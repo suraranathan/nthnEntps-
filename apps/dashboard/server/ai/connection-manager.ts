@@ -40,6 +40,7 @@ function privateDirectory(directory: string) {
 
 /** Local backend-only service. SQLite transactions serialize revisions across CLI processes. */
 export class ConnectionManager {
+  #directory: string
   #db: DatabaseSync
   #vault: CredentialVault
   #resolver: Resolver
@@ -50,6 +51,7 @@ export class ConnectionManager {
     this.#resolver = options.resolver ?? resolveAddresses; this.#transport = options.transport ?? requestPinnedJson; this.#rules = options.rules ?? defaultEndpointRules
     directory = resolve(directory)
     privateDirectory(directory)
+    this.#directory = directory
     const dbPath = join(directory, 'providers.sqlite'), keyPath = join(directory, 'master.key')
     if (!existsSync(keyPath)) {
       if (existsSync(dbPath)) throw new ManagementError('KEY_UNAVAILABLE')
@@ -156,6 +158,60 @@ export class ConnectionManager {
   }
   remove(id: string, revision: number) {
     this.#transaction(() => { this.#expected(id, revision); this.#db.prepare('DELETE FROM connections WHERE id=?').run(id); this.#audit(id, 'remove') })
+  }
+  /** Independent catalog DB; callers own its handle, never the credential database. */
+  openCatalogDatabase(): DatabaseSync {
+    privateDirectory(this.#directory)
+    const path = join(this.#directory, 'catalog.sqlite')
+    try {
+      if (!existsSync(path)) { try { const fd = openSync(path, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600); closeSync(fd) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error } }
+      const stat = lstatSync(path)
+      if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.()) throw new Error('unsafe catalog')
+      return new DatabaseSync(path)
+    } catch { throw new ManagementError('STORE_FAILED') }
+  }
+  /** Fixed provider-owned listing path only; no plaintext credential getter. */
+  async catalogPage(id: string, revision: number, query: Record<string, string> = {}) {
+    const row = this.#expected(id, revision), c = row.connection, adapter = connectionAdapter(c.providerId)
+    if (!c.enabled) throw new ManagementError('CONNECTION_DISABLED')
+    exactFields(query, ['after', 'offset', 'limit', 'cursor', 'page', 'page_token', 'pageToken', 'output_modalities'])
+    if (Object.values(query).some(value => typeof value !== 'string' || value.length > 16000)) throw new ManagementError('INVALID_INPUT')
+    if (adapter.requiresCredential && !row.cipher) throw new ManagementError('CREDENTIAL_REQUIRED')
+    const endpoint = await pinEndpoint(c.baseUrl, c.networkPolicy, c.providerId, this.#resolver, this.#rules)
+    const key = row.cipher ? this.#vault.open(row.cipher, id + ':' + c.credentials.revision) : null
+    let response
+    try {
+      const suffix = new URLSearchParams(query).toString()
+      response = await this.#transport(endpoint, adapter.discoveryPath + (suffix ? '?' + suffix : ''), key, { maxBytes: 16 * 1024 * 1024 })
+    } catch (error) { throw error instanceof ManagementError ? error : new ManagementError('REQUEST_FAILED') }
+    this.#expected(id, revision)
+    if (!this.#read(id).connection.enabled) throw new ManagementError('CONNECTION_DISABLED')
+    if (response.status === 401 || response.status === 403) throw new ManagementError('AUTH_REJECTED')
+    if (response.status === 404 || response.status === 405) throw new ManagementError('DISCOVERY_UNSUPPORTED')
+    if (response.status === 429) throw new ManagementError('RATE_LIMITED')
+    if (response.status >= 300 && response.status < 400) throw new ManagementError('REDIRECT_BLOCKED')
+    if (response.status < 200 || response.status >= 300) throw new ManagementError('PROBE_FAILED')
+    if (key) {
+      const pending: unknown[] = [response.body, response.link], seen = new WeakSet<object>()
+      while (pending.length) {
+        const value = pending.pop()
+        if (typeof value === 'string' && value.includes(key)) throw new ManagementError('INVALID_RESPONSE')
+        if (value && typeof value === 'object' && !seen.has(value)) {
+          seen.add(value)
+          for (const [name, child] of Object.entries(value)) { pending.push(name, child) }
+        }
+      }
+    }
+    return { body: response.body, link: response.link ?? null }
+  }
+  recordDiscovery(id: string, revision: number, succeeded: boolean, code: string) {
+    this.#transaction(() => {
+      const row = this.#expected(id, revision)
+      row.connection.health.discovery = succeeded ? 'succeeded' : code === 'DISCOVERY_UNSUPPORTED' ? 'unsupported' : 'failed'
+      row.connection.health.checkedAt = new Date().toISOString()
+      if (code === 'AUTH_REJECTED') row.connection.health.authentication = 'rejected'
+      this.#write(row); this.#audit(id, 'catalog.refresh', succeeded ? 'OK' : new ManagementError(code).code)
+    })
   }
   async test(id: string, revision: number): Promise<TestResult> {
     if (this.#testing.has(id)) throw new ManagementError('TEST_BUSY')

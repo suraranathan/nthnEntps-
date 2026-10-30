@@ -18,7 +18,7 @@ npm run build
 npm run start
 ```
 
-The combined runner stops both processes on Ctrl+C or if either fails. For separate development terminals, use `npm run dev:agent` and `npm run dev:ui`. The agent server does not hot-reload server source or `.env.server`; restart it after changes. Frontend hot reload remains available.
+The combined runner stops its processes on Ctrl+C or if either fails. For separate development terminals, use `npm run dev:agent` and `npm run dev:ui`. The agent server does not hot-reload server source or `.env.server`; restart it after changes. Frontend hot reload remains available.
 
 ## Connect a real model
 
@@ -64,3 +64,16 @@ npm run providers -- list
 ```
 
 Add/edit/test/enable/disable/remove commands and private-stdin credential handling are documented in [Provider Connection Management](../../docs/PROVIDER_CONNECTIONS.md). The default private store is `.local/ai/`, separate from Alex's `.local/alex/`. New connections default to disabled and do not change Alex's active provider. There is no new browser administration surface, dashboard redesign or Nexus integration.
+
+## Automatic model catalog
+
+Dev/production-preview now also start an independent catalog watcher for enabled Phase 2 provider connections. It discovers newly enabled/edited connections and refreshes due inventories without changing Alex's provider. A catalog-worker error leaves Alex and the UI running. Standalone commands:
+
+```sh
+npm run catalog -- watch
+npm run catalog -- refresh
+npm run catalog -- status
+npm run catalog -- search '{"search":"llama","pageSize":50}'
+```
+
+Search reads persisted metadata and preserves separate account/provider routes. Listings are not verified model access; no inference or automatic spending is performed. Disabled connections are not contacted. See [Model catalog setup and semantics](../../docs/MODEL_CATALOG.md) for pagination, filtering, errors, scheduling and limitations.

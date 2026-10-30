@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-30 — Phase 2 Step 3: automatic discovery and unified catalog
+
+- Added protected discovery for all enabled registry connections: OpenRouter user-filtered/all-modality offset pages, generic advertised pagination and Ollama local tags. Preserved exact model IDs and separate account/provider routes; source listings never become verified access claims.
+- Added a private SQLite catalog with searchable/filterable snapshot pages, source capabilities/metadata, refresh/error history, leases, atomic staging/publication and retained unavailable historical routes. Failed/partial refreshes retain the last complete catalog; only complete success retires unseen listings.
+- Added catalog watch/sync/refresh/search/get/status CLI commands and automatic dev/preview watcher startup. New/changed connections are detected, disabled ones skipped, provider failures isolated and retries backed off. Catalog-worker failure leaves Alex/UI running; shutdown cleanup is bounded.
+- Extended the existing protected transport with allowlisted listing queries/Link metadata and a separate 16MiB discovery response bound, retaining the 1MB management-probe bound. Rejects unsafe pagination and known credential echoes before persistence. No total model-count cap, paid inference, model assignment, Nexus or dashboard redesign.
+- Preserved existing Alex source/frontend/API/provider/memory and all prior tests. Added comprehensive discovery/catalog/runner tests and setup/architecture documentation; no dependencies added.
+- Verification: all 69 tests pass (44 existing + 25 new); frontend/server typecheck, production build and catalog help smoke check pass. Existing asset hashes and bundle warning remain unchanged (1,151.00 kB minified / 319.93 kB gzip). Live external provider validation remains unconfigured.
+
 ## 2026-10-30 — Phase 2 Step 2: provider connection management
 
 - Added independent SQLite-backed connection management and a backend CLI for add/edit/get/list/test/enable/disable/remove, credential replacement/clearing and audit. Supports multiple OpenRouter, OpenAI-compatible and Ollama accounts/endpoints, disabled by default.

@@ -13,6 +13,9 @@ export interface ConnectionInput {
 export type ConnectionPatch = Partial<Omit<ConnectionInput, 'providerId'>>
 export type TestResult = { connection: ManagedConnection; ok: boolean; code: string }
 const messages: Record<string, string> = {
+  CONNECTION_DISABLED: 'Connection is disabled.', DISCOVERY_UNSUPPORTED: 'Provider model discovery is unavailable.',
+  PAGINATION_INVALID: 'Provider pagination did not make progress or is malformed.', CATALOG_CHANGED: 'Catalog changed; restart pagination.',
+  CATALOG_BUSY: 'A catalog refresh is already running.', REFRESH_INTERRUPTED: 'A previous catalog refresh was interrupted.',
   INVALID_INPUT: 'Invalid connection input.', INVALID_ENDPOINT: 'Endpoint does not match the provider or network policy.',
   BLOCKED_ENDPOINT: 'Endpoint resolves to a prohibited network address.', DNS_FAILED: 'Endpoint resolution failed.',
   NOT_FOUND: 'Connection not found.', CONFLICT: 'Connection changed; reload its current revision.',

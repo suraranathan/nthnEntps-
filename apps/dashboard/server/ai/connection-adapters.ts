@@ -9,6 +9,7 @@ export interface ConnectionAdapter {
   credentiallessState: 'missing' | 'not-required'
   probeKind: 'authentication' | 'discovery'
   validateBase(url: URL, network: NetworkPolicy): void
+  discoveryPath: string
   probePath: string
   interpret(response: ProbeResponse): Pick<ProviderConnection['health'], 'authentication' | 'discovery'>
 }
@@ -22,7 +23,7 @@ function success(response: ProbeResponse) {
 const adapters: readonly ConnectionAdapter[] = [
   {
     definition: { id: 'openrouter', name: 'OpenRouter', adapterId: 'openrouter', discovery: 'supported', accountMetadata: 'supported' },
-    requiresCredential: true, credentiallessState: 'missing', probeKind: 'authentication', probePath: '/key',
+    requiresCredential: true, credentiallessState: 'missing', probeKind: 'authentication', probePath: '/key', discoveryPath: '/models/user',
     validateBase(url, network) {
       if (network !== 'public' || url.origin !== 'https://openrouter.ai' || url.pathname.replace(/\/$/, '') !== '/api/v1') throw new ManagementError('INVALID_ENDPOINT')
     },
@@ -34,7 +35,7 @@ const adapters: readonly ConnectionAdapter[] = [
   },
   {
     definition: { id: 'openai-compatible', name: 'OpenAI-compatible endpoint', adapterId: 'openai-compatible', discovery: 'unknown', accountMetadata: 'unknown' },
-    requiresCredential: false, credentiallessState: 'missing', probeKind: 'discovery', probePath: '/models',
+    requiresCredential: false, credentiallessState: 'missing', probeKind: 'discovery', probePath: '/models', discoveryPath: '/models',
     validateBase() {},
     interpret(response) {
       const body = success(response)
@@ -45,7 +46,7 @@ const adapters: readonly ConnectionAdapter[] = [
   },
   {
     definition: { id: 'ollama', name: 'Ollama', adapterId: 'ollama', discovery: 'supported', accountMetadata: 'unsupported' },
-    requiresCredential: false, credentiallessState: 'not-required', probeKind: 'discovery', probePath: '/api/tags',
+    requiresCredential: false, credentiallessState: 'not-required', probeKind: 'discovery', probePath: '/api/tags', discoveryPath: '/api/tags',
     validateBase(url) { if (url.pathname !== '/') throw new ManagementError('INVALID_ENDPOINT') },
     interpret(response) {
       const body = success(response)

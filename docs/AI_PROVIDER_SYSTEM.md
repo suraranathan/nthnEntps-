@@ -67,3 +67,9 @@ The contract-only Step 1 description above is retained as historical scope. Step
 No new provider-management HTTP/browser interface is exposed, so plaintext API keys never enter the frontend. Input credentials travel only through private redirected stdin to the local backend. The existing Alex provider/router/runtime/memory, frontend, API, startup scripts and tests are untouched. Only a new package script invokes the independent CLI; no automatic configuration migration or route activation occurs.
 
 See [Provider Connection Management](PROVIDER_CONNECTIONS.md) for commands, safe input formats, storage/encryption recovery, SSRF policy, local-port approvals and limits. Model catalog refresh/persistence, commercial metadata ingestion, actual agent assignments and Nexus are not implemented by this step.
+
+## Phase 2 Step 3 — implemented automatic discovery and catalog
+
+Step 3 adds source-specific paginated discovery, a separate persistent/searchable SQLite catalog, atomic complete-refresh publication, provider failure status, per-connection refresh leases and automatic scheduling. Each enabled account/gateway connection retains separate exact native-model routes. Discovery never marks model access verified. Catalog searches include unavailable historical routes rather than silently losing alternatives.
+
+The dev/preview supervisor now starts an independent catalog watcher. It can also run through `npm run catalog -- watch`; explicit refresh/sync and cached search/get/status commands are available. Catalog-worker failure does not shut down Alex/UI. Alex's identity, runtime, provider selection, private memory, frontend and API remain unchanged. No Nexus or dashboard redesign is introduced. See [Automatic Model Discovery and Unified Catalog](MODEL_CATALOG.md) for supported pagination, metadata, access semantics, scheduling, resource bounds and validation.

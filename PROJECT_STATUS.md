@@ -2,6 +2,18 @@
 
 Updated: 2026-10-30
 
+## Phase 2 — Step 3: automatic model discovery and unified catalog
+
+Implemented automatic discovery for enabled OpenRouter, OpenAI-compatible and Ollama registry connections, with source-specific/full pagination, exact model IDs, independent account/gateway routes and a persistent searchable catalog. Metadata/capabilities are normalized only from source evidence; missing fields stay unknown. OpenRouter requests all output modalities from its user-filtered listing. Listings remain listed/account-listed, never verified model access; no inference probe or model assignment is performed.
+
+The independent catalog watcher starts with dev/production-preview and also supports standalone `npm run catalog -- watch`. It detects new/changed enabled connections, refreshes due catalogs, skips disabled ones and backs off failures. Cached search/get/status and explicit refresh/sync are provided through the backend CLI. A worker failure does not stop Alex/UI. The new private `catalog.sqlite` is separate from the unchanged encrypted connection store and Alex memory. Atomic staging retains last-complete results after failed/partial refreshes; revisions, leases and snapshot-bound search cursors prevent stale/mixed results. Historical unavailable routes remain queryable.
+
+Existing endpoint validation, DNS/IP pinning, TLS checks and credential encryption are reused. Pagination cannot redirect to other hosts/paths, and credential echoes are rejected before storage. There is no arbitrary model-count ceiling; per-response/page resource limits fail explicitly rather than truncating. All Alex source/frontend/API and existing tests remain unchanged; the startup supervisor only adds an independent worker and bounded shutdown cleanup. No Nexus or dashboard redesign.
+
+Validation: all 69 tests pass (44 unchanged existing tests plus 25 catalog/integration tests), as do frontend/server typecheck, production build and catalog CLI help. The production frontend asset hashes and existing large-bundle warning remain unchanged (1,151.00 kB minified / 319.93 kB gzip).
+
+See [Model catalog documentation](docs/MODEL_CATALOG.md) for commands, supported pagination, access semantics and limitations. External account inventories/access were not tested because no real provider credentials/services were configured. Next: explicit compatible-model access verification and agent assignments, without autonomous Nexus selection.
+
 ## Phase 2 — Step 2: provider connection management
 
 Implemented independent backend connection management for multiple OpenRouter, OpenAI-compatible and Ollama accounts/endpoints. The local CLI (`npm run providers -- help`) supports add, edit, get/list, explicit test, enable/disable, credential replace/clear, remove and sanitized audit. SQLite persists metadata and encrypted credentials in `apps/dashboard/.local/ai/`, separate from Alex's memory; transactions and expected revisions prevent lost updates and stale test results. New connections default to disabled.
@@ -72,4 +84,4 @@ Employee/profile selection, desk inspection, hover feedback, room/door inspectio
 
 ## Verification
 
-`npm run typecheck` (frontend + backend/tests), `npm test` (44 deterministic tests: 16 unchanged Alex tests, 7 contract tests and 21 management tests) and `npm run build` pass. The production bundle retains Vite's existing large-chunk warning (1,151.00 kB minified / 319.93 kB gzip). Live dashboard/API smoke checks verify the unconfigured/offline path and private-memory access denial. No live provider inference, browser interaction or Android device performance evaluation was possible.
+`npm run typecheck` (frontend + backend/tests), `npm test` (69 deterministic tests: 16 unchanged Alex tests, 7 contract tests, 21 management tests and 25 catalog/integration tests) and `npm run build` pass. The production bundle retains Vite's existing large-chunk warning (1,151.00 kB minified / 319.93 kB gzip). Live dashboard/API smoke checks verify the unconfigured/offline path and private-memory access denial. No live provider inference, browser interaction or Android device performance evaluation was possible.

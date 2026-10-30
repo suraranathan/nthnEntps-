@@ -65,11 +65,11 @@ export async function pinEndpoint(base: string, network: NetworkPolicy, provider
   return { base: normalized, url, host, address: addresses[0].address }
 }
 export type PinnedEndpoint = Awaited<ReturnType<typeof pinEndpoint>>
-export type ProbeResponse = { status: number; body: unknown }
-export type ProbeTransport = (endpoint: PinnedEndpoint, path: string, apiKey: string | null) => Promise<ProbeResponse>
+export type ProbeResponse = { status: number; body: unknown; link?: string | null }
+export type ProbeTransport = (endpoint: PinnedEndpoint, path: string, apiKey: string | null, options?: { maxBytes?: number }) => Promise<ProbeResponse>
 
 /** Connect directly to the approved IP: DNS is never resolved again after validation. */
-export const requestPinnedJson: ProbeTransport = (endpoint, path, apiKey) => new Promise((resolve, reject) => {
+export const requestPinnedJson: ProbeTransport = (endpoint, path, apiKey, limits = {}) => new Promise((resolve, reject) => {
   const options: RequestOptions = {
     hostname: endpoint.address, port: endpoint.url.port || undefined, path: endpoint.url.pathname.replace(/\/$/, '') + path,
     method: 'GET', agent: false, maxHeaderSize: 16384, rejectUnauthorized: true,
@@ -84,12 +84,12 @@ export const requestPinnedJson: ProbeTransport = (endpoint, path, apiKey) => new
     const chunks: Buffer[] = []
     response.on('data', (chunk: Buffer) => {
       bytes += chunk.length
-      if (bytes > 1_000_000) { request.destroy(); reject(new ManagementError('RESPONSE_LIMIT')); return }
+      if (bytes > (limits.maxBytes ?? 1_000_000)) { request.destroy(); reject(new ManagementError('RESPONSE_LIMIT')); return }
       chunks.push(chunk)
     })
     response.on('error', () => reject(new ManagementError('REQUEST_FAILED')))
     response.on('end', () => {
-      try { resolve({ status, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) }) }
+      try { resolve({ status, body: JSON.parse(Buffer.concat(chunks).toString('utf8')), link: Array.isArray(response.headers.link) ? response.headers.link.join(', ') : response.headers.link ?? null }) }
       catch { reject(new ManagementError('INVALID_RESPONSE')) }
     })
   })
