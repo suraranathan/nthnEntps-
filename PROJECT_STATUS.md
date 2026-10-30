@@ -2,6 +2,16 @@
 
 Updated: 2026-10-30
 
+## Phase 2 — Step 1: provider contracts
+
+The existing work was inspected and preserved in local baseline commit `8dd6f11`, tagged `phase2-step1-baseline`, before source changes. This captures 39 versionable files, including the completed Alex/office implementation. Private memory, credentials, dependencies and build output were excluded; no existing work was discarded and nothing was pushed.
+
+New isolated contracts in `apps/dashboard/server/ai/contracts.ts` distinguish provider definitions, account/endpoint connections, exact model routes, a searchable paginated catalog, metadata evidence, commercial/usage observations, and explicit agent assignments. They reuse Alex's existing `ModelMessage`, `ModelProvider` and `ModelRouter` types without changing the existing classes. A pure route-identity helper preserves duplicate provider/account/upstream access routes and exact native model IDs. No new module is wired into production; Alex, dashboard, API/configuration and existing memory are unchanged.
+
+Validation: all 23 tests, frontend/server typecheck and the production build pass. The existing 1,151.00 kB minified / 319.93 kB gzip bundle warning remains. Git comparison confirms existing application source/configuration and Alex tests match the recovery baseline.
+
+Step 1 defines schemas and compatibility seams only. There is no new database, credential store, discovery worker, provider-management endpoint, actual assignment/resolver, live connection or Nexus implementation. See [AI Provider System contracts](docs/AI_PROVIDER_SYSTEM.md) for field semantics, security requirements, baseline recovery and next steps.
+
 ## Agent 01 — Alex
 
 Alex's implementation now includes a loopback Node 24+ runtime, original model-independent personality/identity instructions, real OpenAI-compatible and Ollama HTTP transports, a provider router seam for future Nexus, persistent structured memory and a dashboard chat attached to his existing employee profile/avatar. UI states distinguish offline, thinking, online (last inference succeeded) and errors; selected provider/model and per-reply metadata are visible. No fixed joke bank or simulated chat fallback exists.
@@ -50,4 +60,4 @@ Employee/profile selection, desk inspection, hover feedback, room/door inspectio
 
 ## Verification
 
-`npm run typecheck` (frontend + backend/tests), `npm test` (16 deterministic tests) and `npm run build` pass. The production bundle retains Vite's existing large-chunk warning (1,151.00 kB minified / 319.93 kB gzip). Live dashboard/API smoke checks verify the unconfigured/offline path and private-memory access denial. No live provider inference, browser interaction or Android device performance evaluation was possible.
+`npm run typecheck` (frontend + backend/tests), `npm test` (23 deterministic tests: 16 unchanged Alex tests + 7 provider-contract tests) and `npm run build` pass. The production bundle retains Vite's existing large-chunk warning (1,151.00 kB minified / 319.93 kB gzip). Live dashboard/API smoke checks verify the unconfigured/offline path and private-memory access denial. No live provider inference, browser interaction or Android device performance evaluation was possible.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-30 — Phase 2 Step 1: baseline and provider contracts
+
+- Inspected modified/untracked work and preserved the completed Alex/office application in local commit `8dd6f11`, with recovery tag `phase2-step1-baseline`. Captured 39 versionable files; credential-pattern scan found no matches and ignored private/generated files were excluded. No push or destructive Git operation.
+- Added isolated schema-versioned provider, connection, model, route, paginated catalog, discovery/evidence, pricing/limits/usage, inference and explicit-assignment contracts. Reused existing `ModelProvider`, `ModelMessage` and `ModelRouter` through type-only compatibility seams.
+- Added a pure lossless route-key helper that distinguishes connections, exact native model IDs and explicit/default upstreams, without model-count truncation.
+- Added deterministic route/compatibility tests and a compile-time guard keeping plaintext keys outside safe connection metadata. Documented contract semantics, future security/persistence obligations and the recovery baseline in `docs/AI_PROVIDER_SYSTEM.md`.
+- Preserved all existing Alex/frontend/backend/configuration source files. No runtime wiring, database, provider connection, dashboard redesign or Nexus implementation was introduced.
+- Verification: all 23 tests pass (16 unchanged Alex tests + 7 contract tests); frontend/server typecheck and production build pass. Existing bundle-size warning remains (1,151.00 kB minified / 319.93 kB gzip).
+
 ## 2026-10-30 — Alex, Personal Communicator runtime
 
 - Added Alex's versioned identity and original witty, context-aware personality instructions, with serious-mode behavior, grounded humor, explicit AI/capability boundaries and a shared authoritative seven-person roster/office context. No predefined joke bank or canned conversational fallback.
