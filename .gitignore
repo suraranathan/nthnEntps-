@@ -7,6 +7,10 @@ secrets/
 node_modules/
 dist/
 build/
+*.tsbuildinfo
 __pycache__/
 *.pyc
 .DS_Store
+
+# Alex private conversations, structured memory, audit and runtime lock
+apps/dashboard/.local/
