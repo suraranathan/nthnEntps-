@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-30 — Phase 2 Step 2: provider connection management
+
+- Added independent SQLite-backed connection management and a backend CLI for add/edit/get/list/test/enable/disable/remove, credential replacement/clearing and audit. Supports multiple OpenRouter, OpenAI-compatible and Ollama accounts/endpoints, disabled by default.
+- Added AES-256-GCM encryption with a separate private master key, randomized nonces, connection/revision binding, key verification, strict storage permissions and transactional persistence. Credential input uses private stdin only; outputs/audits/errors never include provider keys.
+- Added provider-specific adapters and shared SSRF protections: endpoint validation, explicit loopback approval, all-answer DNS checking/IP pinning, TLS hostname verification, redirects rejected and bounded requests. Endpoint edits clear credentials; revision checks reject stale writes/test results.
+- Added 21 management/security tests and connection-management documentation. Added only the `providers` package script; no dependencies or existing runtime startup behavior changed.
+- Preserved Alex's frontend/backend/provider/memory/API and all existing tests. No browser administration endpoint, dashboard redesign, catalog implementation, model assignment activation or Nexus.
+- Verification: all 44 tests, frontend/server typecheck, production build and CLI help smoke check pass. Existing bundle warning remains (1,151.00 kB minified / 319.93 kB gzip). External account validation still requires real provider credentials; no external connection success is fabricated.
+
 ## 2026-10-30 — Phase 2 Step 1: baseline and provider contracts
 
 - Inspected modified/untracked work and preserved the completed Alex/office application in local commit `8dd6f11`, with recovery tag `phase2-step1-baseline`. Captured 39 versionable files; credential-pattern scan found no matches and ignored private/generated files were excluded. No push or destructive Git operation.

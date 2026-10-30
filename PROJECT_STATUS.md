@@ -2,6 +2,18 @@
 
 Updated: 2026-10-30
 
+## Phase 2 — Step 2: provider connection management
+
+Implemented independent backend connection management for multiple OpenRouter, OpenAI-compatible and Ollama accounts/endpoints. The local CLI (`npm run providers -- help`) supports add, edit, get/list, explicit test, enable/disable, credential replace/clear, remove and sanitized audit. SQLite persists metadata and encrypted credentials in `apps/dashboard/.local/ai/`, separate from Alex's memory; transactions and expected revisions prevent lost updates and stale test results. New connections default to disabled.
+
+API credentials use AES-256-GCM with random nonces and connection/revision-bound authenticated data. A private backend master-key file is generated separately from the database; missing/wrong keys, unsafe permissions and symlinked storage fail closed. Keys are accepted only via private redirected stdin, never arguments/browser code or returned metadata. Endpoint/network edits clear old credentials. The only package-script change is adding `providers`; no dependency was added.
+
+SSRF protection combines explicit public/loopback policies, provider-specific endpoint constraints, private/metadata address blocking, all-answer DNS validation, IP-pinned requests, original-host TLS checks, approved local ports, redirect rejection and bounded requests. Tests distinguish key acceptance from discovery/inference: inference remains untested. No public administration HTTP endpoint or dashboard UI was added. Alex's existing source, provider selection, JSON memory, API, controls and tests are unchanged; there is no Nexus or agent-routing activation.
+
+Validation: all 44 tests pass (16 unchanged Alex tests, 7 unchanged contract tests and 21 management/security tests). Frontend/server typecheck, production build and CLI help smoke check pass. Vite retains the existing large-bundle warning (1,151.00 kB minified / 319.93 kB gzip). Git comparison confirms Alex and existing frontend/backend/startup configuration are unchanged.
+
+See [Provider Connection Management](docs/PROVIDER_CONNECTIONS.md) for usage, backup/recovery and security limits. Real external credentials/local model services were not configured; external connection success is not claimed. Next: paginated model discovery and a searchable catalog, reusing these protected connections.
+
 ## Phase 2 — Step 1: provider contracts
 
 The existing work was inspected and preserved in local baseline commit `8dd6f11`, tagged `phase2-step1-baseline`, before source changes. This captures 39 versionable files, including the completed Alex/office implementation. Private memory, credentials, dependencies and build output were excluded; no existing work was discarded and nothing was pushed.
@@ -60,4 +72,4 @@ Employee/profile selection, desk inspection, hover feedback, room/door inspectio
 
 ## Verification
 
-`npm run typecheck` (frontend + backend/tests), `npm test` (23 deterministic tests: 16 unchanged Alex tests + 7 provider-contract tests) and `npm run build` pass. The production bundle retains Vite's existing large-chunk warning (1,151.00 kB minified / 319.93 kB gzip). Live dashboard/API smoke checks verify the unconfigured/offline path and private-memory access denial. No live provider inference, browser interaction or Android device performance evaluation was possible.
+`npm run typecheck` (frontend + backend/tests), `npm test` (44 deterministic tests: 16 unchanged Alex tests, 7 contract tests and 21 management tests) and `npm run build` pass. The production bundle retains Vite's existing large-chunk warning (1,151.00 kB minified / 319.93 kB gzip). Live dashboard/API smoke checks verify the unconfigured/offline path and private-memory access denial. No live provider inference, browser interaction or Android device performance evaluation was possible.

@@ -59,3 +59,11 @@ Run from `apps/dashboard/`: `npm test`, `npm run typecheck` and `npm run build`.
 Completed checks: all 23 tests pass (16 existing Alex tests + 7 new contract tests); frontend/server typecheck and production build pass. The existing Vite bundle-size warning remains (1,151.00 kB minified / 319.93 kB gzip). Existing Alex/application source, tests and configuration match the baseline. No live provider was contacted.
 
 Inspect the recovery snapshot with `git show phase2-step1-baseline:apps/dashboard/server/providers.ts`. Once the working tree is clean, `git switch -c recovery/phase2-baseline phase2-step1-baseline` opens an independent branch at the baseline without deleting the Phase 2 commit. Do not use reset/clean to recover this work.
+
+## Phase 2 Step 2 — implemented connection management
+
+The contract-only Step 1 description above is retained as historical scope. Step 2 adds a separate backend `ConnectionManager`, SQLite connection/audit storage, an AES-256-GCM credential vault, revision-checked CRUD, provider-specific connection tests and a local CLI (`npm run providers -- help`). Supported connection types are OpenRouter, OpenAI-compatible and Ollama; multiple accounts/endpoints per type remain distinct.
+
+No new provider-management HTTP/browser interface is exposed, so plaintext API keys never enter the frontend. Input credentials travel only through private redirected stdin to the local backend. The existing Alex provider/router/runtime/memory, frontend, API, startup scripts and tests are untouched. Only a new package script invokes the independent CLI; no automatic configuration migration or route activation occurs.
+
+See [Provider Connection Management](PROVIDER_CONNECTIONS.md) for commands, safe input formats, storage/encryption recovery, SSRF policy, local-port approvals and limits. Model catalog refresh/persistence, commercial metadata ingestion, actual agent assignments and Nexus are not implemented by this step.

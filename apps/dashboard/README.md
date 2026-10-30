@@ -52,3 +52,15 @@ npm run build
 ```
 
 Typecheck covers both frontend and server/tests. Production build also runs typecheck. Tests are deterministic isolated fixtures; they do not prove a live AI connection or humor quality. Vite retains the existing large 3D-bundle warning. See [Alex architecture](../../docs/ALEX_ARCHITECTURE.md) for contracts, persistence, privacy, provider and future Sophia/Nexus integration details.
+
+## Phase 2 provider connections
+
+A separate backend CLI now manages multiple OpenRouter, OpenAI-compatible and Ollama connections, with persistent SQLite storage, encrypted credentials and SSRF-protected connection tests:
+
+```sh
+npm run providers -- help
+npm run providers -- providers
+npm run providers -- list
+```
+
+Add/edit/test/enable/disable/remove commands and private-stdin credential handling are documented in [Provider Connection Management](../../docs/PROVIDER_CONNECTIONS.md). The default private store is `.local/ai/`, separate from Alex's `.local/alex/`. New connections default to disabled and do not change Alex's active provider. There is no new browser administration surface, dashboard redesign or Nexus integration.
