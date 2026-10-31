@@ -1,4 +1,4 @@
-/** Phase 2 schema contracts only. No registry, discovery worker or runtime wiring. */
+/** Provider-neutral contracts; implemented services remain independent of Alex runtime. */
 import type { ModelMessage, ModelProvider, ModelRouter } from '../providers.ts'
 
 export const AI_CONTRACT_VERSION = 1 as const
@@ -129,6 +129,7 @@ export interface UsageObservation {
 }
 
 export interface CatalogEntry {
+  verification?: import('./verification-store.ts').Verification | null // explicit probe history, never discovery
   route: ModelRoute
   pricing: Pricing
   limits: readonly LimitObservation[]

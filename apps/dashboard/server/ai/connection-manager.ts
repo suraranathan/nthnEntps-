@@ -204,6 +204,54 @@ export class ConnectionManager {
     }
     return { body: response.body, link: response.link ?? null }
   }
+  /** Fixed inference path, protected transport and vault; no plaintext credential getter. */
+  async inferenceProbe(id: string, revision: number, body: Record<string, unknown>, stream = false) {
+    const row = this.#expected(id, revision), c = row.connection
+    if (!c.enabled) throw new ManagementError('CONNECTION_DISABLED')
+    if (c.credentials.state === 'missing' && c.networkPolicy === 'public') throw new ManagementError('CREDENTIAL_REQUIRED')
+    if (connectionAdapter(c.providerId).requiresCredential && !row.cipher) throw new ManagementError('CREDENTIAL_REQUIRED')
+    const endpoint = await pinEndpoint(c.baseUrl, c.networkPolicy, c.providerId, this.#resolver, this.#rules)
+    const key = row.cipher ? this.#vault.open(row.cipher, id + ':' + c.credentials.revision) : null
+    let response
+    try { response = await this.#transport(endpoint, c.providerId === 'ollama' ? '/api/chat' : '/chat/completions', key, { body, stream, readErrors: true, maxBytes: 256000 }) }
+    catch (error) { throw error instanceof ManagementError ? error : new ManagementError('REQUEST_FAILED') }
+    this.#expected(id, revision)
+    if (!this.get(id).enabled) throw new ManagementError('CONNECTION_DISABLED')
+    if (response.status === 401 || response.status === 403) throw new ManagementError('AUTH_REJECTED')
+    const providerCode = response.body && typeof response.body === 'object' ? (response.body as { error?: { code?: unknown } }).error?.code : null
+    if (response.status === 402 || (response.status === 429 && ['insufficient_quota', 'insufficient_credits', 'credit_balance_too_low'].includes(String(providerCode)))) throw new ManagementError('INSUFFICIENT_CREDITS')
+    if (response.status === 429) throw new ManagementError('RATE_LIMITED')
+    if (response.status === 404) throw new ManagementError('MODEL_UNAVAILABLE')
+    if ([405, 501].includes(response.status)) throw new ManagementError('CAPABILITY_UNSUPPORTED')
+    if ([400, 422].includes(response.status)) throw new ManagementError('INCOMPATIBLE')
+    if (response.status >= 300 && response.status < 400) throw new ManagementError('REDIRECT_BLOCKED')
+    if (response.status < 200 || response.status >= 300) throw new ManagementError('PROBE_FAILED')
+    if (key && JSON.stringify(response.body)?.includes(key)) throw new ManagementError('INVALID_RESPONSE')
+    return response.body
+  }
+  /** Sanitized OpenRouter key allowance; deprecated request-count fields are ignored. */
+  async keyAllowance(id: string, revision: number): Promise<{ limit: number; remaining: number } | null> {
+    const row = this.#expected(id, revision), c = row.connection
+    if (c.providerId !== 'openrouter' || !c.enabled || !row.cipher) return null
+    const endpoint = await pinEndpoint(c.baseUrl, c.networkPolicy, c.providerId, this.#resolver, this.#rules)
+    const key = this.#vault.open(row.cipher, `${id}:${c.credentials.revision}`)
+    let response
+    try { response = await this.#transport(endpoint, '/key', key) } catch { return null }
+    this.#expected(id, revision)
+    if (response.status !== 200 || !response.body || typeof response.body !== 'object' || JSON.stringify(response.body).includes(key)) return null
+    const data = (response.body as { data?: { limit?: unknown; limit_remaining?: unknown } }).data
+    if (typeof data?.limit !== 'number' || typeof data.limit_remaining !== 'number' || !Number.isFinite(data.limit) || !Number.isFinite(data.limit_remaining) || data.limit <= 0 || data.limit_remaining < 0) return null
+    return { limit: data.limit, remaining: data.limit_remaining }
+  }
+  recordInference(id: string, revision: number, succeeded: boolean, code: string) {
+    this.#transaction(() => {
+      const row = this.#expected(id, revision)
+      row.connection.health.inference = succeeded ? 'succeeded' : 'failed'
+      row.connection.health.checkedAt = new Date().toISOString()
+      if (code === 'AUTH_REJECTED') row.connection.health.authentication = 'rejected'
+      this.#write(row); this.#audit(id, 'model.verify', succeeded ? 'OK' : new ManagementError(code).code)
+    })
+  }
   recordDiscovery(id: string, revision: number, succeeded: boolean, code: string) {
     this.#transaction(() => {
       const row = this.#expected(id, revision)

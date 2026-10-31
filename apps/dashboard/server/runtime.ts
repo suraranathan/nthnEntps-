@@ -39,6 +39,7 @@ export class AlexRuntime {
     const provider = this.requireProvider()
     this.busy = true; this.status = 'thinking'; this.detail = 'Waiting for the configured model.'
     try {
+      await provider.prepare?.()
       if (kind === 'probe') {
         const models = await provider.discover()
         this.store.log('provider.discovery', models === null ? 'not supported' : `${models.length} models advertised`)

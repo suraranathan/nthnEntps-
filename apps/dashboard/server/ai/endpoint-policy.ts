@@ -66,20 +66,20 @@ export async function pinEndpoint(base: string, network: NetworkPolicy, provider
 }
 export type PinnedEndpoint = Awaited<ReturnType<typeof pinEndpoint>>
 export type ProbeResponse = { status: number; body: unknown; link?: string | null }
-export type ProbeTransport = (endpoint: PinnedEndpoint, path: string, apiKey: string | null, options?: { maxBytes?: number }) => Promise<ProbeResponse>
+export type ProbeTransport = (endpoint: PinnedEndpoint, path: string, apiKey: string | null, options?: { maxBytes?: number; body?: Record<string, unknown>; stream?: boolean; readErrors?: boolean }) => Promise<ProbeResponse>
 
 /** Connect directly to the approved IP: DNS is never resolved again after validation. */
 export const requestPinnedJson: ProbeTransport = (endpoint, path, apiKey, limits = {}) => new Promise((resolve, reject) => {
   const options: RequestOptions = {
     hostname: endpoint.address, port: endpoint.url.port || undefined, path: endpoint.url.pathname.replace(/\/$/, '') + path,
-    method: 'GET', agent: false, maxHeaderSize: 16384, rejectUnauthorized: true,
+    method: limits.body ? 'POST' : 'GET', agent: false, maxHeaderSize: 16384, rejectUnauthorized: true,
     checkServerIdentity: (_hostname, certificate) => checkServerIdentity(endpoint.host, certificate),
     ...(endpoint.url.protocol === 'https:' && !isIP(endpoint.host) ? { servername: endpoint.host } : {}),
-    headers: { Host: endpoint.url.host, Accept: 'application/json', 'Accept-Encoding': 'identity', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+    headers: { Host: endpoint.url.host, Accept: 'application/json', 'Accept-Encoding': 'identity', ...(limits.body ? { 'Content-Type': 'application/json' } : {}), ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
   }
   const request = (endpoint.url.protocol === 'https:' ? httpsRequest : httpRequest)(options, response => {
     const status = response.statusCode ?? 0
-    if (status < 200 || status >= 300) { response.destroy(); resolve({ status, body: null }); return }
+    if ((status < 200 || status >= 300) && !limits.readErrors) { response.destroy(); resolve({ status, body: null }); return }
     let bytes = 0
     const chunks: Buffer[] = []
     response.on('data', (chunk: Buffer) => {
@@ -89,13 +89,13 @@ export const requestPinnedJson: ProbeTransport = (endpoint, path, apiKey, limits
     })
     response.on('error', () => reject(new ManagementError('REQUEST_FAILED')))
     response.on('end', () => {
-      try { resolve({ status, body: JSON.parse(Buffer.concat(chunks).toString('utf8')), link: Array.isArray(response.headers.link) ? response.headers.link.join(', ') : response.headers.link ?? null }) }
-      catch { reject(new ManagementError('INVALID_RESPONSE')) }
+      try { resolve({ status, body: limits.stream && status >= 200 && status < 300 ? Buffer.concat(chunks).toString('utf8') : JSON.parse(Buffer.concat(chunks).toString('utf8')), link: Array.isArray(response.headers.link) ? response.headers.link.join(', ') : response.headers.link ?? null }) }
+      catch { if (status < 200 || status >= 300) resolve({ status, body: null }); else reject(new ManagementError('INVALID_RESPONSE')) }
     })
   })
   const timer = setTimeout(() => request.destroy(new Error('timeout')), 15000)
   timer.unref()
   request.on('close', () => clearTimeout(timer))
   request.on('error', () => reject(new ManagementError('REQUEST_FAILED')))
-  request.end()
+  request.end(limits.body ? JSON.stringify(limits.body) : undefined)
 })

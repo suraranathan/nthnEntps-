@@ -20,6 +20,24 @@ npm run start
 
 The combined runner stops its processes on Ctrl+C or if either fails. For separate development terminals, use `npm run dev:agent` and `npm run dev:ui`. The agent server does not hot-reload server source or `.env.server`; restart it after changes. Frontend hot reload remains available.
 
+## Capacitor Android app
+
+The Android project is in `android/`; the React/Vite source remains in `src/` and is editable in Termux or Codex. The APK opens `http://127.0.0.1:3000` **on this same phone**. Run `npm run dev` in Termux for Vite live reload, or run `npm run start` after `npm run build` for a production preview. The dashboard at port 3000 proxies `/api` to the private Node service at `127.0.0.1:3001`; both UI and API have one WebView origin. Start Termux before opening the app and keep it running. The APK does not contain or start the Node backend, provider keys, or a model. If the Termux server stops, the app cannot reach Alex or AI Providers.
+
+```sh
+# After editing web source, copy a fresh production build into Android:
+npm run android:sync
+
+# With a compatible JDK, Android SDK (API 36) and Gradle downloads available:
+npm run android:apk
+# Generated debug APK, only after a successful Gradle build:
+# android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+`android:sync` runs typecheck, Vite production build and `cap sync android`. `android:apk` repeats that sync and invokes the checked-in Gradle wrapper's `assembleDebug`. Install the generated debug APK with `adb install -r android/app/build/outputs/apk/debug/app-debug.apk` from a connected host, or open that APK with Android's package installer on this phone. Debug APKs are for local testing; a distributable release needs your own signing key and release build. Web source changes live reload through Vite while `npm run dev` runs; native config, manifest or dependency changes need `npm run android:sync` and an APK rebuild. A production preview needs a new `npm run build` after web edits. Do not run dev and preview together because both use ports 3000/3001.
+
+Android's manifest grants network access and its network security config permits cleartext HTTP only for `127.0.0.1`; other cleartext destinations are denied. Loopback traffic stays on the phone, while provider requests and secrets remain on the Termux backend. The API still rejects LAN origins and untrusted hosts. Do not change the Capacitor URL to a LAN or remote address: this local single-user API has no public authentication. Keep `.env.server` and `.local/` private; never use `VITE_` variables for API keys. See [Android build and connectivity](../../docs/ANDROID_CAPACITOR.md) for setup and verification.
+
 ## Connect a real model
 
 1. Copy `.env.example` to `.env.server` in this directory. The server file is ignored by Git. Restrict its permissions to your user (`chmod 600 .env.server`).
@@ -29,7 +47,7 @@ The combined runner stops its processes on Ctrl+C or if either fails. For separa
 3. Restart `npm run dev` or `npm run start`.
 4. Open **Talk to Alex → Settings → Test real connection**. This makes a real model request, may incur provider charges, and stores its generated response. Successful inference is required for online status. When both adapters are configured, select one in Settings; memory is preserved.
 
-Never use `VITE_` variables for secrets or paste keys into chat. Provider URLs/keys/models are configured on the server, not accepted from browser payloads. The model receives conversation context, explicit notes/preferences, authored office/team facts and the project status document. There is no canned chatbot fallback: with no working provider, Alex reports offline/error.
+Never use `VITE_` variables for secrets or paste keys into chat. Alex can use his saved verified AI Providers assignment through the server-side encrypted connection; legacy environment providers remain available. The **AI Providers** section accepts write-only registry credentials. The model receives conversation context, explicit notes/preferences, authored office/team facts and the project status document. There is no canned chatbot fallback: with no working provider, Alex reports offline/error.
 
 ## Memory, updates and permissions
 
@@ -41,7 +59,7 @@ Proactive updates and daily briefings are off by default. Enabling them authoriz
 
 ## Security and offline behavior
 
-Alex is a local single-user service, not a public authenticated deployment. API host/origin/session/CSRF checks restrict chat to the same-device localhost dashboard. LAN office viewing still works, but LAN access to Alex is rejected. The PWA can cache the office app shell; it never caches the API and does not make offline AI inference possible. Static-only hosting cannot run Alex. Keys stay server-side, and sensitive memory is not encrypted at rest.
+Alex and provider management use a local single-user service, not a public authenticated deployment. API host/origin/session/CSRF checks restrict them to the same-device localhost dashboard. LAN office viewing still works, but LAN API access is rejected. The PWA can cache the office app shell; it never caches the API and does not make offline AI inference possible. Static-only hosting cannot run these services. Saved provider keys are encrypted on the server and never returned; sensitive Alex memory is not encrypted at rest.
 
 ## Validation
 
@@ -63,7 +81,9 @@ npm run providers -- providers
 npm run providers -- list
 ```
 
-Add/edit/test/enable/disable/remove commands and private-stdin credential handling are documented in [Provider Connection Management](../../docs/PROVIDER_CONNECTIONS.md). The default private store is `.local/ai/`, separate from Alex's `.local/alex/`. New connections default to disabled and do not change Alex's active provider. There is no new browser administration surface, dashboard redesign or Nexus integration.
+Use **AI Providers** in the dashboard navigation to add/edit/test/enable/disable/remove these connections, replace/clear write-only credentials, discover and search models, explicitly verify capabilities, and save compatible primary/fallback candidates for agents. New connections default to disabled. Stored credentials cannot be viewed; endpoint changes clear them. Verification can incur provider charges. See [AI Providers dashboard](../../docs/AI_PROVIDERS_DASHBOARD.md) for the workflow, protected HTTP contract and integration limits.
+
+The same add/edit/test/enable/disable/remove CLI commands and private-stdin credential handling remain documented in [Provider Connection Management](../../docs/PROVIDER_CONNECTIONS.md). The default private store is `.local/ai/`, separate from Alex's `.local/alex/`. A saved verified Alex (01) assignment now supplies his runtime OpenRouter model through the protected provider connection. The configured primary is used at startup; only repeated slowness or provider limit signals can trigger a switch to a saved verified fallback. See [Alex assigned runtime](../../docs/ALEX_ASSIGNED_RUNTIME.md).
 
 ## Automatic model catalog
 

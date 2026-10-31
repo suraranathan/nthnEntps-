@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { developmentPwaReset, retiredWorker } from './scripts/pwa-development.ts'
 
 const shellAssets = [
   '/manifest.webmanifest',
@@ -58,7 +59,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (['script', 'style', 'image', 'font', 'manifest'].includes(request.destination)) {
+  if (PRECACHE_URLS.includes(url.pathname) && ['script', 'style', 'image', 'font', 'manifest'].includes(request.destination)) {
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(request);
@@ -78,7 +79,17 @@ self.addEventListener('fetch', (event) => {
 }
 
 export default defineConfig({
-  plugins: [react(), dashboardPwa()],
+  plugins: [react(), dashboardPwa(), {
+    name: 'development-pwa-reset', apply: 'serve',
+    transformIndexHtml() { return [{ tag: 'script', children: developmentPwaReset, injectTo: 'head-prepend' }] },
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.split('?')[0] !== '/service-worker.js') return next()
+        res.writeHead(200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' })
+        res.end(retiredWorker)
+      })
+    },
+  }],
   preview: { host: '0.0.0.0', port: 3000, strictPort: true, proxy: { '/api': { target: 'http://127.0.0.1:3001', changeOrigin: false } } },
   server: {
     fs: { deny: ['.env', '.env.*', '*.{crt,pem,key}', '**/.git/**', '**/.local/**', '**/alex.json', '**/alex-*.tmp', '**/runtime.lock'] },

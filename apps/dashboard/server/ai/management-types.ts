@@ -13,6 +13,9 @@ export interface ConnectionInput {
 export type ConnectionPatch = Partial<Omit<ConnectionInput, 'providerId'>>
 export type TestResult = { connection: ManagedConnection; ok: boolean; code: string }
 const messages: Record<string, string> = {
+  INSUFFICIENT_CREDITS: 'Provider credits are insufficient.', MODEL_UNAVAILABLE: 'Model route is unavailable.',
+  INCOMPATIBLE: 'Model or protocol is incompatible with the probe.', CAPABILITY_UNSUPPORTED: 'Provider explicitly rejects this capability.',
+  NO_COMPATIBLE_MODEL: 'No verified compatible model candidate is available.',
   CONNECTION_DISABLED: 'Connection is disabled.', DISCOVERY_UNSUPPORTED: 'Provider model discovery is unavailable.',
   PAGINATION_INVALID: 'Provider pagination did not make progress or is malformed.', CATALOG_CHANGED: 'Catalog changed; restart pagination.',
   CATALOG_BUSY: 'A catalog refresh is already running.', REFRESH_INTERRUPTED: 'A previous catalog refresh was interrupted.',

@@ -2,6 +2,8 @@
 
 Step 2 adds persistent backend connection management, operated through a local CLI. It does not change Alex's provider selection, identity, memory, API or chat. It adds no browser credential form, HTTP administration endpoint, dashboard redesign or Nexus implementation.
 
+The later [AI Providers dashboard](AI_PROVIDERS_DASHBOARD.md) now exposes these same services through the protected local `/api/ai` transport and write-only credential forms. The Step 2 CLI instructions below remain valid; its historical lack of an HTTP interface is no longer a current integration gap.
+
 ## Run
 
 Requires the existing Node 24+ runtime, with built-in SQLite; no new package is needed. From `apps/dashboard/`:
@@ -119,3 +121,7 @@ Verification completed: 44 tests pass (16 Alex + 7 contracts + 21 management), t
 ## Step 3 integration
 
 Enabled connections are now consumed by the independent automatic catalog watcher started by dev/preview, or by `npm run catalog -- watch`. Connection management commands and credential policy remain unchanged. Edits invalidate old catalog evidence immediately, disabled/removed connections become unavailable in cached results, and changed revisions invalidate in-flight discovery. A new protected manager operation permits only provider-owned listing paths and allowlisted pagination parameters; it does not expose plaintext credentials. Existing connection tests remain inference-free and retain their 1MB response limit. See [Model catalog](MODEL_CATALOG.md) for the separate 16MiB discovery-page limit, atomic catalog refreshes and commands.
+
+## Step 4 integration
+
+`npm run models -- verify ROUTE_ID` explicitly tests inference through the selected enabled connection and encrypted credential. Provider/account routes remain separate; no plaintext credential getter or browser endpoint was added. Protected POST requests reuse endpoint/DNS/TLS policy and add a 256,000-byte bound. Authentication, quota/credits, rate limits, provider failures and malformed output produce sanitized independent verification records. Existing `providers test` remains inference-free. Assignments use verified current-revision capability evidence, not connection-test or discovery success. See [Model verification](MODEL_VERIFICATION.md). No real external accounts were configured or verified.

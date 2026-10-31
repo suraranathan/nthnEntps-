@@ -1,3 +1,4 @@
+import { initializeVerification, latestVerification } from './verification-store.ts'
 import { createHash, randomUUID } from 'node:crypto'
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 import type { CatalogEntry, CatalogPage, CatalogQuery, CatalogRefresh } from './contracts.ts'
@@ -16,6 +17,7 @@ export class CatalogStore {
       this.#db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;')
       const version = this.#db.prepare('PRAGMA user_version').get() as { user_version: number }
       if (version.user_version > 1) throw new Error('unsupported catalog')
+      initializeVerification(this.#db)
       this.#db.exec(`CREATE TABLE IF NOT EXISTS meta (id INTEGER PRIMARY KEY, epoch INTEGER NOT NULL);
         INSERT OR IGNORE INTO meta VALUES (1, 0);
         CREATE TABLE IF NOT EXISTS routes (id TEXT PRIMARY KEY, connection_id TEXT NOT NULL, provider_id TEXT NOT NULL, native_id TEXT NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL);
@@ -111,6 +113,11 @@ export class CatalogStore {
       entry.route.access = { state: 'unavailable', evidence: null }
       if (!connection) entry.route.lifecycle = 'removed'
     }
+    const verification = latestVerification(this.#db, entry.route.id)
+    entry.verification = verification
+    if (connection?.enabled && connection.revision === entry.route.connectionRevision && !status?.errorCode && entry.route.lifecycle !== 'removed' && verification?.connectionRevision === connection.revision && verification.state !== 'untested') {
+      entry.route.access = { state: verification.state === 'verified' ? 'verified' : 'unavailable', evidence: { source: verification.state === 'verified' ? 'inference-response' : 'operator', observedAt: verification.checkedAt, reference: verification.id } }
+    }
     return entry
   }
   get(id: string, connections: ManagedConnection[]): CatalogEntry | null { return this.#transaction(() => this.#get(id, connections)) }
@@ -128,7 +135,8 @@ export class CatalogStore {
     for (const list of [query.connectionIds, query.providerIds, query.freeAccessKinds]) if (list !== undefined && (!Array.isArray(list) || list.some(item => typeof item !== 'string'))) throw new ManagementError('INVALID_INPUT')
     const { cursor: _cursor, ...filters } = query
     const epoch = (this.#db.prepare('SELECT epoch FROM meta WHERE id=1').get() as { epoch: number }).epoch
-    const snapshotId = digest([epoch, connections.map(c => [c.id, c.revision, c.enabled]).sort(), filters])
+    const verificationEpoch = (this.#db.prepare('SELECT coalesce(max(sequence), 0) AS n FROM model_verifications').get() as { n: number }).n
+    const snapshotId = digest([epoch, verificationEpoch, connections.map(c => [c.id, c.revision, c.enabled]).sort(), filters])
     let after = ''
     if (query.cursor !== undefined) {
       try {

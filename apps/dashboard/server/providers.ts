@@ -2,6 +2,7 @@ import type { ProviderInfo } from '../src/alex-contract.ts'
 export type ModelMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 export interface ModelProvider {
   info: ProviderInfo
+  prepare?(): Promise<void>
   complete(messages: ModelMessage[]): Promise<string>
   discover(): Promise<string[] | null>
 }

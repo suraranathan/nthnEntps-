@@ -4,6 +4,7 @@ import { OfficeScene } from './OfficeScene'
 import { team } from './team'
 import { useAlex } from './useAlex'
 import { AlexChat } from './AlexChat'
+import { AiProviders } from './AiProviders'
 
 type Inspection = { kind: 'profile' | 'workstation' | 'room'; title: string; subtitle: string; facts: string[] }
 
@@ -62,11 +63,12 @@ function App() {
         <button className="avatar-button" aria-label="Workspace menu">N</button>
       </header>
 
-      <nav className="mobile-nav" aria-label="Dashboard navigation">
-        {['Office', 'Agents', 'Activity'].map((tab) => <button key={tab} className={activeTab === tab ? 'nav-active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}
+      <nav className="mobile-nav dashboard-nav" aria-label="Dashboard navigation">
+        {['Office', 'Agents', 'Activity', 'AI Providers'].map((tab) => <button key={tab} aria-current={activeTab === tab ? 'page' : undefined} className={activeTab === tab ? 'nav-active' : ''} onClick={() => setActiveTab(tab)}>{tab}</button>)}
       </nav>
 
-      <section className="dashboard">
+      <section className={`dashboard ${activeTab === 'AI Providers' ? 'providers-active' : ''}`}>
+        {activeTab === 'AI Providers' && <AiProviders />}
         <aside className={`panel agent-panel ${activeTab === 'Agents' ? 'panel-current' : ''}`}>
           <div className="panel-heading"><div><div className="eyebrow">WORKSPACE</div><h2>Team</h2></div><span className="count-chip">07</span></div>
           <p className="panel-subtitle">Agent positions · setup preview</p>

@@ -90,6 +90,7 @@ export function AlexChat({ client, open, onClose, onOpen }: Props) {
         {!s && <p className="alex-empty">Alex is offline. The office still works. Start <code>npm run dev</code> to run the dashboard and local agent server together.</p>}
         {s && tab === 'Chat' && <>
           {!s.messages.length && <div className="alex-empty"><h3>Meet Alex</h3><p>Your AI communicator: curious, quick-witted and serious when it matters. Connect a real model to begin; no scripted replies are substituted.</p><p>Conversation, saved notes and the project status document are sent to your configured provider. Local memory stays on this server.</p></div>}
+          {s.events.filter(event => event.type === 'alex_model_switched').slice(-1).map(event => <div className="alex-note" role="status" key={event.id}><strong>Model switched</strong><p>{event.text}</p></div>)}
           {s.messages.map(message => <article className={`alex-message ${message.role}`} key={message.id}><small>{message.role === 'user' ? 'You' : 'Alex'} · {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{message.kind !== 'chat' ? ` · ${message.kind}` : ''}</small><p>{message.content}</p>{message.provider && <small>{message.provider} / {message.model}</small>}</article>)}
           {client.status === 'thinking' && <p role="status" className="alex-empty">Alex is thinking…</p>}<div ref={end} />
         </>}

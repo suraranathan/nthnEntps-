@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">nthnEntps</string>
+    <string name="title_activity_main">nthnEntps</string>
+    <string name="package_name">com.nthnentps.dashboard</string>
+    <string name="custom_url_scheme">com.nthnentps.dashboard</string>
+</resources>

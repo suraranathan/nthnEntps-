@@ -271,7 +271,7 @@ test('dashboard Vite proxy preserves the browser host required by the local API 
   const vite = await createServer({
     configFile: new URL('../vite.config.ts', import.meta.url).pathname,
     logLevel: 'silent',
-    server: { host: '127.0.0.1', port: 0, proxy: { '/api': { target: `http://127.0.0.1:${address.port}` } } },
+    server: { host: '127.0.0.1', port: 0, strictPort: false, proxy: { '/api': { target: `http://127.0.0.1:${address.port}` } } },
   })
   t.after(async () => { await vite.close(); api.closeAllConnections(); await new Promise<void>(resolve => api.close(() => resolve())) })
   await vite.listen()

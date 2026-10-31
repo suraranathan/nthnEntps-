@@ -3,6 +3,12 @@
 !.env.example
 *.pem
 *.key
+*.jks
+*.keystore
+*.p12
+*.pfx
+google-services.json
+local.properties
 secrets/
 node_modules/
 dist/

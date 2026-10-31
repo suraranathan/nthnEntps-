@@ -1,5 +1,68 @@
 # Changelog
 
+## 2026-10-31 — Capacitor Android integration
+
+- Added Capacitor 8 and a native Android project for nthnEntps, retaining the existing React/Vite dashboard, AI Providers, API and Alex.
+- Configured the WebView for the same-phone Termux dashboard at `127.0.0.1:3000`, with existing `/api` proxy to the loopback backend on port 3001; scoped Android cleartext access to loopback and retained API session/CSRF protections.
+- Added web sync/debug APK scripts and Android build, install, security and live-reload documentation. No keys or backend service are bundled in the app; no GitHub push.
+- Verification: 113 tests, typecheck, production build and Capacitor sync pass. Same-phone HTTP checks: dashboard/Alex/AI 200; missing CSRF and LAN Host 403. Native Gradle build was attempted but no JDK is installed, so no APK was produced and installed-WebView testing remains open.
+
+## 2026-10-30 — Alex assigned OpenRouter runtime
+
+Alex now uses his saved Phase 2 agent-01 assignment through a server-only OpenRouter provider adapter. Startup attaches that adapter to the existing ModelRouter; before every Alex request it checks the exact assigned route, enabled connection, current revision, 24-hour verification and required text/system-instruction evidence. The existing runtime still builds Alex's original system instructions, memory, history, authored context and approved Sophia queue, then sends them through ConnectionManager.inferenceProbe with its encrypted credential, protected endpoint/IP/TLS policy and bounded response handling. No key reaches the browser, logs or Alex's prompt. Existing environment providers and manual selection remain available. Model replies retain provider/model attribution and full transcript continuity.
+
+Automatic switching is limited to three consecutive responses taking at least 12 seconds, or observed OpenRouter key allowance at or below 10% of a positive key limit, or a provider 429 rate-limit response. The key allowance comes from OpenRouter's authenticated /key endpoint; deprecated request-count metadata is not used. A switch is considered only among saved ordered fallback route IDs. Before use, the adapter reassesses eligibility, refreshes a stale catalog when needed, and explicitly verifies required capabilities when evidence is missing/expired. It never selects a newer, cheaper or more capable model for that reason alone, and never switches on an unrelated model failure. The switch occurs before Alex builds the next system prompt, records a local event, and displays a notification in chat with the reason. On 429, the failed request is reported honestly; the next request may switch. If no fallback is eligible, Alex reports the problem instead of claiming online status. A generic provider failure also remains an error.
+
+Real OpenRouter validation: the saved primary assignment is aion-labs/aion-2.0. A protected dashboard POST /api/alex chat request returned HTTP 200, status online, that exact model, and a genuine model-generated Alex reply identifying him as employee 01 and Personal Communicator. The assignment currently contains one candidate, so no real fallback switch was possible. The older conversation and identity files were preserved. Existing Sophia queue/delegation controls remain, but Sophia's adapter is still unavailable; no executable model tools were added.
+
+
+## 2026-10-30 — Correct OpenRouter assignment eligibility reasons
+
+Inspection of the real OpenRouter registry confirmed an enabled revision-2 connection, accepted authentication, successful current discovery and 653 correctly scoped catalog routes. Exactly 650 had no verification; two recorded INVALID_RESPONSE and one (aion-labs/aion-3.0) passed text/streaming but received MODEL_UNAVAILABLE on the tools probe, before system instructions ran. The connection's inference health records the last probe, not availability of every model.
+
+Root cause of the blanket unavailable message: AgentAssignments.assess checked route.access.state !== 'verified' before missing verification, so discovery-only listed/account-listed routes all returned MODEL_UNAVAILABLE. Fixed eligibility reasons to distinguish disabled connections, stale/failed catalogs, missing/current-revision verification, individual probe failures, expiry and capability mismatch. Every eligibility gate remains enforced. The UI now explains the actual reason and labels connection inference health as the last probe.
+
+A second integration issue was that the UI always requested all five probes, regardless of the selected agent's requirements. An unrelated optional-capability failure could stop verification before required system instructions. The UI now explicitly verifies selected required capabilities (text is always tested); additional requirements can be selected to test more. No failed capabilities are promoted, no failed provider response is ignored, and new observations leave unrequested capabilities untested.
+
+Real validation on 2026-10-30: aion-labs/aion-3.0 passed new text and system-instruction requests through the existing vault and protected transport; compatibility assessment returned OK for Alex's requirements. No assignment or Alex runtime selection was changed. The earlier failures remain in history; no other model was claimed verified. Raw credentials/responses were not logged. No Nexus or GitHub push.
+
+Validation: 113 full tests passed, the focused 32-test verification suite passed after a fixture type correction, frontend/server typecheck and production build passed, and git diff --check passed. The real dashboard request returned HTTP 200 and status online through aion-labs/aion-2.0. The existing large Vite bundle warning remains. No real automatic switch was observed because no fallback is saved.
+
+Validation: all 111 tests pass, frontend/server typecheck and production build pass, and git diff --check passes. Restarted the running backend to activate the eligibility change. A protected HTTP query of the live dashboard returned 653 routes with zero provider/connection/revision association mismatches: 649 UNVERIFIED, two INVALID_RESPONSE, one MODEL_UNAVAILABLE and one OK at the final check (live eligibility counts changed during the investigation). No bulk verification or assignment was performed. The existing large-bundle warning remains.
+
+
+## 2026-10-30 — Fix Android AI Providers fetch invocation
+
+The Android “Failed to execute 'fetch' on 'Window': Illegal invocation” error was caused by AiClient storing native fetch and invoking it as this.#fetch(...). That method call supplied the AiClient instance as the receiver instead of Window, so browser receiver validation failed before the request reached /api/ai. The resulting API-unavailable UI was a client-side failure, not a backend startup, route, authentication or cache error. Inspection found Alex's existing fetch calls use direct global invocation and do not share this defect.
+
+AiClient now binds both default and injected transports to globalThis. Existing request URLs, session cookies, CSRF headers, origin checks, timeouts, no-store behavior and credential handling are unchanged. Added a receiver-enforcing browser-compatible regression that reproduces the old TypeError before HTTP, then exercises default/injected clients, connection loading and a protected credential write against the actual local API in isolated fixtures. Earlier arrow-function mocks and Node fetch did not enforce Window receiver semantics, explaining why they passed. No Alex, design, Capacitor or backend security changes; no GitHub push.
+
+Validation: all 109 tests pass; frontend/server typecheck and production build pass; git diff --check passes. The live dashboard on localhost:3000 serves the binding fix, loads connection metadata and accepts a CSRF-protected catalog query through the client with a browser-style receiver check. A missing-CSRF request still returns 403. Live checks made no provider mutations or external model calls. Direct Android browser interaction remains unavailable; the Window receiver requirement is reproduced by the regression fixture. The existing large-bundle warning remains (1,175.54 kB / 326.97 kB gzip).
+
+
+## 2026-10-30 — Fix stale dashboard navigation in development
+
+Investigation confirmed the running Vite process uses apps/dashboard and serves App.tsx with the AI Providers button/import/conditional page mount, plus desktop/mobile navigation CSS. The page has no permission, credential or feature-flag visibility gate. The defect is the production PWA worker's broad cache-first handling of scripts/styles: after switching the same origin to development it can cache unchanged /src URLs and keep serving old navigation. Development previously neither removed that worker nor served valid JavaScript at /service-worker.js (Vite returned the HTML fallback). A regression test reproduces stale navigation under that policy. The user's browser cache cannot be inspected here, so attribution of the reported screen to that reproduced defect remains an inference.
+
+Fixed development HTML to remove only this dashboard's worker and shell caches before a one-time reload. Development now serves a no-store retirement worker, and production caching is restricted to its precache asset list so it cannot capture development modules. Existing production offline support, UI/navigation, Alex and all provider services are preserved. The running server has loaded the fix; reload http://localhost:3000 to receive it. No GitHub push.
+
+Validation: all 108 tests pass, frontend/server typecheck passes, production build passes and git diff --check passes. Three new regressions cover stale development-module caching, scoped worker/cache removal without reload loops, and actual Vite navigation/component/CSS/worker responses. Parallel Vite test fixtures now allow available-port selection to avoid collisions. Production frontend asset hashes and the existing large-bundle warning are unchanged. Interactive browser/device confirmation remains unavailable.
+
+
+## 2026-10-30 — AI Providers management interface
+
+- Added AI Providers to the existing desktop/mobile navigation and dashboard design, with add/edit/test/enable/disable/remove controls for all three existing provider types, explicit discovery and write-only credential replacement/clearing. Password inputs clear on submission, and saved credentials are never returned or revealed.
+- Added searchable, filterable, paginated model routes with provider/connection identity, listed versus tested capabilities, verification timestamps/status/expiry and sanitized failure results. Added explicit model verification and compatible primary/ordered fallback assignment controls with the existing revision and capability requirements.
+- Closed the missing dashboard HTTP integration with `/api/ai`, a thin adapter over the existing Phase 2 services. Reused local origin/session/CSRF protections and the Vite proxy; isolated lazy provider initialization and provider errors from Alex's startup and memory. No parallel backend, runtime model switching, automatic inference failover, Nexus or dependency added.
+- Added seven transport/integration tests and dashboard setup/API documentation; updated project status. All 105 tests, frontend/server typecheck, production build and whitespace checks pass. Existing large 3D-bundle warning remains (1,175.51 kB minified / 326.96 kB gzip). Live provider and interactive browser/device validation remain unavailable. Alex identity/personality, runtime/memory/chat and existing features are preserved; nothing pushed to GitHub.
+
+## 2026-10-30 — Phase 2 Step 4: explicit model verification and compatible assignments
+
+- Added explicit provider/account/native-model inference verification with persistent timestamps, revision-bound results, capability observations and sanitized auth/credit/rate-limit/provider error handling. Discovery never establishes verified access.
+- Added separate OpenAI-compatible/OpenRouter and Ollama probes for text, streaming, tools, simple structured output and system instructions. Reused encrypted credentials and protected endpoint transport; no raw responses/keys enter stored results or frontend responses.
+- Added revision-checked agent assignments with multiple ordered compatible models/fallback candidates, evidence expiry and resolution rejection reasons. Alex (01) requires text and system instructions; identity/personality, memory and runtime remain unchanged. No Nexus, dashboard redesign, automatic inference failover or GitHub push.
+- Added 29 verification/assignment tests and updated provider/catalog documentation. All 98 tests, frontend/server typecheck, production build and CLI help pass; frontend hashes and the existing bundle-size warning remain unchanged. No live external models were verified: no real credentials/account routes were configured. Automated successes are mocks/local HTTP fixtures.
+
 ## 2026-10-30 — Phase 2 Step 3: automatic discovery and unified catalog
 
 - Added protected discovery for all enabled registry connections: OpenRouter user-filtered/all-modality offset pages, generic advertised pagination and Ollama local tags. Preserved exact model IDs and separate account/provider routes; source listings never become verified access claims.
