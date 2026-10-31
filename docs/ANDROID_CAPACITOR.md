@@ -18,6 +18,8 @@ The private repository's **Android debug APK** workflow runs on pushes to `main`
 
 In the signed-in GitHub browser, open the repository's **Actions → Android debug APK → successful run → Artifacts → nthnEntps-debug-apk**. Download the ZIP, extract `app-debug.apk` on the phone, and open the APK with Android's package installer. Android may ask you to allow installs from the browser or file manager used to open it. A debug APK is signed with a runner-local debug key; a later run may have a different key and refuse to update an existing installation. Uninstall the earlier debug app if needed (the server data remains in Termux), or set up a persistent release signing key for regular updates. The APK does not start Termux or install the backend; run `npm run start` or `npm run dev` in Termux before opening it.
 
+First verified artifact: [workflow run 41149873371](https://github.com/srrnthn3-a11y/nthnEntps/actions/runs/41149873371), `nthnEntps-debug-apk` (artifact ID `13022358445`), built from commit `e6d3f9c`. The extracted APK SHA-256 is `6b95116ba7e015dc05ccab0de464c26039f8ee04fb7ffc4025076536f100839c`. This artifact expires after seven days; use a newer successful run after that.
+
 ## Security and connectivity checks
 
 - `android/app/src/main/AndroidManifest.xml` declares `INTERNET` and references `res/xml/network_security_config.xml`. That policy denies cleartext by default and allows it only for the `127.0.0.1` domain. The local HTTP exception is needed for Termux loopback on Android API 24–36. No LAN/remote cleartext exception is configured.

@@ -7,6 +7,7 @@
 - The first cloud run stalled in the Vite dev-server smoke test before Gradle. Closed test HTTP connections explicitly and bounded the workflow test step to three minutes before retrying.
 - The bounded retry showed 52 passing tests before the Vite visibility test stayed pending; changed the test runner to run files serially to avoid overlapping Vite servers on the smaller cloud runner.
 - A serial cloud run stalled at the same Vite source-transform smoke test. Replaced only that live transform assertion with source and plugin checks; separate integration tests still exercise the live Vite proxy and the production build compiles all frontend source.
+- The next cloud run succeeded end to end on commit `e6d3f9c`: 113 tests, typecheck, production build, Capacitor sync, Gradle debug APK and artifact upload. Downloaded `app-debug.apk` and verified its ZIP contents, packaged assets, loopback URL and SHA-256. Installation and on-phone WebView/API checks remain pending.
 
 ## 2026-10-31 — Capacitor Android integration
 
