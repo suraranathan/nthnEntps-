@@ -36,7 +36,7 @@ jobs:
         working-directory: apps/dashboard
 
       - name: Test dashboard and backend
-        run: npm test
+        run: timeout 180s npm test
         working-directory: apps/dashboard
 
       - name: Typecheck dashboard and backend

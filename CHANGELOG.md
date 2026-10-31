@@ -4,6 +4,7 @@
 
 - Committed and pushed the approved 95-file Capacitor, dashboard, AI Providers and Alex snapshot as `c338400`; ignore and staged scans found no private configuration, signing key or generated build artifact.
 - Added a private-repository workflow for a Node 24/JDK 21 debug APK build on Ubuntu 24.04, with tests, typechecks, production build, Capacitor sync and an APK-only seven-day artifact. Added download and installation guidance. The cloud build result is pending.
+- The first cloud run stalled in the Vite dev-server smoke test before Gradle. Closed test HTTP connections explicitly and bounded the workflow test step to three minutes before retrying.
 
 ## 2026-10-31 — Capacitor Android integration
 

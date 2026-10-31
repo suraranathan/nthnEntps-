@@ -41,7 +41,7 @@ test('production worker cannot serve cached development source; previous policy 
 
 test('dev serves current navigation, provider component, visible CSS and a valid retirement worker', async t => {
   const server = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, logLevel: 'silent', server: { host: '127.0.0.1', port: 0, strictPort: false } })
-  t.after(() => server.close())
+  t.after(() => { server.httpServer?.closeAllConnections(); return server.close() })
   await server.listen()
   const address = server.httpServer!.address(); assert.ok(address && typeof address === 'object')
   const base = `http://127.0.0.1:${address.port}`
