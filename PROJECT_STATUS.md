@@ -2,6 +2,10 @@
 
 Updated: 2026-10-31
 
+## GitHub Actions Android build
+
+The prepared 95-file Capacitor/dashboard/AI/Alex snapshot was committed as `c338400` and pushed to `origin/main` after staged whitespace and secret-exclusion checks. A private-repository Android debug APK workflow is configured for `main` pushes and manual runs with read-only source access, Node 24, JDK 21, tests, typechecks, production build, Capacitor sync, Gradle `assembleDebug`, and a seven-day APK-only artifact. Workflow execution and artifact verification are pending.
+
 ## Capacitor Android app
 
 Integrated Capacitor 8 and added the Android project for the existing dashboard (`com.nthnentps.dashboard`, display name nthnEntps). The WebView uses the same-phone Termux dashboard at `http://127.0.0.1:3000`; Vite proxies `/api` to the existing backend bound to `127.0.0.1:3001`. Android grants `INTERNET` and scopes its cleartext exception to loopback. Source remains editable in Termux/Codex, with web sync and debug APK scripts. No provider secret is configured in Capacitor or Android resources. The backend must stay running in Termux; live reload uses the existing Vite dev server.

@@ -12,6 +12,12 @@ Install a JDK compatible with Capacitor 8, Android SDK Platform 36, Build Tools 
 
 Run `npm run android:sync` after changing web source or Capacitor dependencies. Run `npm run android:apk` to sync then build a debug APK. A successful build writes `android/app/build/outputs/apk/debug/app-debug.apk`; install with `adb install -r ...` or the Android package installer. Rebuild and reinstall after native configuration changes. No APK exists merely because `cap add` or `cap sync` succeeds. For distribution, configure release signing separately and keep the signing key outside Git and the APK source tree.
 
+## GitHub Actions debug APK
+
+The private repository's **Android debug APK** workflow runs on pushes to `main` and by manual dispatch. It uses Node 24 and JDK 21 on Ubuntu 24.04, runs `npm ci`, tests, typechecks, a production Vite build, Capacitor sync, and Gradle `assembleDebug`. It uploads only `app-debug.apk` as the `nthnEntps-debug-apk` artifact for seven days. The build uses the repository's read-only checkout token; it does not need provider credentials or a signing secret for a debug APK.
+
+In the signed-in GitHub browser, open the repository's **Actions → Android debug APK → successful run → Artifacts → nthnEntps-debug-apk**. Download the ZIP, extract `app-debug.apk` on the phone, and open the APK with Android's package installer. Android may ask you to allow installs from the browser or file manager used to open it. A debug APK is signed with a runner-local debug key; a later run may have a different key and refuse to update an existing installation. Uninstall the earlier debug app if needed (the server data remains in Termux), or set up a persistent release signing key for regular updates. The APK does not start Termux or install the backend; run `npm run start` or `npm run dev` in Termux before opening it.
+
 ## Security and connectivity checks
 
 - `android/app/src/main/AndroidManifest.xml` declares `INTERNET` and references `res/xml/network_security_config.xml`. That policy denies cleartext by default and allows it only for the `127.0.0.1` domain. The local HTTP exception is needed for Termux loopback on Android API 24–36. No LAN/remote cleartext exception is configured.

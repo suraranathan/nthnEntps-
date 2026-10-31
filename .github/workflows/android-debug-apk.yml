@@ -1,0 +1,64 @@
+name: Android debug APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/dashboard/package-lock.json
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dashboard dependencies
+        run: npm ci
+        working-directory: apps/dashboard
+
+      - name: Test dashboard and backend
+        run: npm test
+        working-directory: apps/dashboard
+
+      - name: Typecheck dashboard and backend
+        run: npm run typecheck
+        working-directory: apps/dashboard
+
+      - name: Build dashboard
+        run: npm run build
+        working-directory: apps/dashboard
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+        working-directory: apps/dashboard
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon assembleDebug
+        working-directory: apps/dashboard/android
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nthnEntps-debug-apk
+          path: apps/dashboard/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
