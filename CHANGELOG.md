@@ -6,6 +6,7 @@
 - Added a private-repository workflow for a Node 24/JDK 21 debug APK build on Ubuntu 24.04, with tests, typechecks, production build, Capacitor sync and an APK-only seven-day artifact. Added download and installation guidance. The cloud build result is pending.
 - The first cloud run stalled in the Vite dev-server smoke test before Gradle. Closed test HTTP connections explicitly and bounded the workflow test step to three minutes before retrying.
 - The bounded retry showed 52 passing tests before the Vite visibility test stayed pending; changed the test runner to run files serially to avoid overlapping Vite servers on the smaller cloud runner.
+- A serial cloud run stalled at the same Vite source-transform smoke test. Replaced only that live transform assertion with source and plugin checks; separate integration tests still exercise the live Vite proxy and the production build compiles all frontend source.
 
 ## 2026-10-31 — Capacitor Android integration
 

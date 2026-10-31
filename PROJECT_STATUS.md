@@ -4,7 +4,7 @@ Updated: 2026-10-31
 
 ## GitHub Actions Android build
 
-The prepared 95-file Capacitor/dashboard/AI/Alex snapshot was committed as `c338400` and pushed to `origin/main` after staged whitespace and secret-exclusion checks. A private-repository Android debug APK workflow is configured for `main` pushes and manual runs with read-only source access, Node 24, JDK 21, tests, typechecks, production build, Capacitor sync, Gradle `assembleDebug`, and a seven-day APK-only artifact. The first cloud run reached the Vite smoke test and stalled; a bounded retry confirmed 52 tests passed before the Vite visibility test remained pending. Test files now run serially to avoid overlapping Vite servers on the GitHub runner. Artifact verification is pending.
+The prepared 95-file Capacitor/dashboard/AI/Alex snapshot was committed as `c338400` and pushed to `origin/main` after staged whitespace and secret-exclusion checks. A private-repository Android debug APK workflow is configured for `main` pushes and manual runs with read-only source access, Node 24, JDK 21, tests, typechecks, production build, Capacitor sync, Gradle `assembleDebug`, and a seven-day APK-only artifact. Two cloud runs reached the Vite visibility test and stalled after 52 passing tests; the bounded run proved the stall is inside that development source transform. Its visibility/cache assertions now inspect source and plugin configuration without running a second Vite transform; separate tests still exercise the real Vite proxy, and the production build exercises Vite compilation. Artifact verification is pending.
 
 ## Capacitor Android app
 

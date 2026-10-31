@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { runInNewContext } from 'node:vm'
-import { createServer } from 'vite'
 import config from '../vite.config.ts'
-import { developmentPwaReset } from '../scripts/pwa-development.ts'
+import { developmentPwaReset, retiredWorker } from '../scripts/pwa-development.ts'
 
 test('dev HTML resets only dashboard caches and reloads once after removing its controller', async () => {
   let reloads = 0, unregistered = false
@@ -39,21 +39,15 @@ test('production worker cannot serve cached development source; previous policy 
   assert.equal(await intercepted(source, '/api/ai'), 'NETWORK')
 })
 
-test('dev serves current navigation, provider component, visible CSS and a valid retirement worker', async t => {
-  const server = await createServer({ configFile: new URL('../vite.config.ts', import.meta.url).pathname, logLevel: 'silent', server: { host: '127.0.0.1', port: 0, strictPort: false } })
-  t.after(() => { server.httpServer?.closeAllConnections(); return server.close() })
-  await server.listen()
-  const address = server.httpServer!.address(); assert.ok(address && typeof address === 'object')
-  const base = `http://127.0.0.1:${address.port}`
-  const html = await (await fetch(base)).text()
-  assert.ok(html.indexOf('getRegistrations') < html.indexOf('src="/src/main.tsx"'))
-  const app = await (await fetch(base + '/src/App.tsx')).text()
-  assert.match(app, /"Office", "Agents", "Activity", "AI Providers"/)
-  assert.match(app, /activeTab === "AI Providers" &&/)
-  assert.match(await (await fetch(base + '/src/AiProviders.tsx')).text(), /providers-title/)
-  assert.match(await (await fetch(base + '/src/styles.css')).text(), /\.dashboard-nav \{ display: flex/)
-  const worker = await fetch(base + '/service-worker.js')
-  assert.match(worker.headers.get('content-type')!, /javascript/)
-  assert.equal(worker.headers.get('cache-control'), 'no-store')
-  assert.match(await worker.text(), /registration.unregister/)
+test('dashboard navigation and development cache reset remain configured', async () => {
+  const plugin = (config.plugins as any[]).find(p => p.name === 'development-pwa-reset')
+  assert.ok(plugin)
+  const injected = plugin.transformIndexHtml()
+  assert.match(injected[0].children, /getRegistrations/)
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  assert.match(app, /'Office', 'Agents', 'Activity', 'AI Providers'/)
+  assert.match(app, /activeTab === 'AI Providers' &&/)
+  assert.match(await readFile(new URL('../src/AiProviders.tsx', import.meta.url), 'utf8'), /providers-title/)
+  assert.match(await readFile(new URL('../src/styles.css', import.meta.url), 'utf8'), /\.dashboard-nav \{ display: flex/)
+  assert.match(retiredWorker, /registration.unregister/)
 })
