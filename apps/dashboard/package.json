@@ -10,7 +10,7 @@
     "start": "node scripts/serve.mjs preview",
     "dev:ui": "vite",
     "dev:agent": "node server/index.ts",
-    "test": "node --test tests/*.test.ts",
+    "test": "node --test --test-concurrency=1 tests/*.test.ts",
     "providers": "node server/ai/provider-cli.ts",
     "catalog": "node server/ai/catalog-cli.ts",
     "models": "node server/ai/verification-cli.ts",
