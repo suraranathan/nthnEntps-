@@ -2,6 +2,12 @@
 
 Updated: 2026-10-31
 
+## Android dashboard resume recovery
+
+Added a project-specific Capacitor `onResume` event and browser visibility/focus/online listeners so Alex and the mounted AI Providers page refresh immediately when the APK returns to the foreground. A shared single-flight controller prevents overlapping refreshes, retries failures after 1, 2, 4 and 8 seconds, then reports offline; Alex continues with a 30-second low-rate probe while offline and resumes its normal five-second polling after recovery. The UI now distinguishes reconnecting from offline. Event listeners, request signals and timers are cleaned up on unmount. Existing loopback URLs, proxy, backend Host/Origin/session/CSRF checks and dashboard design are unchanged.
+
+Validation on this Termux phone: 117 tests passed, frontend/server typecheck passed, production Vite build passed, Capacitor web sync passed, and `git diff --check` passed. The Vite large-bundle warning remains. Android SDK/adb are not installed here, so the native `MainActivity` change could not be compiled into or tested in a new APK; the currently installed APK still has the prior behavior. The user's 2–3 second freeze may also involve a stopped Termux process or an unresponsive WebView renderer, which this data-recovery phase does not diagnose or repair. Rebuild/install a new APK and reproduce the app switch to verify the native signal and distinguish those cases. No commit or push.
+
 ## GitHub Actions Android build
 
 The prepared 95-file Capacitor/dashboard/AI/Alex snapshot was committed as `c338400` and pushed to `origin/main` after staged whitespace and secret-exclusion checks. A private-repository Android debug APK workflow is configured for `main` pushes and manual runs with read-only source access, Node 24, JDK 21, tests, typechecks, production build, Capacitor sync, Gradle `assembleDebug`, and a seven-day APK-only artifact. Two early cloud runs stalled in a Vite development source-transform smoke test. That test now checks source and plugin configuration; separate tests still exercise the real Vite proxy, and the production build compiles all frontend source.

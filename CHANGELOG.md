@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-31 — Android dashboard resume recovery
+
+- Emitted a native resume event from the Capacitor activity and listened for it alongside browser foreground/visibility events. Alex and the mounted AI Providers page now refresh immediately after returning to the APK.
+- Added one in-flight refresh per data source, bounded 1/2/4/8-second retries, explicit reconnecting/offline status, a low-rate offline Alex probe, and cleanup of requests, listeners and timers. Kept the existing API origin, ports, cookie/CSRF protection, UI layout and provider functionality.
+- Added four recovery-controller tests. All 117 tests, frontend/server typecheck, production build and Capacitor sync pass. The Vite bundle-size warning remains. Android native build and app-switch behavior are unverified here because no Android SDK/adb is installed; no APK was generated, committed or pushed.
+
 ## 2026-10-31 — GitHub Actions Android APK build
 
 - Committed and pushed the approved 95-file Capacitor, dashboard, AI Providers and Alex snapshot as `c338400`; ignore and staged scans found no private configuration, signing key or generated build artifact.

@@ -12,6 +12,8 @@
 .alex-status-dot { display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #8d9692; }
 .alex-status-dot.online { background: #8bd6bd; }
 .alex-status-dot.thinking { background: #e7bd79; }
+.alex-status-dot.reconnecting { background: #e7bd79; animation: status-pulse 1.5s ease-in-out infinite; }
+@keyframes status-pulse { 50% { opacity: .35; } }
 .alex-status-dot.error { background: #ef9d91; }
 .alex-launch { position: fixed; bottom: 25px; right: 25px; z-index: 30; display: flex; gap: 10px; align-items: center; padding: 14px 20px; border: 1px solid #587367; border-radius: 16px; color: #f2f7f4; background: #243d33; box-shadow: 0 8px 32px #0005; }
 .alex-launch small { color: #b8cbc1; }

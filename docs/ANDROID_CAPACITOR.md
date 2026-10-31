@@ -28,3 +28,9 @@ First verified artifact: [workflow run 41149873371](https://github.com/srrnthn3-
 - `dist/` and synced Android web assets contain the dashboard only. Keep credentials in Termux `.env.server` or the server's private encrypted provider store. Never put keys in `VITE_` variables, Capacitor config, Android resources, or native source.
 
 The APK does not bundle the backend. If Termux is stopped or Android kills its process, the UI cannot use `/api`; restart Termux. This app is designed for one user's phone and does not expose the API as a remote service.
+
+## Resume recovery
+
+`MainActivity.onResume()` emits `nthnentps:resume` through the existing Capacitor bridge. The web client also listens for visible-page, focus and online events, coalesces bursts, and immediately reloads Alex and any mounted AI Providers page. Each data source has one in-flight refresh. Failed reads retry after 1, 2, 4 and 8 seconds, then show offline; Alex checks again every 30 seconds while offline and returns to five-second polling after a successful read. Reconnection does not change API authentication or expose the backend on another interface.
+
+After building and installing an APK with this change, switch to Termux and back. Check that the Alex status and AI Providers page recover without manual reload. If buttons and local navigation also freeze, inspect Android WebView renderer/lifecycle logs; if only API actions fail, check whether both port 3000 and 3001 remain reachable while the APK is foreground. A visible cached page does not prove that its renderer or Termux services are running. This native behavior has not yet been verified on-device for the new build.

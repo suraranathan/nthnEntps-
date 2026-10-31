@@ -1,4 +1,4 @@
-export type ConnectionState = 'offline' | 'online' | 'thinking' | 'error'
+export type ConnectionState = 'offline' | 'online' | 'thinking' | 'error' | 'reconnecting'
 export type MemoryCategory = 'project' | 'relationships' | 'insideJokes' | 'temporary'
 export type MemoryNote = { id: string; text: string; source: 'user'; createdAt: string }
 export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; createdAt: string; kind: 'chat' | 'briefing' | 'update'; provider?: string; model?: string }

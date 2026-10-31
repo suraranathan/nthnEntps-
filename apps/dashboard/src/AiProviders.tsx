@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AiClient } from './ai-client'
+import { useRuntimeRecovery } from './useRuntimeRecovery'
 import type { AiAction, AiSnapshot, AssignmentView, Capability, ManagedConnection, ModelSearch } from './ai-contract'
 import type { CatalogEntry, CatalogQuery, ModelRoute } from '../server/ai/contracts.ts'
 import { capabilityLabels, displayTime, eligibilityReason, verificationLabel } from './ai-display'
@@ -26,16 +27,12 @@ export function AiProviders() {
   const [reload, setReload] = useState(0)
   const [editing, setEditing] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
-  const refresh = useCallback(async (signal?: AbortSignal) => {
-    const data = await client.snapshot(signal)
-    if (mounted.current && !signal?.aborted) setSnapshot(data)
-  }, [client])
+  const recovery = useRuntimeRecovery(signal => client.snapshot(signal), data => { if (mounted.current) setSnapshot(data) })
+  const refresh = recovery.refresh
   useEffect(() => {
     mounted.current = true
-    const controller = new AbortController()
-    void refresh(controller.signal).catch(e => { if (!controller.signal.aborted) setError(message(e)) })
-    return () => { mounted.current = false; controller.abort() }
-  }, [refresh])
+    return () => { mounted.current = false }
+  }, [])
 
   const perform: Perform = async (action, success, after) => {
     if (busy.current) return false
@@ -63,6 +60,7 @@ export function AiProviders() {
     <div className="providers-heading"><div><div className="eyebrow">WORKSPACE CONFIGURATION</div><h1 id="providers-title">AI Providers</h1><p>Manage connections, inspect model access and choose agent candidates.</p></div>
       <button disabled={pending} onClick={() => { setError(''); void refresh().then(() => setReload(n => n + 1)).catch(e => setError(message(e))) }}>Reload state</button></div>
     <p className="providers-note">Alex uses his saved verified primary for live chat. Automatic switches consider only saved verified fallbacks after repeated slowness or a provider limit signal.</p>
+    {recovery.state !== 'connected' && <p className="providers-error" role="status">{recovery.state === 'offline' ? 'Local dashboard backend is offline.' : 'Reconnecting to the local dashboard…'} {recovery.error}</p>}
     {error && <div className="providers-error" role="alert">{error}</div>}
     <div className="providers-notice" role="status" aria-live="polite">{pending ? 'Working… Provider tests and verification may take a moment.' : notice}</div>
     {!snapshot ? <p>{error ? 'The provider management API is unavailable. Reload state to retry.' : 'Loading provider system…'}</p> : <>
