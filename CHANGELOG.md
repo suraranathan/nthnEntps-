@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-03 — Linux environment bootstrap fixes and dashboard artifact
+
+- Fixed the custom `com.nthn` bootstrap's `libtirpc` failure by populating `/usr/share/automake-1.16` with the custom Automake 1.16 data files, so upstream tarballs that use absolute `INSTALL` symlinks resolve correctly.
+- Added `git`, `python` and `nodejs` to the bootstrap's post-additional package list and extended `verify_bootstrap.py` to require them plus their command entries and Python symlinks.
+- Added `scripts/test_bootstrap_proot.sh`, a real ARM64 runtime test that binds an extracted bootstrap to `/data/data/com.nthn/files`, checks the shell/package tools and file persistence, and installs a locally built `.deb` targeting the `com.nthn` prefix.
+- Verified the `git-2.50.1.tar.xz` checksum from the corrected `www.kernel.org` URL and rewrote the stale `mirrors.kernel.org` source path in the workflow.
+- Pushed `rea-termux-analysis` commit `288cba6` and started workflow run `41654652900`; the bootstrap result is pending.
+- Committed and pushed dashboard work as `144b6ff`. The Android CI workflow built `app-debug.apk` (4,528,413 bytes; SHA-256 `07a970655e21de2f174391a730f346053155f11528647e3ff7d21473d3a9c591`). Installation and on-phone WebView checks remain pending.
+- Documented the repository boundary, verified facts, blockers and next steps in `AGENTS.md`, `IMPLEMENTATION_PLAN.md` and `HANDOFF.md`.
+
 ## 2026-10-31 — Measured Office environment redesign
 
 - Reorganized the existing 3D Office into a shared 22 × 17 metre floor plan with a central four-desk work area, south entrance/reception/waiting area, west meeting and consultation rooms, and three east-side private work rooms.
