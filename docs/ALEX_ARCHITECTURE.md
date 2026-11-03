@@ -21,14 +21,15 @@ OpenAI-compatible transport uses `POST /chat/completions` with `model`, ordered 
 | Component | Responsibility |
 | --- | --- |
 | `src/team.ts` | Shared seven-person roster and explicit authored scene context. Six colleagues remain placeholders. |
-| `server/identity.ts` | Versioned Alex identity, original personality, seriousness/humor rules, truthful capability and context boundaries. No fixed jokes or canned conversational fallback. |
+| `server/identity.ts`, `server/personality-context.ts` | Versioned Alex identity, stable values, sensitive-context guidance and user-controlled humor. No fixed jokes or conversational quotas. |
 | `server/providers.ts` | `ModelProvider`, bounded/timeout-protected HTTP adapters, optional model discovery and allowlisted `ModelRouter.select()` seam for future Nexus. |
 | `server/memory.ts` | Schema-validated private JSON persistence, atomic serialized writes, contextual retrieval, events and audit. |
 | `server/runtime.ts` | Conversation lifecycle, user-controlled memory/settings, local handoff queue and notification generation. Single in-flight generation; local setting changes roll back on write failure. |
 | `server/sophia.ts` | Unavailable adapter, correlated request/update types, approval requirement and trusted-adapter update validation. No production dispatcher is installed. |
-| `server/notifications.ts` | Deterministic timezone/quiet-hour/interval/day/deduplication rules. |
+| `server/notifications.ts`, `server/project-monitor.ts`, `server/followups.ts` | Quiet hours, rate limits, persisted project document fingerprints and user-saved follow-up state/event detection. |
+| `server/philosophy.ts` | Source registry, labeled paraphrase perspectives, curated checked quotation and a fail-closed guard for apparent unverified historical quotes. |
 | `server/http.ts` | Local API boundary, bounded JSON input, session cookie, CSRF, origin/host checks, request pacing and sanitized errors. |
-| `src/useAlex.ts`, `src/AlexChat.tsx` | Polling connection state, interactive chat, explicit saved memory, preferences, model switch/test, queue and action log. |
+| `src/useAlex.ts`, `src/AlexChat.tsx` | Polling connection state, interactive chat, explicit saved memory, follow-ups, preferences, model switch/test, queue and action log. |
 | `scripts/serve.mjs` | Runs loopback agent API and existing Vite dev/production preview together; forwards shutdown and fails if either process exits. |
 
 ```mermaid
@@ -76,6 +77,16 @@ The UI accepts an exact task request or clarification and requires a separate ap
 A future trusted dispatcher can implement `SophiaAdapter.submit()` and `updates()`, preserving correlation IDs and user requirements. `applySophiaUpdate()` rejects unknown IDs, undelivered/terminal requests and backward transitions. The current runtime never calls a live adapter. Installing a future dispatcher also requires a reviewed dispatch permission flow: this implementation's checkbox authorizes **local storage only**, not future automatic execution/delivery. Future consequential tools must enforce action-specific approval server-side; a model saying “approved” is not authorization. No arbitrary shell/file/deployment executor exists.
 
 ## Proactive communication
+
+### Personality, philosophy and follow-up extension (2026-10-31)
+
+Alex keeps a stable versioned identity across providers. Each chat turn adds context-sensitive guidance: a small set of high-confidence distress cues suppresses joking, and otherwise the selected model judges whether a question, advice, humor, teasing or disagreement is useful. There are no timed question/joke/disagreement routines. This is a guard and a value framework, not proof that a given model will act naturally. Explicit inside-joke notes and transcript retrieval survive model changes; automatic extraction of private memories from conversation is intentionally unavailable. Users save durable shared facts explicitly.
+
+Philosophical guidance is optional and source-indexed. The source registry covers Marcus Aurelius, Seneca, Epictetus, Socrates through Plato, Aristotle and Confucius. Its perspective descriptions are paraphrases, and any novel synthesis must be labeled Alex's interpretation. Only the exact Epictetus excerpt in the curated registry is approved as a direct historical quotation, with work, section, translator and source URL. Apparent unverified attributed quotes in generated text are replaced by an explicit verification failure. This conservative guard cannot prove every possible model-generated historical claim or detect all quotation styles. For strict academic quotation work, a larger reviewed corpus and human source review are still required. The source URLs are public reading references; no network fetch runs during Alex requests.
+
+The backend fingerprints `PROJECT_STATUS.md` by section on startup and each minute. The first read sets a baseline; later changed sections create a persistent event, with undelivered edits coalesced to the latest document. This reports a document change, not independently verified task progress. User-saved follow-ups hold pending, scheduled, overdue, completed and dismissed states. Due, reminder and stalled signals create at most one event per state; the event waits through quiet hours and survives restart. Unfinished Sophia queue entries are included as unverified context, not silently converted into completed work. There is no Git/file-system watcher beyond the status document, no Android background scheduler, and no automatic extraction of tasks from free-form chat.
+
+Automatic messages require the existing proactive opt-in. Project and provider events additionally require conversation initiation set to relevant; saved follow-up signals use the separate follow-up switch. Reminder times use a separate reminder switch. Quiet hours and interval gating apply before all automatic model calls. Manual chat and the explicit “Brief me now” action remain available and do not consume a scheduled briefing slot. These messages stay inside the dashboard; no OS push or external message is sent.
 
 Defaults: proactive updates and daily briefings off, minimum interval 60 minutes, quiet 22:00–08:00 Asia/Manila. Interval is configurable between 15 and 1440 minutes. The server checks once per minute while running. Quiet hours may cross midnight; equal start/end disables them. Scheduled briefings require proactive permission, run at most once per local date after the configured time, and respect quiet hours/intervals. There is no missed-day replay backlog.
 

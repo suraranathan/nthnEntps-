@@ -73,7 +73,7 @@ Typecheck covers both frontend and server/tests. Production build also runs type
 
 ## Phase 2 provider connections
 
-A separate backend CLI now manages multiple OpenRouter, OpenAI-compatible and Ollama connections, with persistent SQLite storage, encrypted credentials and SSRF-protected connection tests:
+A separate backend CLI manages multiple OpenAI, Anthropic, Google Gemini, OpenRouter, xKiro, custom OpenAI-compatible and Ollama connections, with persistent SQLite storage, encrypted credentials and protected connection tests:
 
 ```sh
 npm run providers -- help
@@ -81,9 +81,9 @@ npm run providers -- providers
 npm run providers -- list
 ```
 
-Use **AI Providers** in the dashboard navigation to add/edit/test/enable/disable/remove these connections, replace/clear write-only credentials, discover and search models, explicitly verify capabilities, and save compatible primary/fallback candidates for agents. New connections default to disabled. Stored credentials cannot be viewed; endpoint changes clear them. Verification can incur provider charges. See [AI Providers dashboard](../../docs/AI_PROVIDERS_DASHBOARD.md) for the workflow, protected HTTP contract and integration limits.
+Use **AI Providers** in the sidebar to add, manage and enable connections, search synchronized models, add an exact model ID manually when discovery is unavailable, explicitly verify capabilities, and save compatible primary/fallback candidates for agents. New connections default to disabled. Connection tests run automatically after creation and relevant changes; enabled model catalogs refresh in the background. Manual models must pass verification before assignment. Custom OpenAI-compatible endpoints can use bearer or `x-api-key` authentication. Stored credentials cannot be viewed; endpoint changes clear them. Verification can incur provider charges and asks for confirmation. See [AI Providers dashboard](../../docs/AI_PROVIDERS_DASHBOARD.md) for the workflow, protected HTTP contract and integration limits.
 
-The same add/edit/test/enable/disable/remove CLI commands and private-stdin credential handling remain documented in [Provider Connection Management](../../docs/PROVIDER_CONNECTIONS.md). The default private store is `.local/ai/`, separate from Alex's `.local/alex/`. A saved verified Alex (01) assignment now supplies his runtime OpenRouter model through the protected provider connection. The configured primary is used at startup; only repeated slowness or provider limit signals can trigger a switch to a saved verified fallback. See [Alex assigned runtime](../../docs/ALEX_ASSIGNED_RUNTIME.md).
+The same add/edit/test/enable/disable/remove CLI commands and private-stdin credential handling remain documented in [Provider Connection Management](../../docs/PROVIDER_CONNECTIONS.md). The default private store is `.local/ai/`, separate from Alex's `.local/alex/`. A saved verified Alex (01) assignment supplies his runtime model through the protected provider connection, including native Anthropic and Gemini formats. The configured primary is used at startup; only repeated slowness or provider limit signals can trigger a switch to a saved verified fallback before a new request, with an in-chat event. See [Alex assigned runtime](../../docs/ALEX_ASSIGNED_RUNTIME.md).
 
 ## Automatic model catalog
 

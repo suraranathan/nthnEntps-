@@ -8,9 +8,12 @@ export interface ConnectionAdapter {
   requiresCredential: boolean
   credentiallessState: 'missing' | 'not-required'
   probeKind: 'authentication' | 'discovery'
+  protocol: 'openai-chat' | 'ollama-chat' | 'anthropic-messages' | 'gemini-generate-content'
+  authStyle: 'bearer' | 'anthropic' | 'gemini'
   validateBase(url: URL, network: NetworkPolicy): void
   discoveryPath: string
   probePath: string
+  inferencePath(model: string, stream: boolean): string
   interpret(response: ProbeResponse): Pick<ProviderConnection['health'], 'authentication' | 'discovery'>
 }
 function success(response: ProbeResponse) {
@@ -23,7 +26,7 @@ function success(response: ProbeResponse) {
 const adapters: readonly ConnectionAdapter[] = [
   {
     definition: { id: 'openrouter', name: 'OpenRouter', adapterId: 'openrouter', discovery: 'supported', accountMetadata: 'supported' },
-    requiresCredential: true, credentiallessState: 'missing', probeKind: 'authentication', probePath: '/key', discoveryPath: '/models/user',
+    requiresCredential: true, credentiallessState: 'missing', probeKind: 'authentication', protocol: 'openai-chat', authStyle: 'bearer', probePath: '/key', discoveryPath: '/models/user', inferencePath: () => '/chat/completions',
     validateBase(url, network) {
       if (network !== 'public' || url.origin !== 'https://openrouter.ai' || url.pathname.replace(/\/$/, '') !== '/api/v1') throw new ManagementError('INVALID_ENDPOINT')
     },
@@ -34,8 +37,32 @@ const adapters: readonly ConnectionAdapter[] = [
     },
   },
   {
-    definition: { id: 'openai-compatible', name: 'OpenAI-compatible endpoint', adapterId: 'openai-compatible', discovery: 'unknown', accountMetadata: 'unknown' },
-    requiresCredential: false, credentiallessState: 'missing', probeKind: 'discovery', probePath: '/models', discoveryPath: '/models',
+    definition: { id: 'openai', name: 'OpenAI', adapterId: 'openai', discovery: 'supported', accountMetadata: 'unknown' },
+    requiresCredential: true, credentiallessState: 'missing', probeKind: 'discovery', protocol: 'openai-chat', authStyle: 'bearer', probePath: '/models', discoveryPath: '/models', inferencePath: () => '/chat/completions',
+    validateBase(url, network) { if (network !== 'public' || url.origin !== 'https://api.openai.com' || url.pathname.replace(/\/$/, '') !== '/v1') throw new ManagementError('INVALID_ENDPOINT') },
+    interpret(response) { const body = success(response); if (!Array.isArray(body.data) || !body.data.every(x => x && typeof x.id === 'string')) throw new ManagementError('INVALID_RESPONSE'); return { authentication: 'accepted', discovery: 'succeeded' } },
+  },
+  {
+    definition: { id: 'anthropic', name: 'Anthropic', adapterId: 'anthropic', discovery: 'supported', accountMetadata: 'unknown' },
+    requiresCredential: true, credentiallessState: 'missing', probeKind: 'discovery', protocol: 'anthropic-messages', authStyle: 'anthropic', probePath: '/models', discoveryPath: '/models', inferencePath: () => '/messages',
+    validateBase(url, network) { if (network !== 'public' || url.origin !== 'https://api.anthropic.com' || url.pathname.replace(/\/$/, '') !== '/v1') throw new ManagementError('INVALID_ENDPOINT') },
+    interpret(response) { const body = success(response); if (!Array.isArray(body.data) || !body.data.every(x => x && typeof x.id === 'string')) throw new ManagementError('INVALID_RESPONSE'); return { authentication: 'accepted', discovery: 'succeeded' } },
+  },
+  {
+    definition: { id: 'gemini', name: 'Google Gemini', adapterId: 'gemini', discovery: 'supported', accountMetadata: 'unknown' },
+    requiresCredential: true, credentiallessState: 'missing', probeKind: 'discovery', protocol: 'gemini-generate-content', authStyle: 'gemini', probePath: '/models', discoveryPath: '/models', inferencePath: (model, stream) => `/models/${encodeURIComponent(model.replace(/^models\//, ''))}:${stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`,
+    validateBase(url, network) { if (network !== 'public' || url.origin !== 'https://generativelanguage.googleapis.com' || url.pathname.replace(/\/$/, '') !== '/v1beta') throw new ManagementError('INVALID_ENDPOINT') },
+    interpret(response) { const body = success(response); if (!Array.isArray(body.models) || !body.models.every(x => x && typeof x.name === 'string')) throw new ManagementError('INVALID_RESPONSE'); return { authentication: 'accepted', discovery: 'succeeded' } },
+  },
+  {
+    definition: { id: 'xkiro', name: 'xKiro', adapterId: 'xkiro', discovery: 'supported', accountMetadata: 'unknown' },
+    requiresCredential: true, credentiallessState: 'missing', probeKind: 'discovery', protocol: 'openai-chat', authStyle: 'bearer', probePath: '/models', discoveryPath: '/models', inferencePath: () => '/chat/completions',
+    validateBase(url, network) { if (network !== 'public' || url.origin !== 'https://api.xkiro.com' || url.pathname.replace(/\/$/, '') !== '/v1') throw new ManagementError('INVALID_ENDPOINT') },
+    interpret(response) { const body = success(response); if (!Array.isArray(body.data) || !body.data.every(x => x && typeof x.id === 'string')) throw new ManagementError('INVALID_RESPONSE'); return { authentication: 'unknown', discovery: 'succeeded' } },
+  },
+  {
+    definition: { id: 'openai-compatible', name: 'Custom OpenAI-compatible endpoint', adapterId: 'openai-compatible', discovery: 'unknown', accountMetadata: 'unknown' },
+    requiresCredential: false, credentiallessState: 'missing', probeKind: 'discovery', protocol: 'openai-chat', authStyle: 'bearer', probePath: '/models', discoveryPath: '/models', inferencePath: () => '/chat/completions',
     validateBase() {},
     interpret(response) {
       const body = success(response)
@@ -46,7 +73,7 @@ const adapters: readonly ConnectionAdapter[] = [
   },
   {
     definition: { id: 'ollama', name: 'Ollama', adapterId: 'ollama', discovery: 'supported', accountMetadata: 'unsupported' },
-    requiresCredential: false, credentiallessState: 'not-required', probeKind: 'discovery', probePath: '/api/tags', discoveryPath: '/api/tags',
+    requiresCredential: false, credentiallessState: 'not-required', probeKind: 'discovery', protocol: 'ollama-chat', authStyle: 'bearer', probePath: '/api/tags', discoveryPath: '/api/tags', inferencePath: () => '/api/chat',
     validateBase(url) { if (url.pathname !== '/') throw new ManagementError('INVALID_ENDPOINT') },
     interpret(response) {
       const body = success(response)

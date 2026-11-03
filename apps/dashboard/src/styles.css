@@ -140,3 +140,58 @@
   .providers-page input:not([type="checkbox"]), .providers-page select { font-size: 16px; }
   .providers-page button { min-height: 40px; }
 }
+
+/* The office owns the landing view. Other sections are reached through the temporary drawer. */
+.app-shell { max-width: none; }
+.topbar { height: 64px; gap: 14px; }
+.menu-button { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border: 1px solid #3b4b3d; border-radius: 9px; background: #26352b; color: #dce9dc; font-size: 19px; }
+.menu-button:focus-visible, .avatar-button:focus-visible, .sidebar button:focus-visible { outline: 2px solid #8bd6bd; outline-offset: 2px; }
+.workspace-label { margin-left: auto; }
+.avatar-button { margin-left: 0; }
+.dashboard { display: block; width: 100%; max-width: 1280px; margin: 0 auto; padding: 22px 0 30px; }
+.dashboard > :is(.office-column, .panel, .providers-page) { width: 100%; }
+.office-heading { margin-bottom: 14px; }
+.office-heading h1 { margin: 4px 0 0; }
+.scene-canvas { height: clamp(360px, calc(100dvh - 220px), 760px); }
+.agent-panel, .activity-panel, .tasks-panel { max-width: 860px; margin: 0 auto; }
+.agent-panel .summary-row, .tasks-panel .summary-row { max-width: 360px; }
+.tasks-panel .empty-state { max-width: 330px; margin: 18px auto; }
+.tasks-panel > .add-button { margin: 0 auto; }
+.sidebar-backdrop { position: fixed; inset: 0; z-index: 49; background: #050a07b8; animation: backdrop-in .2s ease-out; }
+.sidebar { position: fixed; z-index: 50; inset: 0 auto 0 0; width: min(340px, 88vw); max-height: 100dvh; display: flex; flex-direction: column; padding: max(22px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom)); border-right: 1px solid #455949; background: #19261e; box-shadow: 14px 0 40px #0008; transform: translateX(-105%); visibility: hidden; transition: transform .24s ease, visibility .24s; }
+.sidebar-open { transform: translateX(0); visibility: visible; }
+.sidebar-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 4px 2px 22px; border-bottom: 1px solid #344437; }
+.sidebar-heading h2 { margin: 5px 0 0; font-family: Manrope, sans-serif; font-size: 23px; }
+.sidebar-close { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid #4a604e; border-radius: 8px; background: #2a3a2e; font-size: 23px; }
+.sidebar nav { display: flex; flex-direction: column; gap: 5px; overflow-y: auto; padding: 18px 0; }
+.sidebar nav button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 46px; padding: 10px 13px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: #d7e1d7; text-align: left; font-size: 14px; }
+.sidebar nav button:hover, .sidebar nav .nav-active { border-color: #4d6652; background: #2b4031; color: #f1f7ef; }
+.sidebar nav button span:last-child { color: #9bb7a0; font-size: 11px; text-transform: capitalize; }
+.sidebar-footer { margin-top: auto; padding: 16px 4px 0; border-top: 1px solid #344437; color: #aabcae; font-size: 11px; }
+.sidebar-footer .alex-status-dot { margin-right: 5px; }
+.sidebar-footer p { margin: 18px 0 0; color: #77887b; font-size: 9px; letter-spacing: 1px; }
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 680px) {
+  .app-shell { padding: 0 12px; }
+  .topbar { height: 56px; gap: 9px; }
+  .brand-name { font-size: 13px; }
+  .workspace-label { display: none; }
+  .avatar-button { margin-left: auto; }
+  .dashboard { padding: 14px 0 22px; }
+  .office-heading h1 { font-size: 21px; }
+  .scene-canvas { height: max(360px, calc(100dvh - 185px)); }
+  .scene-count { font-size: 7px; }
+  .scene-controls { height: auto; min-height: 48px; gap: 8px; flex-wrap: wrap; padding: 8px; }
+  .zoom-controls { gap: 5px; }
+  .panel { display: block; }
+}
+@media (prefers-reduced-motion: reduce) { .sidebar, .sidebar-backdrop { transition: none; animation: none; } }
+
+.providers-advanced { margin: 14px 0; padding: 10px 12px; border: 1px solid #3d5141; border-radius: 9px; background: #1d2b21; }
+.providers-advanced > summary { cursor: pointer; color: #c8dec9; font-size: 12px; font-weight: 600; padding: 3px 0; }
+.providers-advanced[open] > summary { margin-bottom: 12px; }
+.providers-manual { margin: 18px 0; padding-top: 16px; border-top: 1px solid #405444; }
+.providers-manual .providers-fields { margin: 12px 0; }
+.providers-manual > button { margin-top: 4px; }
+.connection-card .providers-advanced .providers-actions { margin-top: 12px; }
+@media (max-width: 680px) { .providers-advanced { padding: 10px; } .providers-manual .providers-fields { display: block; } .providers-manual label { margin: 10px 0; } }

@@ -117,7 +117,7 @@ test('quiet hours handle midnight, boundaries, daytime ranges and disabled quiet
 
 test('proactive events are opt-in, throttled, quiet, deduplicated and retained after failures', async t => {
   const { store, runtime, provider } = await fixture(t)
-  store.event('test_event', 'Actual local test event; not task completion')
+  store.event('project_change', 'Actual local test document change; not task completion')
   const morning = new Date('2026-10-30T02:00:00Z') // 10:00 Manila
   assert.equal(notificationDue(store.state, morning), null)
   store.state.preferences.proactive = true
@@ -130,7 +130,7 @@ test('proactive events are opt-in, throttled, quiet, deduplicated and retained a
   store.state.lastNotification = 0; store.state.lastBriefingDay = ''
   assert.equal(notificationDue(store.state, morning), 'briefing')
   store.state.lastBriefingDay = '2026-10-30'; assert.equal(notificationDue(store.state, morning), null)
-  store.event('new', 'Another actual event')
+  store.event('project_change', 'Another actual event')
   provider.fail = true
   const before = store.state.deliveredEvents.length
   await assert.rejects(runtime.generate('update'))

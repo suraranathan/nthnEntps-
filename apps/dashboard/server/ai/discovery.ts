@@ -12,11 +12,11 @@ const strings = (value: unknown): string[] | null => Array.isArray(value) && val
 const tokens = (value: unknown): number | null => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 const support = (value: unknown) => typeof value === 'boolean' ? value ? 'supported' as const : 'unsupported' as const : 'unknown' as const
 export function initialDiscoveryQuery(providerId: string): DiscoveryQuery {
-  return providerId === 'openrouter' ? { offset: '0', limit: String(DISCOVERY_PAGE_SIZE), output_modalities: 'all' } : {}
+  return providerId === 'openrouter' ? { offset: '0', limit: String(DISCOVERY_PAGE_SIZE), output_modalities: 'all' } : providerId === 'gemini' ? { pageSize: String(DISCOVERY_PAGE_SIZE) } : providerId === 'xkiro' ? { modality: 'all' } : providerId === 'anthropic' ? { limit: String(DISCOVERY_PAGE_SIZE) } : {}
 }
 export function modelDescriptor(value: unknown, connection: ManagedConnection, at: string): ModelDescriptor {
   const raw = providerObject(value), architecture = record(raw.architecture), capabilities = record(raw.capabilities)
-  const nativeId = connection.providerId === 'ollama' ? raw.name : raw.id
+  const nativeId = ['ollama', 'gemini'].includes(connection.providerId) ? raw.name : raw.id
   if (typeof nativeId !== 'string' || !nativeId.trim()) throw new ManagementError('INVALID_RESPONSE')
   const parameters = strings(raw.supported_parameters), features = strings(raw.capabilities)
   let input = strings(architecture.input_modalities) ?? strings(raw.input_modalities) ?? strings(capabilities.input)
@@ -24,6 +24,13 @@ export function modelDescriptor(value: unknown, connection: ManagedConnection, a
   if (features) {
     if (features.includes('completion')) { input ??= ['text', ...(features.includes('vision') ? ['image'] : [])]; output ??= ['text'] }
     if (features.includes('embedding')) { input ??= ['text']; output ??= ['embedding']; if (features.includes('completion') && !strings(architecture.output_modalities) && !strings(raw.output_modalities) && !strings(capabilities.output)) output = ['text', 'embedding'] }
+  }
+  if (connection.providerId === 'gemini') {
+    const methods = strings(raw.supportedGenerationMethods)
+    if (methods) { input ??= ['text']; output ??= methods.includes('generateContent') ? ['text'] : [] }
+  }
+  if (connection.providerId === 'xkiro' && typeof raw.modality === 'string') {
+    input ??= ['text']; output ??= [raw.modality === 'chat' ? 'text' : raw.modality === 'tts' || raw.modality === 'stt' ? 'audio' : raw.modality]
   }
   const caps: ModelCapabilities = {
     input, output,
@@ -33,6 +40,7 @@ export function modelDescriptor(value: unknown, connection: ManagedConnection, a
     systemInstructions: support(capabilities.system_instructions ?? raw.supports_system_instructions),
   }
   if (caps.tools === 'unknown' && parameters) caps.tools = parameters.includes('tools') ? 'supported' : 'unsupported'
+  if (connection.providerId === 'xkiro' && capabilities.vision === true) input = ['text', 'image']
   if (caps.tools === 'unknown' && features) caps.tools = features.includes('tools') ? 'supported' : 'unsupported'
   if (caps.structuredOutput === 'unknown' && parameters) caps.structuredOutput = parameters.includes('response_format') || parameters.includes('structured_outputs') ? 'supported' : 'unsupported'
   const extensions: Record<string, JsonValue> = {}
@@ -61,8 +69,8 @@ export function modelDescriptor(value: unknown, connection: ManagedConnection, a
   }
   return {
     nativeModelId: nativeId, displayName: typeof raw.name === 'string' && raw.name.trim() ? raw.name : nativeId,
-    capabilities: caps, contextTokens: tokens(raw.context_length) ?? tokens(raw.context_window) ?? tokens(record(raw.top_provider).context_length),
-    maxOutputTokens: tokens(raw.max_output_tokens) ?? tokens(record(raw.top_provider).max_completion_tokens),
+    capabilities: { ...caps, input }, contextTokens: tokens(raw.context_length) ?? tokens(raw.context_window) ?? tokens(raw.inputTokenLimit) ?? tokens(record(raw.top_provider).context_length),
+    maxOutputTokens: tokens(raw.max_output_tokens) ?? tokens(raw.outputTokenLimit) ?? tokens(record(raw.top_provider).max_completion_tokens),
     evidence: { source: 'provider-api', observedAt: at, reference: connection.providerId + ':' + connection.id }, extensions,
   }
 }
@@ -75,14 +83,14 @@ function nextLink(value: unknown, connection: ManagedConnection): DiscoveryQuery
   if (url.origin !== expected.origin || url.pathname !== expected.pathname || url.username || url.password || url.hash) throw new ManagementError('PAGINATION_INVALID')
   const result: DiscoveryQuery = {}
   for (const [key, item] of url.searchParams) {
-    if (!['after', 'offset', 'limit', 'cursor', 'page', 'page_token', 'pageToken', 'output_modalities'].includes(key) || key in result) throw new ManagementError('PAGINATION_INVALID')
+    if (!['after', 'offset', 'limit', 'cursor', 'page', 'page_token', 'pageToken', 'pageSize', 'output_modalities', 'modality'].includes(key) || key in result) throw new ManagementError('PAGINATION_INVALID')
     result[key] = item
   }
   return result
 }
 export function parseDiscovery(body: unknown, connection: ManagedConnection, query: DiscoveryQuery, link: string | null = null): ParsedDiscovery {
   const data = providerObject(body)
-  const items = connection.providerId === 'ollama' ? data.models : data.data
+  const items = ['ollama', 'gemini'].includes(connection.providerId) ? data.models : data.data
   if (!Array.isArray(items)) throw new ManagementError('INVALID_RESPONSE')
   const at = new Date().toISOString(), models = items.map(item => modelDescriptor(item, connection, at))
   let next: DiscoveryQuery | null = null, specified = false

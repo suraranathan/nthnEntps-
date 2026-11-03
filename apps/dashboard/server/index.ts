@@ -56,7 +56,14 @@ const server = createApi(runtime, [], () => {
 })
 const timer = setInterval(() => { void runtime.tick() }, 60000)
 timer.unref()
-const shutdown = () => { clearInterval(timer); server.close(() => { ai?.close(); void unlink(lockPath).finally(() => process.exit(0)) }); setTimeout(() => process.exit(1), 3000).unref() }
+let shuttingDown = false
+const shutdown = () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  clearInterval(timer)
+  server.close(() => { ai?.close(); ai = undefined; void unlink(lockPath).finally(() => process.exit(0)) })
+  setTimeout(() => process.exit(1), 3000).unref()
+}
 process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown)
 server.on('error', () => { console.error('Alex API failed to listen. Check port 3001 and local data permissions.'); void unlink(lockPath).finally(() => process.exit(1)) })
 server.listen(3001, '127.0.0.1', () => { console.log('Alex API listening on loopback :3001; no model marked online until inference succeeds.'); process.send?.('ready') })

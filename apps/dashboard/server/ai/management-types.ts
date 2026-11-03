@@ -1,12 +1,13 @@
 import type { ProviderConnection } from './contracts.ts'
 
 export type NetworkPolicy = 'public' | 'loopback'
-export type ManagedConnection = ProviderConnection & { networkPolicy: NetworkPolicy }
+export type ManagedConnection = ProviderConnection & { networkPolicy: NetworkPolicy; authStyle?: 'bearer' | 'x-api-key' }
 export interface ConnectionInput {
   providerId: string
   label: string
   baseUrl: string
   networkPolicy?: NetworkPolicy
+  authStyle?: 'bearer' | 'x-api-key'
   enabled?: boolean
   scope?: ProviderConnection['scope']
 }

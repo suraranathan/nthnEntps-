@@ -79,7 +79,7 @@ test('management HTTP shares local session protections, rejects invalid input an
   assert.equal(get.status, 200); assert.equal(get.headers.get('cache-control'), 'no-store')
   assert.match(get.headers.get('set-cookie')!, /HttpOnly; SameSite=Strict; Path=\/api/)
   const data = await get.json() as AiSnapshot
-  assert.deepEqual(data.providers.map(p => p.id), ['openrouter', 'openai-compatible', 'ollama'])
+  assert.deepEqual(data.providers.map(p => p.id), ['openrouter', 'openai', 'anthropic', 'gemini', 'xkiro', 'openai-compatible', 'ollama'])
   assert.deepEqual(data.localPorts, [11434, 1234, 8000, 8080])
   const headers = { Host: 'localhost:3000', Origin: 'http://localhost:3000', Cookie: f.cookie, 'X-Alex-CSRF': data.csrf, 'Content-Type': 'application/json' }
   const post = (body: string, patch = {}) => rawFetch(f.base + '/api/ai', { method: 'POST', headers: { ...headers, ...patch }, body })
@@ -263,7 +263,7 @@ test('browser fetch receiver is preserved for default and injected transports th
   try {
     const client = new AiClient()
     const snapshot = await client.snapshot()
-    assert.ok(Array.isArray(snapshot.connections)); assert.equal(snapshot.providers.length, 3)
+    assert.ok(Array.isArray(snapshot.connections)); assert.equal(snapshot.providers.length, 7)
     const c = await client.request<ManagedConnection>({ action: 'connection.add', connection: input, apiKey: secret })
     assert.equal(c.credentials.state, 'configured')
     assert.equal((await client.snapshot()).connections.length, 1)

@@ -35,6 +35,10 @@ export class AiManagementApi {
     }
     return { csrf, providers: availableProviders(), connections: this.manager.list(), refreshes: this.catalog.statuses(), capabilities: capabilityNames, localPorts: this.localPorts, testResults }
   }
+  async #testAfterChange(id: string, revision: number) {
+    try { return (await this.manager.test(id, revision)).connection }
+    catch { return this.manager.get(id) }
+  }
   async action(input: unknown): Promise<unknown> {
     const data = objectInput(input)
     const fields: Record<string, string[]> = {
@@ -42,7 +46,7 @@ export class AiManagementApi {
       'connection.credential': ['id', 'revision', 'apiKey'], 'connection.enable': ['id', 'revision', 'enabled'],
       'connection.remove': ['id', 'revision'], 'connection.test': ['id', 'revision'], 'catalog.refresh': ['id'],
       'catalog.search': ['query', 'agentId', 'requiredCapabilities'], 'model.verify': ['routeId', 'capabilities'],
-      'assignment.get': ['agentId'], 'assignment.set': ['assignment', 'revision'],
+      'assignment.get': ['agentId'], 'assignment.set': ['assignment', 'revision'], 'model.manual.add': ['connectionId', 'nativeModelId', 'displayName'],
     }
     if (typeof data.action !== 'string' || !Object.hasOwn(fields, data.action)) throw new ManagementError('INVALID_INPUT')
     exactFields(data, ['action', ...fields[data.action]])
@@ -51,16 +55,31 @@ export class AiManagementApi {
     if (fields[data.action].includes('revision') && (!Number.isSafeInteger(data.revision) || (data.revision as number) < 0)) throw new ManagementError('INVALID_INPUT')
     const id = data.id as string, revision = data.revision as number
     switch (data.action) {
-      case 'connection.add': return this.manager.add(data.connection, data.apiKey ?? null)
-      case 'connection.edit': return this.manager.edit(id, revision, data.patch)
-      case 'connection.credential': return this.manager.setCredential(id, revision, data.apiKey)
+      case 'connection.add': {
+        const connection = this.manager.add(data.connection, data.apiKey ?? null)
+        return this.#testAfterChange(connection.id, connection.revision)
+      }
+      case 'connection.edit': {
+        const before = this.manager.get(id), connection = this.manager.edit(id, revision, data.patch)
+        return before.baseUrl !== connection.baseUrl || before.networkPolicy !== connection.networkPolicy || before.authStyle !== connection.authStyle ? this.#testAfterChange(id, connection.revision) : connection
+      }
+      case 'connection.credential': {
+        const connection = this.manager.setCredential(id, revision, data.apiKey)
+        return this.#testAfterChange(id, connection.revision)
+      }
       case 'connection.enable':
         if (typeof data.enabled !== 'boolean') throw new ManagementError('INVALID_INPUT')
-        return this.manager.setEnabled(id, revision, data.enabled)
+        {
+          const connection = this.manager.setEnabled(id, revision, data.enabled)
+          return data.enabled ? this.#testAfterChange(id, connection.revision) : connection
+        }
       case 'connection.remove': this.manager.remove(id, revision); return { removed: true }
       case 'connection.test': return this.manager.test(id, revision)
       case 'catalog.refresh': return this.catalog.refresh(id)
       case 'model.verify': return this.verification.verify(data.routeId as string, capabilities(data.capabilities))
+      case 'model.manual.add':
+        if (typeof data.connectionId !== 'string' || typeof data.nativeModelId !== 'string' || typeof data.displayName !== 'string') throw new ManagementError('INVALID_INPUT')
+        return this.catalog.addManual(data.connectionId, data.nativeModelId, data.displayName)
       case 'catalog.search': {
         const agentId = agent(data.agentId)
         const required = [...new Set<Capability>(['text', ...(agentId === '01' ? alexRequirements : []), ...capabilities(data.requiredCapabilities)])]

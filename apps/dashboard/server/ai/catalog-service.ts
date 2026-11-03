@@ -6,6 +6,7 @@ import type { RefreshStatus } from './catalog-store.ts'
 import { initialDiscoveryQuery, parseDiscovery } from './discovery.ts'
 import { ManagementError } from './management-types.ts'
 import { modelRouteKey } from './route-identity.ts'
+import { connectionAdapter } from './connection-adapters.ts'
 
 /** No inference/verification or agent routing: catalog observations only. */
 export class CatalogService implements ModelCatalog {
@@ -19,6 +20,10 @@ export class CatalogService implements ModelCatalog {
   close() { this.#store.close() }
   async search(query: CatalogQuery = {}) { return this.#store.search(query, this.#manager.list()) }
   async getRoute(routeId: string) { return this.#store.get(routeId, this.#manager.list()) }
+  addManual(connectionId: string, nativeId: string, displayName: string) {
+    const connection = this.#manager.get(connectionId)
+    return this.#store.addManual(connection, nativeId, displayName)
+  }
   statuses() { return this.#store.statuses() }
   async refresh(connectionId: string): Promise<RefreshStatus> {
     const connection = this.#manager.get(connectionId)
@@ -39,7 +44,7 @@ export class CatalogService implements ModelCatalog {
           const { nativeModelId, ...details } = model
           const ref = { connectionId: connection.id, nativeModelId, upstreamEndpointId: null }
           return {
-            route: { id: modelRouteKey(ref), ref, providerId: connection.providerId, protocol: connection.providerId === 'ollama' ? 'ollama-chat' : 'openai-chat', connectionRevision: connection.revision,
+            route: { id: modelRouteKey(ref), ref, providerId: connection.providerId, protocol: connectionAdapter(connection.providerId).protocol, connectionRevision: connection.revision,
               model: details, access: { state: page.visibility === 'account-filtered' ? 'account-listed' : 'listed', evidence: model.evidence }, lifecycle: model.extensions.deprecated === true || model.extensions.lifecycle === 'deprecated' ? 'deprecated' : 'active' },
             pricing: { components: [], completeness: 'unknown', evidence: null, freeAccess: { kind: 'unknown', eligibility: 'unknown', conditions: [], evidence: null } },
             limits: [], firstSeenAt: model.evidence.observedAt, lastSeenAt: model.evidence.observedAt,

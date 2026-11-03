@@ -2,23 +2,25 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { validatePreferences } from './validation.ts'
 import { randomUUID } from 'node:crypto'
-import type { ChatMessage, MemoryCategory, MemoryNote, Preferences, ProjectEvent, TeamRequest } from '../src/alex-contract.ts'
-export const defaultPreferences: Preferences = { humor: 'balanced', communication: '', proactive: false, intervalMinutes: 60, quietStart: '22:00', quietEnd: '08:00', timezone: 'Asia/Manila', dailyBriefing: false, briefingTime: '09:00' }
+import type { ChatMessage, FollowUp, MemoryCategory, MemoryNote, Preferences, ProjectEvent, TeamRequest } from '../src/alex-contract.ts'
+export const defaultPreferences: Preferences = { humor: 'balanced', communication: '', proactive: false, intervalMinutes: 60, quietStart: '22:00', quietEnd: '08:00', timezone: 'Asia/Manila', dailyBriefing: false, briefingTime: '09:00', philosophy: true, conversationInitiation: 'relevant', followUps: true, reminders: true, stalledAfterDays: 7 }
 export type MemoryState = {
   version: 1
   preferences: Preferences
   notes: Record<MemoryCategory, MemoryNote[]>
   messages: ChatMessage[]
   requests: TeamRequest[]
+  followUps: FollowUp[]
   events: ProjectEvent[]
   audit: { at: string; action: string; outcome: string }[]
   routing: string | null
   lastNotification: number
   lastBriefingDay: string
   deliveredEvents: string[]
+  projectFingerprint: { hash: string; sections: Record<string, string> } | null
 }
 export function emptyMemory(): MemoryState {
-  return { version: 1, preferences: { ...defaultPreferences }, notes: { project: [], relationships: [], insideJokes: [], temporary: [] }, messages: [], requests: [], events: [], audit: [], routing: null, lastNotification: 0, lastBriefingDay: '', deliveredEvents: [] }
+  return { version: 1, preferences: { ...defaultPreferences }, notes: { project: [], relationships: [], insideJokes: [], temporary: [] }, messages: [], requests: [], followUps: [], events: [], audit: [], routing: null, lastNotification: 0, lastBriefingDay: '', deliveredEvents: [], projectFingerprint: null }
 }
 export class MemoryStore {
   state = emptyMemory()
@@ -29,6 +31,12 @@ export class MemoryStore {
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
     try {
       const saved = JSON.parse(await readFile(join(this.directory, 'alex.json'), 'utf8'))
+      // Add new optional fields to existing private stores without discarding history.
+      if (saved?.version === 1 && saved.preferences && typeof saved.preferences === 'object') {
+        saved.preferences = { ...defaultPreferences, ...saved.preferences }
+        saved.followUps ??= []
+        saved.projectFingerprint ??= null
+      }
       validateMemory(saved)
       this.state = saved
     } catch (error) {
@@ -79,7 +87,9 @@ function validateMemory(value: unknown): asserts value is MemoryState {
   }
   if (!array(state.messages) || !state.messages.every(m => m && typeof m === 'object' && string(m.id, 100) && ['user', 'assistant'].includes(m.role) && string(m.content) && string(m.createdAt, 100) && ['chat', 'briefing', 'update'].includes(m.kind))) fail()
   if (!array(state.requests) || !state.requests.every(r => r && typeof r === 'object' && string(r.id, 100) && r.target === 'sophia' && ['request', 'clarification'].includes(r.type) && ['awaiting_adapter', 'submitted', 'in_progress', 'completed', 'failed'].includes(r.state) && string(r.text, 8000) && string(r.createdAt, 100) && array(r.updates) && r.updates.every(u => u && typeof u === 'object' && string(u.text, 8000) && string(u.at, 100)))) fail()
+  if (!array(state.followUps) || state.followUps.length > 200 || !state.followUps.every(f => f && typeof f === 'object' && string(f.id, 100) && string(f.text, 1000) && ['pending', 'scheduled', 'completed', 'dismissed', 'overdue'].includes(f.state) && string(f.createdAt, 100) && string(f.updatedAt, 100) && (f.dueAt === null || string(f.dueAt, 100)) && (f.remindAt === null || string(f.remindAt, 100)) && (f.lastSignal === null || ['stalled', 'reminder', 'overdue'].includes(f.lastSignal)))) fail()
   if (!array(state.events) || !state.events.every(e => e && typeof e === 'object' && string(e.id, 100) && string(e.type, 100) && string(e.text) && string(e.at, 100))) fail()
   if (!array(state.audit) || !state.audit.every(e => e && typeof e === 'object' && string(e.at, 100) && string(e.action, 100) && string(e.outcome))) fail()
   if (!(state.routing === null || string(state.routing, 100)) || !Number.isFinite(state.lastNotification) || state.lastNotification < 0 || !string(state.lastBriefingDay, 100) || !array(state.deliveredEvents) || !state.deliveredEvents.every(id => string(id, 100))) fail()
+  if (state.projectFingerprint !== null && (!state.projectFingerprint || !string(state.projectFingerprint.hash, 100) || !state.projectFingerprint.sections || typeof state.projectFingerprint.sections !== 'object' || Array.isArray(state.projectFingerprint.sections) || Object.keys(state.projectFingerprint.sections).length > 200 || !Object.entries(state.projectFingerprint.sections).every(([key, hash]) => string(key, 100) && string(hash, 100)))) fail()
 }

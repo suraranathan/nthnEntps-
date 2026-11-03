@@ -12,7 +12,13 @@ import type { ManagedConnection, NetworkPolicy, TestResult } from './management-
 
 type Stored = { connection: ManagedConnection; cipher: string | null }
 const unknownHealth = (): ManagedConnection['health'] => ({ authentication: 'unknown', discovery: 'never-tested', inference: 'never-tested', checkedAt: null })
-const fields = ['label', 'baseUrl', 'networkPolicy', 'enabled', 'scope']
+const fields = ['label', 'baseUrl', 'networkPolicy', 'authStyle', 'enabled', 'scope']
+function authStyle(providerId: string, value: unknown): 'bearer' | 'x-api-key' | undefined {
+  if (value === undefined) return providerId === 'openai-compatible' ? 'bearer' : undefined
+  if (providerId !== 'openai-compatible' || !['bearer', 'x-api-key'].includes(String(value))) throw new ManagementError('INVALID_INPUT')
+  return value as 'bearer' | 'x-api-key'
+}
+const wireAuth = (c: ManagedConnection) => c.providerId === 'openai-compatible' ? c.authStyle ?? 'bearer' : connectionAdapter(c.providerId).authStyle
 const credentialState = (providerId: string, present: boolean): ManagedConnection['credentials']['state'] => present ? 'configured' : connectionAdapter(providerId).credentiallessState
 function label(value: unknown) {
   if (typeof value !== 'string' || !value.trim() || value.length > 200 || /[\x00-\x1f\x7f]/.test(value)) throw new ManagementError('INVALID_INPUT')
@@ -117,10 +123,11 @@ export class ConnectionManager {
     const data = objectInput(input); exactFields(data, ['providerId', ...fields])
     const adapter = connectionAdapter(data.providerId), key = credentialInput(secret)
     const network = (data.networkPolicy ?? 'public') as NetworkPolicy
+    const configuredAuth = authStyle(adapter.definition.id, data.authStyle)
     if (data.enabled !== undefined && typeof data.enabled !== 'boolean') throw new ManagementError('INVALID_INPUT')
     const connection: ManagedConnection = {
       id: randomUUID(), providerId: adapter.definition.id, label: label(data.label),
-      baseUrl: validateEndpoint(data.baseUrl, network, adapter.definition.id, this.#rules), networkPolicy: network,
+      baseUrl: validateEndpoint(data.baseUrl, network, adapter.definition.id, this.#rules), networkPolicy: network, ...(configuredAuth ? { authStyle: configuredAuth } : {}),
       scope: data.scope === undefined ? { account: null, project: null, region: null } : scopeInput(data.scope), enabled: data.enabled ?? false,
       revision: 1, credentials: { state: credentialState(adapter.definition.id, Boolean(key)), revision: key ? 1 : 0 }, health: unknownHealth(),
     }
@@ -136,13 +143,15 @@ export class ConnectionManager {
       const network = (data.networkPolicy ?? c.networkPolicy) as NetworkPolicy
       const base = validateEndpoint(data.baseUrl ?? c.baseUrl, network, c.providerId, this.#rules)
       const endpointChanged = base !== c.baseUrl || network !== c.networkPolicy
+      const authChanged = data.authStyle !== undefined && data.authStyle !== (c.authStyle ?? 'bearer')
       if (data.label !== undefined) c.label = label(data.label)
       if (data.scope !== undefined) c.scope = scopeInput(data.scope)
+      if (data.authStyle !== undefined) c.authStyle = authStyle(c.providerId, data.authStyle)
       if (typeof data.enabled === 'boolean') c.enabled = data.enabled
       c.baseUrl = base; c.networkPolicy = network; c.revision++
       if (endpointChanged) {
         row.cipher = null; c.credentials = { state: credentialState(c.providerId, false), revision: c.credentials.revision + 1 }; c.health = unknownHealth()
-      }
+      } else if (authChanged) c.health = unknownHealth()
       this.#write(row); this.#audit(id, endpointChanged ? 'edit.endpoint.credentials-cleared' : 'edit'); return c
     })
   }
@@ -174,7 +183,7 @@ export class ConnectionManager {
   async catalogPage(id: string, revision: number, query: Record<string, string> = {}) {
     const row = this.#expected(id, revision), c = row.connection, adapter = connectionAdapter(c.providerId)
     if (!c.enabled) throw new ManagementError('CONNECTION_DISABLED')
-    exactFields(query, ['after', 'offset', 'limit', 'cursor', 'page', 'page_token', 'pageToken', 'output_modalities'])
+    exactFields(query, ['after', 'offset', 'limit', 'cursor', 'page', 'page_token', 'pageToken', 'pageSize', 'output_modalities', 'modality'])
     if (Object.values(query).some(value => typeof value !== 'string' || value.length > 16000)) throw new ManagementError('INVALID_INPUT')
     if (adapter.requiresCredential && !row.cipher) throw new ManagementError('CREDENTIAL_REQUIRED')
     const endpoint = await pinEndpoint(c.baseUrl, c.networkPolicy, c.providerId, this.#resolver, this.#rules)
@@ -182,7 +191,7 @@ export class ConnectionManager {
     let response
     try {
       const suffix = new URLSearchParams(query).toString()
-      response = await this.#transport(endpoint, adapter.discoveryPath + (suffix ? '?' + suffix : ''), key, { maxBytes: 16 * 1024 * 1024 })
+      response = await this.#transport(endpoint, adapter.discoveryPath + (suffix ? '?' + suffix : ''), key, { maxBytes: 16 * 1024 * 1024, authStyle: wireAuth(c) })
     } catch (error) { throw error instanceof ManagementError ? error : new ManagementError('REQUEST_FAILED') }
     this.#expected(id, revision)
     if (!this.#read(id).connection.enabled) throw new ManagementError('CONNECTION_DISABLED')
@@ -206,14 +215,19 @@ export class ConnectionManager {
   }
   /** Fixed inference path, protected transport and vault; no plaintext credential getter. */
   async inferenceProbe(id: string, revision: number, body: Record<string, unknown>, stream = false) {
-    const row = this.#expected(id, revision), c = row.connection
+    const row = this.#expected(id, revision), c = row.connection, adapter = connectionAdapter(c.providerId)
     if (!c.enabled) throw new ManagementError('CONNECTION_DISABLED')
     if (c.credentials.state === 'missing' && c.networkPolicy === 'public') throw new ManagementError('CREDENTIAL_REQUIRED')
-    if (connectionAdapter(c.providerId).requiresCredential && !row.cipher) throw new ManagementError('CREDENTIAL_REQUIRED')
+    if (adapter.requiresCredential && !row.cipher) throw new ManagementError('CREDENTIAL_REQUIRED')
     const endpoint = await pinEndpoint(c.baseUrl, c.networkPolicy, c.providerId, this.#resolver, this.#rules)
     const key = row.cipher ? this.#vault.open(row.cipher, id + ':' + c.credentials.revision) : null
     let response
-    try { response = await this.#transport(endpoint, c.providerId === 'ollama' ? '/api/chat' : '/chat/completions', key, { body, stream, readErrors: true, maxBytes: 256000 }) }
+    try {
+      const model = body.model
+      if (typeof model !== 'string' || !model || model.length > 1000) throw new ManagementError('INVALID_INPUT')
+      const payload = adapter.protocol === 'gemini-generate-content' ? Object.fromEntries(Object.entries(body).filter(([name]) => name !== 'model')) : body
+      response = await this.#transport(endpoint, adapter.inferencePath(model, stream), key, { body: payload, stream, readErrors: true, maxBytes: 256000, authStyle: wireAuth(c) })
+    }
     catch (error) { throw error instanceof ManagementError ? error : new ManagementError('REQUEST_FAILED') }
     this.#expected(id, revision)
     if (!this.get(id).enabled) throw new ManagementError('CONNECTION_DISABLED')
@@ -271,7 +285,7 @@ export class ConnectionManager {
       const endpoint = await pinEndpoint(c.baseUrl, c.networkPolicy, c.providerId, this.#resolver, this.#rules)
       const key = row.cipher ? this.#vault.open(row.cipher, `${id}:${c.credentials.revision}`) : null
       if (adapter.requiresCredential && !key) throw new ManagementError('CREDENTIAL_REQUIRED')
-      const result = await this.#transport(endpoint, adapter.probePath, key)
+      const result = await this.#transport(endpoint, adapter.probePath, key, { authStyle: wireAuth(c) })
       health = { ...health, ...adapter.interpret(result), checkedAt: new Date().toISOString() }; ok = true
     } catch (error) {
       code = error instanceof ManagementError ? error.code : 'REQUEST_FAILED'

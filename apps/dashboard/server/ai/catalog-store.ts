@@ -5,6 +5,8 @@ import type { CatalogEntry, CatalogPage, CatalogQuery, CatalogRefresh } from './
 import type { ManagedConnection } from './management-types.ts'
 import { ManagementError } from './management-types.ts'
 import { ConnectionManager } from './connection-manager.ts'
+import { modelRouteKey } from './route-identity.ts'
+import { connectionAdapter } from './connection-adapters.ts'
 
 export type RefreshStatus = CatalogRefresh & { modelsSeen: number; nextAttemptAt: number; failures: number; leaseExpiresAt: number }
 type Row = { data: string }
@@ -89,6 +91,7 @@ export class CatalogStore {
         for (const row of existing) {
           if (this.#db.prepare('SELECT 1 FROM staging WHERE refresh_id=? AND route_id=?').get(status.id, row.id)) continue
           const entry = JSON.parse(row.data) as CatalogEntry
+          if (entry.route.model.evidence.source === 'operator') continue
           entry.route.lifecycle = 'removed'; entry.route.access = { state: 'unavailable', evidence: { source: 'provider-api', observedAt: status.completedAt, reference: 'complete-catalog-refresh' } }
           this.#db.prepare('UPDATE routes SET data=? WHERE id=?').run(JSON.stringify(entry), row.id)
         }
@@ -106,16 +109,45 @@ export class CatalogStore {
       return status
     })
   }
+  addManual(connection: ManagedConnection, nativeId: string, displayName: string): CatalogEntry {
+    if (!nativeId.trim() || nativeId.length > 500 || /[\x00-\x1f\x7f]/.test(nativeId) || !displayName.trim() || displayName.length > 200 || /[\x00-\x1f\x7f]/.test(displayName)) throw new ManagementError('INVALID_INPUT')
+    const now = new Date().toISOString(), ref = { connectionId: connection.id, nativeModelId: nativeId.trim(), upstreamEndpointId: null }
+    const id = modelRouteKey(ref)
+    return this.#transaction(() => {
+      const existing = this.#db.prepare('SELECT data FROM routes WHERE id=?').get(id) as Row | undefined
+      const evidence = { source: 'operator' as const, observedAt: now, reference: connection.id }
+      if (existing) {
+        const entry = JSON.parse(existing.data) as CatalogEntry
+        if (entry.route.connectionRevision === connection.revision && entry.route.lifecycle === 'active') return entry
+        entry.route.connectionRevision = connection.revision
+        entry.route.model.displayName = displayName.trim()
+        entry.route.model.evidence = evidence
+        entry.route.access = { state: 'listed', evidence }
+        entry.route.lifecycle = 'active'
+        entry.lastSeenAt = now
+        this.#db.prepare('UPDATE routes SET name=?, data=? WHERE id=?').run(entry.route.model.displayName, JSON.stringify(entry), id)
+        this.#epoch()
+        return entry
+      }
+      const entry: CatalogEntry = { route: { id, ref, providerId: connection.providerId, protocol: connectionAdapter(connection.providerId).protocol, connectionRevision: connection.revision,
+        model: { displayName: displayName.trim(), capabilities: { input: null, output: null, tools: 'unknown', streaming: 'unknown', structuredOutput: 'unknown', systemInstructions: 'unknown' }, contextTokens: null, maxOutputTokens: null, evidence, extensions: {} },
+        access: { state: 'listed', evidence }, lifecycle: 'active' }, pricing: { components: [], completeness: 'unknown', evidence: null, freeAccess: { kind: 'unknown', eligibility: 'unknown', conditions: [], evidence: null } }, limits: [], firstSeenAt: now, lastSeenAt: now }
+      this.#db.prepare('INSERT INTO routes VALUES (?, ?, ?, ?, ?, ?)').run(id, connection.id, connection.providerId, ref.nativeModelId, entry.route.model.displayName, JSON.stringify(entry))
+      this.#epoch()
+      return entry
+    })
+  }
   #decorate(entry: CatalogEntry, connections: ManagedConnection[], statuses: RefreshStatus[]): CatalogEntry {
     const connection = connections.find(item => item.id === entry.route.ref.connectionId)
     const status = statuses.find(item => item.connectionId === entry.route.ref.connectionId)
-    if (!connection || !connection.enabled || connection.revision !== entry.route.connectionRevision || status?.errorCode) {
+    const manual = entry.route.model.evidence.source === 'operator'
+    if (!connection || !connection.enabled || connection.revision !== entry.route.connectionRevision || (!manual && status?.errorCode)) {
       entry.route.access = { state: 'unavailable', evidence: null }
       if (!connection) entry.route.lifecycle = 'removed'
     }
     const verification = latestVerification(this.#db, entry.route.id)
     entry.verification = verification
-    if (connection?.enabled && connection.revision === entry.route.connectionRevision && !status?.errorCode && entry.route.lifecycle !== 'removed' && verification?.connectionRevision === connection.revision && verification.state !== 'untested') {
+    if (connection?.enabled && connection.revision === entry.route.connectionRevision && (manual || !status?.errorCode) && entry.route.lifecycle !== 'removed' && verification?.connectionRevision === connection.revision && verification.state !== 'untested') {
       entry.route.access = { state: verification.state === 'verified' ? 'verified' : 'unavailable', evidence: { source: verification.state === 'verified' ? 'inference-response' : 'operator', observedAt: verification.checkedAt, reference: verification.id } }
     }
     return entry

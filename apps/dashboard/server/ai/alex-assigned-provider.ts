@@ -7,6 +7,7 @@ import { ConnectionManager } from './connection-manager.ts'
 import { ManagementError } from './management-types.ts'
 import { VerificationService } from './verification-service.ts'
 import type { ModelRoute } from './contracts.ts'
+import { connectionAdapter } from './connection-adapters.ts'
 
 // Three consecutive requests above this threshold establish consistent slowness.
 export const SLOW_REQUEST_MS = 12000
@@ -38,7 +39,7 @@ export class AlexAssignedProvider implements ModelProvider {
     // Only saved fallbacks can be explored. Discovery is refreshed when stale;
     // verification is explicit here because switching may incur provider charges.
     const route = candidate.route
-    if (!route || route.providerId !== 'openrouter') return null
+    if (!route) return null
     try {
       if (['CATALOG_STALE', 'CATALOG_REFRESH_FAILED'].includes(candidate.code)) await this.#catalog.refresh(route.ref.connectionId)
       candidate = await this.#assignments.assess(id, requirements)
@@ -76,7 +77,7 @@ export class AlexAssignedProvider implements ModelProvider {
       }
     }
     const assessment = await this.#assignments.assess(this.#routeId, assignment.requiredCapabilities)
-    if (!assessment.compatible || !assessment.route || assessment.route.providerId !== 'openrouter') throw new ProviderError(`Assigned model is unavailable (${assessment.code}). Verify a compatible saved model in AI Providers.`, 503)
+    if (!assessment.compatible || !assessment.route) throw new ProviderError(`Assigned model is unavailable (${assessment.code}). Verify a compatible saved model in AI Providers.`, 503)
     this.info.model = assessment.route.ref.nativeModelId
     if (this.#unavailable) throw new ProviderError(this.#unavailable, 503)
   }
@@ -86,15 +87,24 @@ export class AlexAssignedProvider implements ModelProvider {
     const checked = await this.#assignments.assess(this.#routeId, assignment.requiredCapabilities)
     if (!checked.compatible || !checked.route) throw new ProviderError(`Assigned model is unavailable (${checked.code}).`, 503)
     const route = checked.route
-    const body = { model: route.ref.nativeModelId, messages, stream: false, max_tokens: 1600, provider: { require_parameters: true } }
+    const protocol = connectionAdapter(route.providerId).protocol
+    const system = messages.filter(message => message.role === 'system').map(message => message.content).join('\n\n')
+    const turns = messages.filter(message => message.role !== 'system')
+    const body: Record<string, unknown> = protocol === 'ollama-chat'
+      ? { model: route.ref.nativeModelId, messages, stream: false, options: { num_predict: 1600 } }
+      : protocol === 'anthropic-messages'
+        ? { model: route.ref.nativeModelId, messages: turns, system, max_tokens: 1600 }
+        : protocol === 'gemini-generate-content'
+          ? { model: route.ref.nativeModelId, contents: turns.map(message => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }] })), systemInstruction: { parts: [{ text: system }] }, generationConfig: { maxOutputTokens: 1600 } }
+          : { model: route.ref.nativeModelId, messages, stream: false, ...(route.providerId === 'openrouter' ? { max_tokens: 1600, provider: { require_parameters: true } } : route.providerId === 'openai' ? { max_completion_tokens: 1600 } : { max_tokens: 1600 }) }
     const started = this.#clock()
     try {
       const data = await this.#manager.inferenceProbe(route.ref.connectionId, route.connectionRevision, body)
-      const response = data as { choices?: { message?: { content?: unknown; tool_calls?: unknown }; finish_reason?: string }[] }
+      const response = data as { choices?: { message?: { content?: unknown; tool_calls?: unknown }; finish_reason?: string }[]; message?: { content?: unknown; tool_calls?: unknown }; done_reason?: string; content?: { type?: string; text?: string }[]; stop_reason?: string; candidates?: { content?: { parts?: { text?: string; functionCall?: unknown }[] }; finishReason?: string }[] }
       const choice = response?.choices?.[0]
-      if (choice?.message?.tool_calls) throw new ProviderError('Model requested unsupported tools; no tool was executed.')
-      if (choice?.finish_reason === 'length') throw new ProviderError('Model response was truncated; try a shorter request.')
-      const text = choice?.message?.content
+      if (choice?.message?.tool_calls || response?.message?.tool_calls || response?.content?.some(part => part.type === 'tool_use') || response?.candidates?.[0]?.content?.parts?.some(part => part.functionCall)) throw new ProviderError('Model requested unsupported tools; no tool was executed.')
+      if (choice?.finish_reason === 'length' || response?.done_reason === 'length' || response?.stop_reason === 'max_tokens' || response?.candidates?.[0]?.finishReason === 'MAX_TOKENS') throw new ProviderError('Model response was truncated; try a shorter request.')
+      const text = protocol === 'ollama-chat' ? response?.message?.content : protocol === 'anthropic-messages' ? response?.content?.filter(part => part.type === 'text').map(part => part.text ?? '').join('') : protocol === 'gemini-generate-content' ? response?.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('') : choice?.message?.content
       if (typeof text !== 'string' || !text.trim()) throw new ProviderError('Provider returned no usable text.')
       this.#slow = nextSlowStreak(this.#slow, this.#clock() - started)
       if (this.#slow >= SLOW_STREAK) this.#pendingReason = 'slow'

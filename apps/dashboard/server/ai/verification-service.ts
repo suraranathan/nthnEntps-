@@ -5,6 +5,7 @@ import { ManagementError } from './management-types.ts'
 import { buildProbe, validateProbe } from './verification-probes.ts'
 import { capabilityNames, VerificationStore } from './verification-store.ts'
 import type { Capability, CapabilityResult, Verification } from './verification-store.ts'
+import { connectionAdapter } from './connection-adapters.ts'
 
 export class VerificationService {
   readonly store: VerificationStore
@@ -28,7 +29,7 @@ export class VerificationService {
       if (!c.enabled) throw new ManagementError('CONNECTION_DISABLED')
       if (route.connectionRevision !== c.revision) throw new ManagementError('CONFLICT')
       if (route.lifecycle === 'removed') throw new ManagementError('MODEL_UNAVAILABLE')
-      if (route.ref.upstreamEndpointId !== null || !['openai-chat', 'ollama-chat'].includes(route.protocol)) throw new ManagementError('INCOMPATIBLE')
+      if (route.ref.upstreamEndpointId !== null || route.protocol !== connectionAdapter(c.providerId).protocol) throw new ManagementError('INCOMPATIBLE')
       for (const capability of [...new Set<Capability>(['text', ...requested])]) {
         const observation = result.capabilities[capability]
         try {

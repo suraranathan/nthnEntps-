@@ -39,15 +39,26 @@ test('production worker cannot serve cached development source; previous policy 
   assert.equal(await intercepted(source, '/api/ai'), 'NETWORK')
 })
 
-test('dashboard navigation and development cache reset remain configured', async () => {
+test('office landing view and drawer navigation retain every dashboard section', async () => {
   const plugin = (config.plugins as any[]).find(p => p.name === 'development-pwa-reset')
   assert.ok(plugin)
   const injected = plugin.transformIndexHtml()
   assert.match(injected[0].children, /getRegistrations/)
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
-  assert.match(app, /'Office', 'Agents', 'Activity', 'AI Providers'/)
+  assert.match(app, /'Office', 'Agents', 'Activity', 'Tasks', 'AI Providers'/)
+  for (const section of ['Office', 'Agents', 'Activity', 'Tasks', 'AI Providers']) {
+    assert.ok(app.includes(`activeTab === '${section}' &&`), `${section} has a reachable view`)
+  }
+  assert.match(app, /useState<Section>\('Office'\)/)
+  assert.match(app, /sections\.map\(section => <button/)
+  assert.match(app, /Talk to Alex/)
+  assert.match(app, /showLauncher=\{false\}/)
   assert.match(app, /activeTab === 'AI Providers' &&/)
   assert.match(await readFile(new URL('../src/AiProviders.tsx', import.meta.url), 'utf8'), /providers-title/)
-  assert.match(await readFile(new URL('../src/styles.css', import.meta.url), 'utf8'), /\.dashboard-nav \{ display: flex/)
+  const css = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8')
+  assert.match(css, /\.sidebar-open \{ transform: translateX\(0\)/)
+  assert.match(css, /\.dashboard \{ display: block/)
+  assert.match(css, /@media \(max-width: 680px\) \{ \.providers-advanced/)
+  assert.match(css, /\.providers-manual \.providers-fields \{ display: block/)
   assert.match(retiredWorker, /registration.unregister/)
 })

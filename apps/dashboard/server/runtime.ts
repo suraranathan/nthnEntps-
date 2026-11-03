@@ -1,13 +1,17 @@
-import { InputError, textInput, categoryInput, validatePreferences } from './validation.ts'
+import { InputError, textInput, categoryInput, validatePreferences, optionalDate } from './validation.ts'
 export { InputError, validatePreferences } from './validation.ts'
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import type { AlexSnapshot } from '../src/alex-contract.ts'
 import { buildSystem, identity } from './identity.ts'
 import { conversationContext, MemoryStore } from './memory.ts'
-import { localClock, notificationDue } from './notifications.ts'
+import { localClock, notificationDue, pendingProactiveEvents } from './notifications.ts'
 import { ModelRouter, ProviderError } from './providers.ts'
 import { prepareRequest, UnavailableSophia } from './sophia.ts'
+import { conversationGuidance, hasInappropriateHumor, isSensitiveConversation } from './personality-context.ts'
+import { guardPhilosophyReply } from './philosophy.ts'
+import { observeProject } from './project-monitor.ts'
+import { scanFollowUps } from './followups.ts'
 
 export class AlexRuntime {
   status: AlexSnapshot['status'] = 'offline'
@@ -22,19 +26,26 @@ export class AlexRuntime {
   constructor(store: MemoryStore, router: ModelRouter, projectFile: string) { this.store = store; this.router = router; this.projectFile = projectFile }
   snapshot(csrf = ''): AlexSnapshot {
     const provider = this.router.current()?.info
-    return { identity, status: this.status, detail: this.detail, provider: provider?.id ?? null, model: provider?.model ?? null, providers: this.router.providers.map(x => x.info), preferences: this.store.state.preferences, memory: this.store.state.notes, messages: this.store.state.messages.slice(-200), requests: this.store.state.requests.slice(-50), events: this.store.state.events.slice(-30), audit: this.store.state.audit.slice(-20), csrf }
+    return { identity, status: this.status, detail: this.detail, provider: provider?.id ?? null, model: provider?.model ?? null, providers: this.router.providers.map(x => x.info), preferences: this.store.state.preferences, memory: this.store.state.notes, messages: this.store.state.messages.slice(-200), requests: this.store.state.requests.slice(-50), followUps: this.store.state.followUps.slice(-100), events: this.store.state.events.slice(-30), audit: this.store.state.audit.slice(-20), csrf }
   }
   async initialize() {
+    await this.observe()
     this.store.event('runtime_started', 'Alex local runtime started. Other employees remain placeholders; model connectivity has not yet been verified.')
     this.store.log('runtime.start', 'offline; awaiting real inference')
     await this.store.save()
+  }
+  private async observe(now = new Date()) {
+    let changed = false
+    try { changed = observeProject(this.store, await readFile(this.projectFile, 'utf8')) } catch { /* Missing document is not a progress event. */ }
+    changed = scanFollowUps(this.store, now) || changed
+    if (changed) await this.store.save()
   }
   private requireProvider() {
     const provider = this.router.current()
     if (!provider) throw new ProviderError('No model provider configured. Set server environment variables, then restart the agent server.', 503)
     return provider
   }
-  async generate(kind: 'chat' | 'briefing' | 'update' | 'probe', text = '') {
+  async generate(kind: 'chat' | 'briefing' | 'update' | 'probe', text = '', automatic = kind === 'update') {
     if (this.busy) throw new InputError('Alex is already thinking. Please wait.', 409)
     const provider = this.requireProvider()
     this.busy = true; this.status = 'thinking'; this.detail = 'Waiting for the configured model.'
@@ -51,13 +62,24 @@ export class AlexRuntime {
       }
       let project = 'Project status document unavailable; do not infer project progress.'
       try { project = await readFile(this.projectFile, 'utf8') } catch { /* Explicit missing context above. */ }
-      const system = buildSystem(this.store.state, { id: provider.info.id, model: provider.info.model }, project)
-      const currentEvents = this.store.state.events.filter(x => !this.store.state.deliveredEvents.includes(x.id))
+      const system = buildSystem(this.store.state, { id: provider.info.id, model: provider.info.model }, project) + (kind === 'chat' ? '\n' + conversationGuidance(this.store.state, text) : '')
+      const currentEvents = pendingProactiveEvents(this.store.state)
       const instruction = kind === 'probe' ? 'Briefly identify yourself and your actual current limitations. This is a user-requested real connection test.' : kind === 'briefing' ? 'Give today’s concise project briefing from the supplied document, explicit user-reported project notes, pending requests and verified events. Distinguish user reports from verified events. If there is no measured progress, say so. Do not treat sample UI activity as real.' : `Give one concise proactive update only about these real local events, clearly distinguishing queued requests from delivered work: ${JSON.stringify(currentEvents)}`
       const history = conversationContext(this.store.state.messages, text || instruction)
-      const reply = await provider.complete([{ role: 'system', content: system }, ...history, ...(kind === 'chat' ? [] : [{ role: 'user' as const, content: instruction }])])
+      const modelMessages = [{ role: 'system' as const, content: system }, ...history, ...(kind === 'chat' ? [] : [{ role: 'user' as const, content: instruction }])]
+      let rawReply = await provider.complete(modelMessages)
+      if (kind === 'chat' && (isSensitiveConversation(text) || this.store.state.preferences.humor === 'serious') && hasInappropriateHumor(rawReply)) {
+        rawReply = await provider.complete([...modelMessages, { role: 'assistant', content: rawReply }, { role: 'user', content: 'Your previous answer used humor in a serious context. Rewrite it directly and respectfully, without jokes or teasing.' }])
+        if (hasInappropriateHumor(rawReply)) throw new ProviderError('Model could not maintain a serious tone')
+      }
+      let reply = guardPhilosophyReply(rawReply, text)
+      if (reply !== rawReply) {
+        const paraphrase = await provider.complete([...modelMessages, { role: 'assistant', content: rawReply }, { role: 'user', content: 'The attributed direct quotation was not in the verified source registry. Rewrite as clearly labeled paraphrase or your own interpretation, without direct historical quotations.' }])
+        reply = guardPhilosophyReply(paraphrase, text)
+      }
+      if (kind === 'chat' && (isSensitiveConversation(text) || this.store.state.preferences.humor === 'serious') && hasInappropriateHumor(reply)) throw new ProviderError('Model could not maintain a serious tone')
       this.store.state.messages.push({ id: randomUUID(), role: 'assistant', content: reply, createdAt: new Date().toISOString(), kind: kind === 'briefing' || kind === 'update' ? kind : 'chat', provider: provider.info.id, model: provider.info.model })
-      if (kind === 'briefing' || kind === 'update') {
+      if (automatic && (kind === 'briefing' || kind === 'update')) {
         this.store.state.lastNotification = Date.now()
         this.store.state.deliveredEvents = [...new Set([...this.store.state.deliveredEvents, ...currentEvents.map(x => x.id)])].slice(-500)
         if (kind === 'briefing') this.store.state.lastBriefingDay = localClock(new Date(), this.store.state.preferences.timezone).day
@@ -124,16 +146,35 @@ export class AlexRuntime {
         this.store.event('sophia_request_queued', `User approved ${request.type} ${request.id} for future Sophia integration. It is awaiting an adapter and has NOT been delivered.`)
         break
       }
+      case 'followup.create': {
+        if (this.store.state.followUps.length >= 200) throw new InputError('Follow-up list is full')
+        const now = new Date().toISOString(), dueAt = optionalDate(a.dueAt), remindAt = optionalDate(a.remindAt)
+        this.store.state.followUps.push({ id: randomUUID(), text: textInput(a.text, 1000), state: dueAt || remindAt ? 'scheduled' : 'pending', createdAt: now, updatedAt: now, dueAt, remindAt, lastSignal: null })
+        break
+      }
+      case 'followup.update': {
+        const item = this.store.state.followUps.find(x => x.id === textInput(a.id, 100))
+        if (!item) throw new InputError('Unknown follow-up', 404)
+        if (!['completed', 'dismissed', 'pending'].includes(String(a.state))) throw new InputError('Invalid follow-up state')
+        item.state = a.state as 'completed' | 'dismissed' | 'pending'
+        if ('dueAt' in a) item.dueAt = optionalDate(a.dueAt)
+        if ('remindAt' in a) item.remindAt = optionalDate(a.remindAt)
+        if (item.state === 'pending' && (item.dueAt || item.remindAt)) item.state = 'scheduled'
+        item.updatedAt = new Date().toISOString(); item.lastSignal = null
+        break
+      }
       default: throw new InputError('Unknown action; execution tools are unavailable', 404)
     }
     this.store.log(String(a.action), 'saved locally')
     await this.store.save()
   }
   async tick(now = new Date()) {
-    if (this.busy || this.changing || !this.router.current() || now.getTime() - this.lastAttempt < 300000) return
+    if (this.busy || this.changing) return
+    await this.observe(now)
+    if (!this.router.current() || now.getTime() - this.lastAttempt < 300000) return
     const kind = notificationDue(this.store.state, now)
     if (!kind) return
     this.lastAttempt = now.getTime()
-    try { await this.generate(kind) } catch { /* Error and audit are observable; retry is bounded. */ }
+    try { await this.generate(kind, '', true) } catch { /* Error and audit are observable; retry is bounded. */ }
   }
 }

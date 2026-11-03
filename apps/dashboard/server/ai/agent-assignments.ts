@@ -32,7 +32,7 @@ export class AgentAssignments {
     if (!c || route.lifecycle === 'removed') code = 'MODEL_UNAVAILABLE'
     else if (!c.enabled) code = 'CONNECTION_DISABLED'
     else if (route.connectionRevision !== c.revision) code = 'CATALOG_STALE'
-    else if (this.#catalog.statuses().some(s => s.connectionId === c.id && s.errorCode)) code = 'CATALOG_REFRESH_FAILED'
+    else if (route.model.evidence.source !== 'operator' && this.#catalog.statuses().some(s => s.connectionId === c.id && s.errorCode)) code = 'CATALOG_REFRESH_FAILED'
     else if (!v || v.connectionRevision !== c.revision) code = 'UNVERIFIED'
     else if (v.state !== 'verified') code = v.code ?? 'UNVERIFIED'
     else if (route.access.state !== 'verified') code = 'MODEL_UNAVAILABLE'

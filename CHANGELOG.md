@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-10-31 — Measured Office environment redesign
+
+- Reorganized the existing 3D Office into a shared 22 × 17 metre floor plan with a central four-desk work area, south entrance/reception/waiting area, west meeting and consultation rooms, and three east-side private work rooms.
+- Rebuilt doors, glazed partitions, internal dividers, room labels, cabinetry, seating, rugs and lighting accents around the measured plan while retaining employee selection, desk/room inspection, camera gestures, Alex access and sidebar navigation.
+- Added fixed furniture footprints and lightweight walkability checks. Tests confirm room containment, no fixed furniture overlap, and entrance routes to all room doors and seven workstation approaches. Characters remain seated placeholders without runtime walking or physics.
+- Kept Android DPR and shadow limits. Full suite: 134 passed, one opt-in evaluation skipped; typecheck and final production build passed. Direct Android visual/touch and frame-rate validation remains open. No commit or push.
+
+## 2026-10-31 — AI provider expansion and simpler dashboard controls
+
+- Added OpenAI, Anthropic, Google Gemini and xKiro adapters beside OpenRouter, Ollama and custom OpenAI-compatible endpoints. Native Anthropic/Gemini discovery, authentication, capability probes and assigned Alex text responses reuse the existing protected transport and encrypted vault.
+- Added optional bearer or `x-api-key` authentication for custom endpoints, automatic connection tests after relevant changes, and persistent manual model entries that require live verification before assignment. Existing catalog synchronization and per-agent ordered assignments remain in use.
+- Simplified AI Providers with concise status, expandable diagnostics/filters/settings, contextual actions and confirmation for paid verification and consequential changes. Kept the Office landing view and mobile sidebar.
+- Made API shutdown idempotent after an interrupted background run exposed a duplicate database close on Ctrl+C.
+- Updated provider documentation and added tests for registration, discovery, automatic tests, manual assignment, native runtime and credential headers. All 132 tests passed with one opt-in evaluation skipped; typecheck and production build passed. Live external account checks and Android touch QA remain open. No commit or push.
+
+## 2026-10-31 — Office-first dashboard navigation
+
+- Made the Office the sole default content view and moved Agents, Activity, Tasks, AI Providers and Alex access into a responsive slide-in sidebar.
+- Moved overview cards and the existing New task control into their relevant sections while retaining the 3D Office, inspection and camera controls, Alex chat panels and unread indicator.
+- Kept the existing local API, authentication checks, provider management and application state. Navigation checks, 126 passing tests with one opt-in evaluation skipped, typecheck, production build and whitespace check passed. Live UI, Alex and AI Providers endpoints return HTTP 200. Direct touch/browser interaction remains unverified; the existing large Vite bundle warning remains. No commit or push.
+
+## 2026-10-31 — Alex personality and proactive intelligence extension
+
+- Added context-sensitive personality guidance for curiosity, useful advice, reasoned disagreement, uncertainty, playful humor and immediate serious-context tone adjustment. No canned responses or timed personality routines.
+- Added six-philosopher source index with labeled paraphrase guidance, one checked direct quotation and rejection of apparent unverified attributed quotes.
+- Added persistent project-document change detection and user-saved follow-ups with due dates, reminder times, overdue/stalled states and duplicate-event prevention.
+- Added settings for philosophical guidance, conversation initiative, follow-ups, reminders and stalled-task threshold while retaining quiet hours and notification frequency.
+- Preserved existing provider routing, memory, local API protections and in-app-only notification delivery. Added deterministic regression tests and an opt-in live-model evaluation. The full suite passed 126 tests with one opt-in test skipped; typecheck and production build passed.
+
 ## 2026-10-31 — Android dashboard resume recovery
 
 - Emitted a native resume event from the Capacitor activity and listened for it alongside browser foreground/visibility events. Alex and the mounted AI Providers page now refresh immediately after returning to the APK.

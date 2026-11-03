@@ -1,5 +1,9 @@
 import type { Preferences } from '../src/alex-contract.ts'
 import type { MemoryState } from './memory.ts'
+export function pendingProactiveEvents(memory: MemoryState) {
+  const p = memory.preferences
+  return memory.events.filter(x => !memory.deliveredEvents.includes(x.id) && ((x.type.startsWith('followup_') && p.followUps) || (p.conversationInitiation === 'relevant' && (x.type.startsWith('project_change') || x.type === 'sophia_request_queued' || x.type === 'alex_model_switched'))))
+}
 export function localClock(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date)
   const value = (key: string) => parts.find(x => x.type === key)!.value
@@ -16,6 +20,6 @@ export function notificationDue(memory: MemoryState, now: Date): 'briefing' | 'u
   const clock = localClock(now, p.timezone)
   if (inQuietHours(clock.time, p) || now.getTime() - memory.lastNotification < p.intervalMinutes * 60000) return null
   if (p.dailyBriefing && clock.time >= p.briefingTime && memory.lastBriefingDay !== clock.day) return 'briefing'
-  if (memory.events.some(x => !memory.deliveredEvents.includes(x.id))) return 'update'
+  if (pendingProactiveEvents(memory).length) return 'update'
   return null
 }

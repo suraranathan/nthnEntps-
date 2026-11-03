@@ -34,7 +34,13 @@ The watcher runs only while its process is running. It does not survive stopping
 | --- | --- |
 | OpenRouter | Authenticated `/models/user`, explicitly requesting `output_modalities=all`. Offset/limit pages of 500 are followed until exhaustion, including the final empty page when needed. No public-catalog fallback is silently substituted for account filtering. |
 | OpenAI-compatible | `/models`, initially without assumed vendor-specific pagination parameters. Follows advertised cursors/tokens, `has_more`/`last_id`, next-page/next-offset fields, total/current-page metadata, same-endpoint next links and HTTP Link `rel=next`. |
+| OpenAI | Authenticated `/models`; retains exact model IDs and advertised metadata. Non-chat models still require a compatible inference probe before assignment. |
+| Anthropic | Authenticated `/models`; follows `has_more` and `last_id` with `after` pagination. |
+| Google Gemini | Authenticated `/models`; follows `nextPageToken` and retains the `models/` resource name. |
+| xKiro | `/models?modality=all` includes all advertised modalities; a public listing does not prove key access or model availability. |
 | Ollama | `/api/tags`, keeping exact tags/quantized identities and supplied details. Its normal unpaginated model array is consumed in full; advertised generic pagination is also honored. |
+
+When discovery is unsupported, a user can add an exact model ID with operator evidence. Manual entries survive automatic refreshes and keep their route ID across connection revisions; each new revision requires fresh live verification before assignment.
 
 Provider pagination markers, rather than a configured model-count limit, govern enumeration. Repeated cursors, pages with no new route progress, inconsistent totals/end markers and malformed continuations fail explicitly. Cursor pages and offset pages are not interchangeable assumptions; arbitrary custom pagination schemes need an adapter extension rather than being fabricated. Provider-side changing inventories cannot be turned into a point-in-time server snapshot unless the provider itself offers that guarantee.
 

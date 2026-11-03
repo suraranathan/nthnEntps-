@@ -33,5 +33,6 @@ export type AiAction =
   | { action: 'catalog.refresh'; id: string }
   | { action: 'catalog.search'; query: CatalogQuery; agentId: string; requiredCapabilities: Capability[] }
   | { action: 'model.verify'; routeId: string; capabilities: Capability[] }
+  | { action: 'model.manual.add'; connectionId: string; nativeModelId: string; displayName: string }
   | { action: 'assignment.get'; agentId: string }
   | { action: 'assignment.set'; assignment: Omit<CompatibleAssignment, 'revision'>; revision: number }

@@ -47,7 +47,11 @@ Multiple connections may use the same provider and label. IDs remain unique; mod
 | Provider ID | Base URL / connection test |
 | --- | --- |
 | `openrouter` | Exact `https://openrouter.ai/api/v1`; authenticated `GET /key` checks key acceptance. |
-| `openai-compatible` | A public HTTPS API base, commonly ending `/v1`; `GET /models` validates the returned listing shape. Credential presence does not prove authentication. |
+| `openai` | Exact `https://api.openai.com/v1`; authenticated `GET /models`. |
+| `anthropic` | Exact `https://api.anthropic.com/v1`; authenticated `GET /models`, native Messages inference. |
+| `gemini` | Exact `https://generativelanguage.googleapis.com/v1beta`; authenticated `GET /models`, native GenerateContent inference. |
+| `xkiro` | Exact `https://api.xkiro.com/v1`; public `GET /models` checks reachability, not key access. |
+| `openai-compatible` | A public HTTPS or approved loopback API base, commonly ending `/v1`; `GET /models` validates the returned listing shape. Supports bearer or `x-api-key` auth via `authStyle`; credential presence does not prove authentication. |
 | `ollama` | Root origin, commonly `http://127.0.0.1:11434`; `GET /api/tags` validates local listing shape. |
 
 The OpenRouter probe uses the documented [key endpoint](https://openrouter.ai/docs/api_reference/limits); Ollama uses the documented [tags endpoint](https://docs.ollama.com/api/tags). Only minimal health observations are retained, not arbitrary account response fields or provider error bodies. These tests do not run inference, download models, persist a catalog or claim that all listed models can be invoked.

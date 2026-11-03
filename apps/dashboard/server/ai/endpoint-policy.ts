@@ -66,7 +66,7 @@ export async function pinEndpoint(base: string, network: NetworkPolicy, provider
 }
 export type PinnedEndpoint = Awaited<ReturnType<typeof pinEndpoint>>
 export type ProbeResponse = { status: number; body: unknown; link?: string | null }
-export type ProbeTransport = (endpoint: PinnedEndpoint, path: string, apiKey: string | null, options?: { maxBytes?: number; body?: Record<string, unknown>; stream?: boolean; readErrors?: boolean }) => Promise<ProbeResponse>
+export type ProbeTransport = (endpoint: PinnedEndpoint, path: string, apiKey: string | null, options?: { maxBytes?: number; body?: Record<string, unknown>; stream?: boolean; readErrors?: boolean; authStyle?: 'bearer' | 'x-api-key' | 'anthropic' | 'gemini' }) => Promise<ProbeResponse>
 
 /** Connect directly to the approved IP: DNS is never resolved again after validation. */
 export const requestPinnedJson: ProbeTransport = (endpoint, path, apiKey, limits = {}) => new Promise((resolve, reject) => {
@@ -75,7 +75,7 @@ export const requestPinnedJson: ProbeTransport = (endpoint, path, apiKey, limits
     method: limits.body ? 'POST' : 'GET', agent: false, maxHeaderSize: 16384, rejectUnauthorized: true,
     checkServerIdentity: (_hostname, certificate) => checkServerIdentity(endpoint.host, certificate),
     ...(endpoint.url.protocol === 'https:' && !isIP(endpoint.host) ? { servername: endpoint.host } : {}),
-    headers: { Host: endpoint.url.host, Accept: 'application/json', 'Accept-Encoding': 'identity', ...(limits.body ? { 'Content-Type': 'application/json' } : {}), ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+    headers: { Host: endpoint.url.host, Accept: 'application/json', 'Accept-Encoding': 'identity', ...(limits.body ? { 'Content-Type': 'application/json' } : {}), ...(limits.authStyle === 'anthropic' ? { 'anthropic-version': '2023-06-01' } : {}), ...(apiKey ? limits.authStyle === 'gemini' ? { 'x-goog-api-key': apiKey } : ['anthropic', 'x-api-key'].includes(limits.authStyle ?? '') ? { 'x-api-key': apiKey } : { Authorization: `Bearer ${apiKey}` } : {}) },
   }
   const request = (endpoint.url.protocol === 'https:' ? httpsRequest : httpRequest)(options, response => {
     const status = response.statusCode ?? 0

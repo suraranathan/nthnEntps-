@@ -2,6 +2,36 @@
 
 Updated: 2026-10-31
 
+## Current Office environment redesign
+
+The Office remains the dashboard landing screen. Its existing React Three Fiber scene, camera gestures, inspection actions, seven employee identities, Alex access, AI Providers and sidebar navigation remain connected. The scene now uses a shared 22 × 17 metre plan (`officeLayout.ts`) for room boundaries, door locations, desk positions and fixed furniture footprints. A 2.3 metre south entrance feeds a central walkway and four-person work area. The west side contains an eight-seat meeting room and two-person consultation room; the east side contains Alex's private office, Sophia's product office and Victor's security office. Reception and waiting furniture occupy the south area. Doors are held open, glazed partitions and internal dividers define the rooms, and cabinetry and shelves sit against walls. The procedural wood floor, warm lighting, soft contact shadows, beveled furniture, seated character models and touch camera are retained and refined with area rugs, updated furniture placement and room labels.
+
+The floor-plan checks confirm fixed furniture stays within its assigned room without overlap and routes from the entrance reach all five room doors and all seven workstation approaches. The new tests cover those checks. The six non-Alex employees remain seated placeholders; there is no character walking, door animation or physics simulation. `routeExists` and `walkable` provide a lightweight plan-level route check for later movement, but no runtime character navigation is claimed. The existing 1.3 device-pixel-ratio cap, low-power renderer preference and single 1024px shadow map remain. Android WebView frame rate, direct touch behavior, visual quality on multiple phone sizes and installed APK behavior have not been measured here. The existing large Vite bundle warning remains. Projects, Apps and a standalone Settings page are not present in the current dashboard navigation; existing destinations were retained.
+
+Validation: 134 tests passed and one opt-in live evaluation was skipped. Typecheck and the final production build passed. No commit or push.
+
+## AI provider expansion and simplified management
+
+The existing adapter registry now includes OpenAI, Anthropic, Google Gemini, OpenRouter, xKiro, custom OpenAI-compatible endpoints and Ollama. Native Anthropic Messages and Gemini GenerateContent requests use provider-specific authentication, model discovery, text/capability probes and Alex runtime response parsing through the existing pinned endpoint transport. Custom OpenAI-compatible connections support bearer or `x-api-key` authentication. Multiple accounts keep distinct encrypted credentials and model route IDs.
+
+Connection tests now run automatically after creation, endpoint/credential changes and enabling. The existing catalog watcher discovers enabled connections and refreshes due models; the UI reads status every 30 seconds while its page is open. Operators can add an exact model ID when discovery is unavailable. Manual entries survive catalog refreshes; re-entering one after a connection revision change keeps its route ID and requires fresh verification before assignment. Existing assignments and Alex memory remain in place. Saved fallbacks are considered before a new request under the existing slow/limit policy and produce an in-chat event. AI Providers now shows concise status with expandable diagnostics, filters and advanced settings; live verification, assignment changes, disabling and removal retain confirmation controls.
+
+Validation: 132 tests passed and one opt-in live evaluation was skipped. Focused tests cover registration, separate accounts, provider-specific discovery/pagination, native probe formats, manual model verification and assignment, automatic connection tests, credential headers, and assigned Anthropic/Gemini runtime. Typecheck and production build passed. Direct live account inference, paid capability probes and installed Android visual/touch behavior remain unverified. Model selection covers text chat; the other six office agents remain placeholders. The existing large Vite bundle warning remains. No commit or push.
+
+The background dashboard remains available at `http://localhost:3000`. A duplicate API shutdown callback observed during restart was fixed; its startup/catalog suite passed 25 tests. UI, Alex and AI Providers HTTP reads return 200.
+
+## Office-first dashboard redesign
+
+The default dashboard now renders only the Office scene, inspection overlay and camera controls. A temporary slide-in sidebar holds Office, Agents, Activity, Tasks, AI Providers and Talk to Alex. The former team-capacity and open-task summary cards are in Agents and Tasks, respectively; the existing New task control is in Tasks. The drawer closes on navigation, backdrop tap, close button or Escape and is responsive on mobile. Alex's chat drawer, unread count and internal panels remain accessible from the sidebar. No backend, provider connection, authentication or persisted application state was changed by this redesign.
+
+Validation: navigation source checks cover all six sidebar destinations and the Office default. All 127 tests completed with 126 passing and one opt-in live-model evaluation skipped. Typecheck, production build and `git diff --check` passed. The running Vite server serves the updated UI (HTTP 200); Alex and AI Providers API reads also return HTTP 200. Direct touch/browser interaction remains unverified here. The existing large Vite bundle warning remains. No commit or push.
+
+## Alex personality, philosophy and proactive intelligence
+
+Extended the existing Alex runtime without replacing provider assignment or security boundaries. Context-sensitive conversation guidance covers curiosity, independent reasoning, constructive disagreement, serious-context tone and natural humor; these remain dependent on the selected model's actual behavior. Explicit inside-joke memory and transcript continuity persist across providers. Philosophy uses a six-author source index, labeled paraphrases and one curated verified Epictetus quotation; apparent unsupported historical quotations are blocked rather than presented as authentic. Project status changes are detected by persistent section fingerprints. User-saved follow-ups support pending, scheduled, overdue, completed and dismissed states, with deduplicated reminder/stalled events. Existing quiet hours, minimum interval and in-app delivery gate automatic messages. Settings now control philosophy, initiative, follow-ups and reminders.
+
+Deterministic tests cover migration, behavioral guidance, serious-tone repair, quotation blocking and paraphrase repair, project-change deduplication, follow-up transitions, quiet hours, rate limits, restart recovery and provider continuity. The full dashboard suite passed 126 tests with one explicitly opt-in live-model evaluation skipped. Typecheck and the production Vite build passed; the existing large-bundle warning remains. Live-model quality, Android background behavior and broader quotation coverage remain unverified. No commit or push.
+
 ## Android dashboard resume recovery
 
 Added a project-specific Capacitor `onResume` event and browser visibility/focus/online listeners so Alex and the mounted AI Providers page refresh immediately when the APK returns to the foreground. A shared single-flight controller prevents overlapping refreshes, retries failures after 1, 2, 4 and 8 seconds, then reports offline; Alex continues with a 30-second low-rate probe while offline and resumes its normal five-second polling after recovery. The UI now distinguishes reconnecting from offline. Event listeners, request signals and timers are cleaned up on unmount. Existing loopback URLs, proxy, backend Host/Origin/session/CSRF checks and dashboard design are unchanged.
@@ -134,13 +164,13 @@ Security includes server-only environment credentials, configured provider URLs/
 
 Setup and detailed contracts: [dashboard README](apps/dashboard/README.md), [Alex architecture](docs/ALEX_ARCHITECTURE.md).
 
-## Dashboard and office reconstruction
+## Earlier dashboard and office reconstruction (historical; layout superseded above)
 
 `apps/dashboard/` retains React, TypeScript, Vite, Three.js and React Three Fiber. The office has been rebuilt as an 18 × 14 architectural cutaway with a warm walnut plank floor, cream masonry, thick walls and skirting, large rear windows, framed glass partitions, open doors, and a recognizable two-meter main entrance. Camera-facing exterior walls are cut down for visibility; the roof is omitted and thin ceiling luminaires remain visible.
 
 The written reconstruction specification was used: the workspace `references/` folder contains no reference images, so visual correspondence to the hand-drawn and realistic images has not been verified.
 
-## Current floor plan
+## Earlier floor plan
 
 - Upper-left: enclosed private working room for Alex, with desk, computer, chair, rear cabinetry, tall bookcase and a separate inward-opening door.
 - Lower-left: enclosed conference room with a long rectangular table, eight upholstered chairs (three per side and one at each end), presentation display and its own door. The divider between the two left rooms is solid.

@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { ContactShadows } from './ContactShadows'
 import { InteriorDetails } from './InteriorDetails'
 import { OfficeArchitecture, SoftBlock } from './OfficeArchitecture'
+import { DESKS, OFFICE, ROOMS } from './officeLayout'
 
 type Agent = { id: string; name: string; role: string; color: string; state: string }
 type Props = {
@@ -71,7 +72,7 @@ function makeFloorTexture() {
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(4.5, 3.5)
+  texture.repeat.set(5.5, 4.25)
   texture.anisotropy = 4
   return texture
 }
@@ -312,8 +313,9 @@ function RoomTrigger({ name, position, size, hovered, onHover, onInspect, suppre
   </mesh>
 }
 
+const BASE_RADIUS = 35
 function useOfficeCamera(gl: THREE.WebGLRenderer, view: Props['view'], onViewChange: Props['onViewChange'], zoom: number, onZoomChange: Props['onZoomChange'], resetToken: number, suppressClick: MutableRefObject<boolean>) {
-  const orbit = useRef({ theta: .42, phi: .72, radius: 29 })
+  const orbit = useRef({ theta: .42, phi: .72, radius: BASE_RADIUS })
   const spherical = useMemo(() => new THREE.Spherical(), [])
   const focus = useMemo(() => new THREE.Vector3(0, .68, -.05), [])
   const viewRef = useRef(view)
@@ -322,10 +324,10 @@ function useOfficeCamera(gl: THREE.WebGLRenderer, view: Props['view'], onViewCha
   useEffect(() => {
     orbit.current.theta = .42
     orbit.current.phi = .72
-    orbit.current.radius = 29
+    orbit.current.radius = BASE_RADIUS
   }, [resetToken])
   useEffect(() => {
-    orbit.current.radius = 29 / zoom
+    orbit.current.radius = BASE_RADIUS / zoom
   }, [zoom])
 
   useEffect(() => {
@@ -369,8 +371,8 @@ function useOfficeCamera(gl: THREE.WebGLRenderer, view: Props['view'], onViewCha
         event.preventDefault()
         const distance = distanceBetweenFirstTwo()
         if (last.distance > 0 && distance > 0) {
-          orbit.current.radius = THREE.MathUtils.clamp(orbit.current.radius * (last.distance / distance), 22.308, 36.25)
-          onZoomChange(Math.round(THREE.MathUtils.clamp(29 / orbit.current.radius, .8, 1.3) * 100) / 100)
+          orbit.current.radius = THREE.MathUtils.clamp(orbit.current.radius * (last.distance / distance), 18.42, 46.67)
+          onZoomChange(Math.round(THREE.MathUtils.clamp(BASE_RADIUS / orbit.current.radius, .75, 1.9) * 100) / 100)
         }
         last.distance = distance
         moved = true
@@ -410,8 +412,8 @@ function useOfficeCamera(gl: THREE.WebGLRenderer, view: Props['view'], onViewCha
 
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
-      orbit.current.radius = THREE.MathUtils.clamp(orbit.current.radius * Math.exp(event.deltaY * .001), 22.308, 36.25)
-      onZoomChange(Math.round(THREE.MathUtils.clamp(29 / orbit.current.radius, .8, 1.3) * 100) / 100)
+      orbit.current.radius = THREE.MathUtils.clamp(orbit.current.radius * Math.exp(event.deltaY * .001), 18.42, 46.67)
+      onZoomChange(Math.round(THREE.MathUtils.clamp(BASE_RADIUS / orbit.current.radius, .75, 1.9) * 100) / 100)
     }
     const onContextMenu = (event: MouseEvent) => event.preventDefault()
 
@@ -464,22 +466,24 @@ export function OfficeScene({ agents, selected, hovered, onHover, onSelectAgent,
   }, [])
   useEffect(() => () => { floor.dispose(); keyboard.dispose(); brand.dispose() }, [floor, keyboard, brand])
   useEffect(() => { gl.shadowMap.type = THREE.PCFSoftShadowMap }, [gl])
-  // Dedicated stations: Alex private, Victor/Daniel/Marcus/Emma bench, Sophia product, Oliver platform.
-  const positions = useMemo(() => [
-    [-6.5, 0, -3.8], [-1.7, 0, -2.5], [6.3, 0, -3.8],
-    [-.18, 0, -2.5], [-1.7, 0, -3.32], [-.18, 0, -3.32], [6.3, 0, 3.3],
-  ] as [number, number, number][], [])
+  const positions = useMemo(() => agents.map(agent => {
+    const station = DESKS.find(desk => desk.id === agent.id)
+    if (!station) throw new Error(`Missing station for agent ${agent.id}`)
+    return [station.x, 0, station.z] as [number, number, number]
+  }), [agents])
   const roomFacts: Record<string, [string, string[]]> = {
-    'Private office': ['Upper-left · Alex', ['Dedicated desk, computer and ergonomic chair', 'Enclosed room with glazing, storage and a 1.2m entrance']],
-    'Meeting room': ['Lower-left · conference suite', ['Long rectangular table with eight seats', 'Presentation display and clear access from the west aisle']],
-    'Product office': ['Upper-right · Sophia', ['Private glazed workstation and storage', 'Door opens inward from the central circulation area']],
-    'Platform lab': ['Lower-right · Oliver', ['Dedicated platform workstation and populated shelving', 'Printer and coffee counter along the perimeter']],
-    'Reception': ['Entrance welcome area', ['Welcome counter, computer and visitor sofa', 'Direct access from the main entrance to the central aisle']],
-    'Main entrance': ['South side · two-meter opening', ['Open entrance door and labeled threshold', 'Continuous aisle connects the shared desks and all rooms']],
+    'Meeting room': ['North-west · eight seats', ['Shared conference table and presentation screen', 'Glazed door from the central walkway']],
+    'Consultation': ['West · two-person conversation', ['Facing chairs and a small discussion table', 'Enclosed room with storage and a separate door']],
+    'Private office': ['North-east · Alex', ['Dedicated desk, computer and ergonomic chair', 'Glazed room with storage and inward-open door']],
+    'Product office': ['East · Sophia', ['Private workstation and storage', 'Door opens from the central circulation area']],
+    'Security office': ['South-east · Victor', ['Dedicated security workstation', 'Perimeter shelving and cabinet storage']],
+    'Work area': ['Central · four workstations', ['Daniel, Marcus, Emma and Oliver', 'Wide side aisles connect every room']],
+    'Reception': ['South · entrance welcome area', ['Working reception counter, visitor sofa and coffee table', 'Direct path from the main entrance']],
+    'Main entrance': ['South · 2.3 metre opening', ['Level threshold and an unobstructed central walkway', 'Reception and waiting area inside']],
   }
   const inspectRoom = (name: string) => {
     if (suppressClick.current) return
-    const [subtitle, facts] = roomFacts[name]
+    const [subtitle, facts] = roomFacts[name] ?? ['Office area', []]
     onInspectRoom(name, subtitle, facts)
   }
 
@@ -493,8 +497,8 @@ export function OfficeScene({ agents, selected, hovered, onHover, onSelectAgent,
     } else focusTarget.set(0, .68, -.05)
     focus.lerp(focusTarget, 1 - Math.exp(-5 * delta))
     const phi = view === 'top' ? .035 : orbit.current.phi
-    const fit = Math.max(1, 1.3 / (size.width / size.height))
-    cameraTarget.setFromSpherical(spherical.set(orbit.current.radius * fit * (selected ? .32 : 1), phi, orbit.current.theta)).add(focus)
+    const fit = Math.max(1, 1.15 / (size.width / size.height))
+    cameraTarget.setFromSpherical(spherical.set(orbit.current.radius * fit * (selected ? .48 : 1), phi, orbit.current.theta)).add(focus)
     camera.position.lerp(cameraTarget, 1 - Math.exp(-6 * delta))
     camera.lookAt(focus)
   })
@@ -505,20 +509,16 @@ export function OfficeScene({ agents, selected, hovered, onHover, onSelectAgent,
     <directionalLight position={[3, 7, -9]} intensity={2.6} color="#fff3d9" castShadow shadow-mapSize={[1024, 1024]} shadow-camera-left={-12} shadow-camera-right={12} shadow-camera-top={11} shadow-camera-bottom={-11} shadow-camera-near={.5} shadow-camera-far={35} shadow-normalBias={.025} shadow-bias={-.0002} />
     <directionalLight position={[-5, 9, 7]} intensity={.65} color="#e4edf8" />
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -.015, 0]} receiveShadow>
-      <planeGeometry args={[18, 14]} />
+      <planeGeometry args={[OFFICE.width, OFFICE.depth]} />
       <meshStandardMaterial map={floor} bumpMap={floor} bumpScale={.018} roughness={.63} metalness={.02} />
     </mesh>
     <ContactShadows stations={positions} />
     <OfficeArchitecture inspect={inspectRoom} />
     <InteriorDetails brand={brand} />
-    {([
-      ['Private office', -6.5, -3.5, 4.8, 6.8], ['Meeting room', -6.5, 3.5, 4.8, 6.8],
-      ['Product office', 6.5, -3.5, 4.8, 6.8], ['Platform lab', 6.5, 4, 4.8, 5.6],
-      ['Reception', -1.6, 4.4, 3.1, 4],
-    ] as [string, number, number, number, number][]).map(([name, x, z, width, depth]) =>
-      <RoomTrigger key={name} name={name} position={[x, -.005, z]} size={[width, depth]} hovered={hovered === 'room:' + name} onHover={onHover} onInspect={() => inspectRoom(name)} suppressClick={suppressClick} />
+    {[...ROOMS, { id: 'Work area', x: 0, z: -3.8, width: 9.6, depth: 9.1 }, { id: 'Reception', x: 0, z: 5.65, width: 9.6, depth: 5.1 }].map(room =>
+      <RoomTrigger key={room.id} name={room.id} position={[room.x, -.005, room.z]} size={[room.width, room.depth]} hovered={hovered === 'room:' + room.id} onHover={onHover} onInspect={() => inspectRoom(room.id)} suppressClick={suppressClick} />
     )}
-    {agents.map((agent, index) => <Desk key={agent.id} agent={agent} position={positions[index]} rotation={index === 4 || index === 5 ? Math.PI : 0} selected={selected === agent.id} hovered={hovered === agent.id} onHover={onHover} onSelectAgent={onSelectAgent} onInspectWorkstation={onInspectWorkstation} keyboard={keyboard} suppressClick={suppressClick} />)}
-    <mesh position={[0, -.025, 0]} onClick={(event) => { event.stopPropagation(); if (!suppressClick.current) onClearSelection() }}><boxGeometry args={[17.8, .012, 13.8]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
+    {agents.map((agent, index) => <Desk key={agent.id} agent={agent} position={positions[index]} rotation={DESKS.find(desk => desk.id === agent.id)?.rotation ?? 0} selected={selected === agent.id} hovered={hovered === agent.id} onHover={onHover} onSelectAgent={onSelectAgent} onInspectWorkstation={onInspectWorkstation} keyboard={keyboard} suppressClick={suppressClick} />)}
+    <mesh position={[0, -.025, 0]} onClick={(event) => { event.stopPropagation(); if (!suppressClick.current) onClearSelection() }}><boxGeometry args={[OFFICE.width - .2, .012, OFFICE.depth - .2]} /><meshBasicMaterial transparent opacity={0} depthWrite={false} /></mesh>
   </>
 }

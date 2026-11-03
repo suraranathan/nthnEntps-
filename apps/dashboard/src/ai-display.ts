@@ -24,4 +24,11 @@ const reasons: Record<string, string> = {
   CAPABILITY_UNTESTED_OR_UNSUPPORTED: 'Required capabilities are untested or unsupported',
 }
 export const eligibilityReason = (code: string) => reasons[code] ?? code
+const catalogErrors: Record<string, string> = {
+  AUTH_REJECTED: 'Provider rejected the API key or model access.', CREDENTIAL_REQUIRED: 'Add an API key to this connection.',
+  RATE_LIMITED: 'Provider rate limit reached; retry is scheduled.', DNS_FAILED: 'Provider address could not be resolved.',
+  REQUEST_FAILED: 'Provider request failed or timed out.', INVALID_RESPONSE: 'Provider returned a model list this adapter could not read.',
+  PAGINATION_INVALID: 'Provider model pagination was incomplete or malformed.', DISCOVERY_UNSUPPORTED: 'Model discovery is unavailable; add a model manually.',
+}
+export const catalogErrorMessage = (code: string) => catalogErrors[code] ?? `Catalog check failed (${code}).`
 export const displayTime = (value: string | null | undefined) => value ? new Date(value).toLocaleString() : 'Never'

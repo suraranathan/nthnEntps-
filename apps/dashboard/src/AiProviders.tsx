@@ -4,7 +4,7 @@ import { AiClient } from './ai-client'
 import { useRuntimeRecovery } from './useRuntimeRecovery'
 import type { AiAction, AiSnapshot, AssignmentView, Capability, ManagedConnection, ModelSearch } from './ai-contract'
 import type { CatalogEntry, CatalogQuery, ModelRoute } from '../server/ai/contracts.ts'
-import { capabilityLabels, displayTime, eligibilityReason, verificationLabel } from './ai-display'
+import { capabilityLabels, catalogErrorMessage, displayTime, eligibilityReason, verificationLabel } from './ai-display'
 import { team } from './team'
 
 type Perform = (action: AiAction, success: string, after?: () => void) => Promise<boolean>
@@ -12,6 +12,10 @@ type OperationResult = { ok?: boolean; code?: string | null; state?: string; err
 const message = (error: unknown) => error instanceof Error ? error.message : 'Provider request failed.'
 const defaults: Record<string, { baseUrl: string; networkPolicy: 'public' | 'loopback' }> = {
   openrouter: { baseUrl: 'https://openrouter.ai/api/v1', networkPolicy: 'public' },
+  openai: { baseUrl: 'https://api.openai.com/v1', networkPolicy: 'public' },
+  anthropic: { baseUrl: 'https://api.anthropic.com/v1', networkPolicy: 'public' },
+  gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', networkPolicy: 'public' },
+  xkiro: { baseUrl: 'https://api.xkiro.com/v1', networkPolicy: 'public' },
   'openai-compatible': { baseUrl: '', networkPolicy: 'public' },
   ollama: { baseUrl: 'http://127.0.0.1:11434', networkPolicy: 'loopback' },
 }
@@ -27,7 +31,7 @@ export function AiProviders() {
   const [reload, setReload] = useState(0)
   const [editing, setEditing] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
-  const recovery = useRuntimeRecovery(signal => client.snapshot(signal), data => { if (mounted.current) setSnapshot(data) })
+  const recovery = useRuntimeRecovery(signal => client.snapshot(signal), data => { if (mounted.current) setSnapshot(data) }, { healthyInterval: 30000, offlineInterval: 30000 })
   const refresh = recovery.refresh
   useEffect(() => {
     mounted.current = true
@@ -57,8 +61,7 @@ export function AiProviders() {
   const editConnection = snapshot?.connections.find(c => c.id === editing)
 
   return <section className="providers-page" aria-labelledby="providers-title" aria-busy={pending}>
-    <div className="providers-heading"><div><div className="eyebrow">WORKSPACE CONFIGURATION</div><h1 id="providers-title">AI Providers</h1><p>Manage connections, inspect model access and choose agent candidates.</p></div>
-      <button disabled={pending} onClick={() => { setError(''); void refresh().then(() => setReload(n => n + 1)).catch(e => setError(message(e))) }}>Reload state</button></div>
+    <div className="providers-heading"><div><div className="eyebrow">WORKSPACE CONFIGURATION</div><h1 id="providers-title">AI Providers</h1><p>Connect providers, choose models, and assign agents.</p></div></div>
     <p className="providers-note">Alex uses his saved verified primary for live chat. Automatic switches consider only saved verified fallbacks after repeated slowness or a provider limit signal.</p>
     {recovery.state !== 'connected' && <p className="providers-error" role="status">{recovery.state === 'offline' ? 'Local dashboard backend is offline.' : 'Reconnecting to the local dashboard…'} {recovery.error}</p>}
     {error && <div className="providers-error" role="alert">{error}</div>}
@@ -73,18 +76,22 @@ export function AiProviders() {
           return <article className="connection-card" key={c.id}>
             <div className="panel-heading"><h3>{c.label}</h3><span className={`provider-badge ${c.enabled ? 'good' : ''}`}>{c.enabled ? 'Enabled' : 'Disabled'}</span></div>
             <p>{snapshot.providers.find(p => p.id === c.providerId)?.name ?? c.providerId}</p><code>{c.baseUrl}</code>
-            <dl><div><dt>Credentials</dt><dd>{c.credentials.state}</dd></div><div><dt>Authentication</dt><dd>{c.health.authentication}</dd></div><div><dt>Discovery / last inference probe</dt><dd>{c.health.discovery} / {c.health.inference}</dd></div><div><dt>Last check</dt><dd>{displayTime(c.health.checkedAt)}</dd></div></dl>
+            <p className={test?.code && test.code !== 'OK' || status?.errorCode ? 'provider-failure' : 'providers-muted'} role="status">{!c.enabled ? 'Paused' : status?.errorCode ? catalogErrorMessage(status.errorCode) : c.health.authentication === 'rejected' ? 'Credential rejected' : status?.state === 'complete' ? `${status.modelsSeen} models available` : c.health.discovery === 'unsupported' ? 'Discovery unavailable · add a model manually' : c.health.checkedAt ? 'Connection checked · model sync pending' : 'Checking connection…'}</p>
             {c.scope.account && <p>Account: {c.scope.account}</p>}
-            {test && <p className={test.code === 'OK' ? '' : 'provider-failure'}>Last connection test (history): {test.message} · {test.code} · {displayTime(test.at)}</p>}
-            {status && <p className={status.errorCode ? 'provider-failure' : ''}>Catalog: {status.state} · {status.modelsSeen} models · {displayTime(status.completedAt || status.startedAt)}{status.errorCode ? ` · ${status.errorCode}` : ''}{status.connectionRevision !== c.revision ? ' · Previous connection revision; refresh required' : ''}</p>}
-            <div className="providers-actions">
-              <button disabled={pending || editing !== null} onClick={() => setEditing(c.id)}>Edit</button>
+            {test && test.code !== 'OK' && <p className="provider-failure">{test.message}</p>}
+            <div className="providers-actions"><button disabled={pending || editing !== null} onClick={() => setEditing(c.id)}>Manage connection</button></div>
+            <details className="providers-advanced"><summary>Advanced actions and diagnostics</summary>
+              <dl><div><dt>Credentials</dt><dd>{c.credentials.state}</dd></div><div><dt>Authentication</dt><dd>{c.health.authentication}</dd></div><div><dt>Discovery / last inference probe</dt><dd>{c.health.discovery} / {c.health.inference}</dd></div><div><dt>Last check</dt><dd>{displayTime(c.health.checkedAt)}</dd></div></dl>
+              {test && <p>Last connection test: {test.message} · {displayTime(test.at)}</p>}
+              {status && <p>Catalog: {status.state} · {status.modelsSeen} models · {displayTime(status.completedAt || status.startedAt)}{status.connectionRevision !== c.revision ? ' · Previous connection revision' : ''}</p>}
+              <div className="providers-actions">
               <button disabled={pending} onClick={() => void perform({ action: 'connection.test', id: c.id, revision: c.revision }, 'Connection test completed. A connection test does not verify model inference.')}>Test connection</button>
-              <button disabled={pending} onClick={() => void perform({ action: 'connection.enable', id: c.id, revision: c.revision, enabled: !c.enabled }, `Connection ${c.enabled ? 'disabled' : 'enabled'}.`)}>{c.enabled ? 'Disable' : 'Enable'}</button>
+              <button disabled={pending} onClick={() => { if (c.enabled && !window.confirm(`Disable ${c.label}? Assigned models on this connection will become unavailable.`)) return; void perform({ action: 'connection.enable', id: c.id, revision: c.revision, enabled: !c.enabled }, `Connection ${c.enabled ? 'disabled' : 'enabled'}.`) }}>{c.enabled ? 'Disable' : 'Enable'}</button>
               <button disabled={pending || !c.enabled} onClick={() => void perform({ action: 'catalog.refresh', id: c.id }, 'Model discovery completed.')}>Discover models</button>
               <button className="providers-danger" disabled={pending} onClick={() => setRemoving(c.id)}>Remove</button>
-            </div>
+              </div>
             {removing === c.id && <div className="providers-confirm"><p>Remove “{c.label}” and its stored credential? Historical model evidence will remain, with this route unavailable.</p><button className="providers-danger" disabled={pending} onClick={() => void perform({ action: 'connection.remove', id: c.id, revision: c.revision }, 'Connection removed.', () => { setRemoving(null); if (editing === c.id) setEditing(null) })}>Confirm removal</button> <button disabled={pending} onClick={() => setRemoving(null)}>Cancel</button></div>}
+            </details>
           </article>
         })}</div>
         {editing && (editing === 'new' || editConnection) && <ConnectionEditor key={editConnection ? `${editConnection.id}:${editConnection.revision}` : 'new'} connection={editConnection} snapshot={snapshot} pending={pending} perform={perform} onClose={() => setEditing(null)} />}
@@ -99,24 +106,26 @@ function ConnectionEditor({ connection: c, snapshot, pending, perform, onClose }
   const [label, setLabel] = useState(c?.label ?? '')
   const [baseUrl, setBase] = useState(c?.baseUrl ?? defaults[providerId]?.baseUrl ?? '')
   const [networkPolicy, setNetwork] = useState<'public' | 'loopback'>(c?.networkPolicy ?? defaults[providerId]?.networkPolicy ?? 'public')
+  const [authStyle, setAuthStyle] = useState<'bearer' | 'x-api-key'>(c?.authStyle ?? 'bearer')
   const [scope, setScope] = useState(c?.scope ?? { account: null, project: null, region: null })
   const [key, setKey] = useState('')
   const [clearKey, setClearKey] = useState(false)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const secret = key; setKey('')
-    const metadata = { label, baseUrl, networkPolicy, scope }
-    await perform(c ? { action: 'connection.edit', id: c.id, revision: c.revision, patch: metadata } : { action: 'connection.add', connection: { ...metadata, providerId, enabled: false }, ...(secret ? { apiKey: secret } : {}) }, c ? 'Connection updated. Refresh discovery and verify models again.' : 'Connection saved as disabled. Test it, enable it and discover models.', onClose)
+    const metadata = { label, baseUrl, networkPolicy, scope, ...(providerId === 'openai-compatible' ? { authStyle } : {}) }
+    await perform(c ? { action: 'connection.edit', id: c.id, revision: c.revision, patch: metadata } : { action: 'connection.add', connection: { ...metadata, providerId, enabled: false }, ...(secret ? { apiKey: secret } : {}) }, c ? 'Connection updated. Connection test runs automatically after endpoint changes.' : 'Connection saved as disabled. Connection test runs automatically; enable it to sync models.', onClose)
   }
   return <div className="connection-editor">
     <h3>{c ? `Edit ${c.label}` : 'Add a connection'}</h3>
     <form onSubmit={event => void submit(event)}>
       <fieldset disabled={pending}><legend className="sr-only">Connection details</legend>
-        <div className="providers-fields"><label>Provider<select value={providerId} disabled={Boolean(c)} onChange={e => { const id = e.target.value; setProvider(id); setBase(defaults[id]?.baseUrl ?? ''); setNetwork(defaults[id]?.networkPolicy ?? 'public'); setKey('') }}>{snapshot.providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <div className="providers-fields"><label>Provider<select value={providerId} disabled={Boolean(c)} onChange={e => { const id = e.target.value; setProvider(id); setBase(defaults[id]?.baseUrl ?? ''); setNetwork(defaults[id]?.networkPolicy ?? 'public'); setAuthStyle('bearer'); setKey('') }}>{snapshot.providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
           <label>Connection name<input required maxLength={200} value={label} onChange={e => setLabel(e.target.value)} placeholder="Personal account / local workstation" /></label>
           <label>Base URL<input required type="url" maxLength={2048} value={baseUrl} onChange={e => setBase(e.target.value)} placeholder="https://provider.example/v1" /></label>
-          <label>Network policy<select value={networkPolicy} disabled={providerId === 'openrouter'} onChange={e => setNetwork(e.target.value as 'public' | 'loopback')}><option value="public">Public HTTPS</option><option value="loopback">Local loopback</option></select></label>
-          {(['account', 'project', 'region'] as const).map(field => <label key={field}>{field} (optional)<input maxLength={200} value={scope[field] ?? ''} onChange={e => setScope(s => ({ ...s, [field]: e.target.value || null }))} /></label>)}
+          <label>Network policy<select value={networkPolicy} disabled={!['openai-compatible', 'ollama'].includes(providerId)} onChange={e => setNetwork(e.target.value as 'public' | 'loopback')}><option value="public">Public HTTPS</option><option value="loopback">Local loopback</option></select></label>
+          {providerId === 'openai-compatible' && <label>API key header<select value={authStyle} onChange={e => setAuthStyle(e.target.value as 'bearer' | 'x-api-key')}><option value="bearer">Authorization: Bearer</option><option value="x-api-key">x-api-key</option></select></label>}
+          <details className="providers-advanced"><summary>Account details (optional)</summary>{(['account', 'project', 'region'] as const).map(field => <label key={field}>{field}<input maxLength={200} value={scope[field] ?? ''} onChange={e => setScope(s => ({ ...s, [field]: e.target.value || null }))} /></label>)}</details>
           {!c && <label>API key (write only)<input type="password" autoComplete="new-password" maxLength={8192} value={key} onChange={e => setKey(e.target.value)} placeholder={providerId === 'openrouter' ? 'Required for OpenRouter access' : 'Optional for local services'} /></label>}
         </div>
         <p>Local ports allowed by the backend: {snapshot.localPorts.join(', ')}. Public endpoints require HTTPS. Credentials are encrypted on the server and never returned.</p>
@@ -152,6 +161,9 @@ function ModelWorkspace({ snapshot, client, pending, perform, reload }: { snapsh
   const [searchError, setSearchError] = useState('')
   const [searching, setSearching] = useState(false)
   const [searchReload, setSearchReload] = useState(0)
+  const [manualConnection, setManualConnection] = useState('')
+  const [manualId, setManualId] = useState('')
+  const [manualName, setManualName] = useState('')
   const controller = useRef<AbortController | null>(null)
   const query: CatalogQuery = { search, ...(provider ? { providerIds: [provider] } : {}), ...(connection ? { connectionIds: [connection] } : {}), ...(output ? { outputModality: output } : {}), pageSize: 30 }
   const queryKey = JSON.stringify(query), requirementsKey = JSON.stringify(requirements)
@@ -205,7 +217,7 @@ function ModelWorkspace({ snapshot, client, pending, perform, reload }: { snapsh
       <label>Agent<select disabled={pending} value={agentId} onChange={e => setAgent(e.target.value)}>{team.map(a => <option value={a.id} key={a.id}>{a.id} · {a.name} — {a.role}</option>)}</select></label>
       {assignmentError && <p className="provider-failure" role="alert">{assignmentError}</p>}
       {assignmentLoading ? <p role="status">Loading assignment…</p> : <>
-        <fieldset disabled={pending || !ready} className="capability-options"><legend>Required observed capabilities</legend>{snapshot.capabilities.map(cap => <label className="providers-check" key={cap}><input type="checkbox" checked={requirements.includes(cap)} disabled={cap === 'text' || (agentId === '01' && cap === 'systemInstructions')} onChange={e => { setRequirements(caps => e.target.checked ? [...caps, cap] : caps.filter(c => c !== cap)); setDirty(true) }} />{capabilityLabels[cap]}</label>)}</fieldset>
+        <details className="providers-advanced"><summary>Advanced capability requirements</summary><fieldset disabled={pending || !ready} className="capability-options"><legend>Required observed capabilities</legend>{snapshot.capabilities.map(cap => <label className="providers-check" key={cap}><input type="checkbox" checked={requirements.includes(cap)} disabled={cap === 'text' || (agentId === '01' && cap === 'systemInstructions')} onChange={e => { setRequirements(caps => e.target.checked ? [...caps, cap] : caps.filter(c => c !== cap)); setDirty(true) }} />{capabilityLabels[cap]}</label>)}</fieldset></details>
         {agentId === '01' && <p>Alex always requires verified text and system instructions.</p>}
         <ol className="candidate-list">{candidateIds.map((id, index) => {
           const route = knownRoutes[id], eligibility = result?.eligibility[id]
@@ -214,17 +226,21 @@ function ModelWorkspace({ snapshot, client, pending, perform, reload }: { snapsh
         })}</ol>
         {!candidateIds.length && <p className="providers-empty">No model candidates selected. Use “Add candidate” on a compatible catalog entry.</p>}
       </>}
-      <div className="providers-actions"><button className="providers-primary" disabled={pending || !ready || !candidateIds.length || !dirty} onClick={() => void perform({ action: 'assignment.set', revision: assignment?.assignment?.revision ?? 0, assignment: { agentId, candidateRouteIds: candidateIds, requiredCapabilities: requirements } }, 'Assignment and ordered fallbacks saved. Alex checks the selected route before his next request.', () => setAssignmentReload(n => n + 1))}>Save assignment</button><button disabled={pending || assignmentLoading} onClick={() => setAssignmentReload(n => n + 1)}>{dirty ? 'Discard draft / reload assignment' : 'Reload assignment'}</button></div>
+      <div className="providers-actions"><button className="providers-primary" disabled={pending || !ready || !candidateIds.length || !dirty} onClick={() => { if (!window.confirm(`Save ${candidateIds.length} model choice${candidateIds.length === 1 ? '' : 's'} for ${agentId === '01' ? 'Alex' : `agent ${agentId}`}? This changes the model used on future requests.`)) return; void perform({ action: 'assignment.set', revision: assignment?.assignment?.revision ?? 0, assignment: { agentId, candidateRouteIds: candidateIds, requiredCapabilities: requirements } }, 'Assignment and ordered fallbacks saved. Alex checks the selected route before his next request.', () => setAssignmentReload(n => n + 1)) }}>Save assignment</button>{dirty && <button disabled={pending || assignmentLoading} onClick={() => setAssignmentReload(n => n + 1)}>Discard changes</button>}</div>
       {dirty && <p className="providers-note">Changing the agent discards this draft. Every candidate must pass the backend’s current compatibility checks before saving.</p>}
     </section>
 
     <section className="panel providers-section catalog-section" aria-labelledby="catalog-title">
-      <div className="panel-heading"><div><div className="eyebrow">DISCOVERED ROUTES</div><h2 id="catalog-title">Model catalog</h2></div><button disabled={pending || searching} onClick={() => setSearchReload(n => n + 1)}>Restart results</button></div>
+      <div className="panel-heading"><div><div className="eyebrow">AVAILABLE MODELS</div><h2 id="catalog-title">Model catalog</h2></div></div>
       <p>Discovery lists models; it does not verify access. Verify explicitly to test inference and capabilities. Verification tests the selected agent’s required capabilities, always including text, and may incur provider charges. Select additional requirements to test them. Each run replaces the latest evidence; unrequested capabilities remain untested.</p>
-      <div className="providers-filters"><label>Search models<input type="search" maxLength={2000} placeholder="Name or exact model ID" value={search} onChange={e => setSearch(e.target.value)} /></label><label>Provider<select value={provider} onChange={e => { setProvider(e.target.value); setConnection('') }}><option value="">All providers</option>{snapshot.providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Connection<select value={connection} onChange={e => setConnection(e.target.value)}><option value="">All connections</option>{snapshot.connections.filter(c => !provider || c.providerId === provider).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Output modality<select value={output} onChange={e => setOutput(e.target.value)}><option value="">All / unknown</option>{['text', 'image', 'audio', 'video', 'embedding'].map(m => <option key={m} value={m}>{m}</option>)}</select></label></div>
+      <label>Search models<input type="search" maxLength={2000} placeholder="Name or exact model ID" value={search} onChange={e => setSearch(e.target.value)} /></label>
+      <details className="providers-advanced"><summary>Filters and manual model entry</summary><div className="providers-filters"><label>Provider<select value={provider} onChange={e => { setProvider(e.target.value); setConnection('') }}><option value="">All providers</option>{snapshot.providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Connection<select value={connection} onChange={e => setConnection(e.target.value)}><option value="">All connections</option>{snapshot.connections.filter(c => !provider || c.providerId === provider).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Output modality<select value={output} onChange={e => setOutput(e.target.value)}><option value="">All / unknown</option>{['text', 'image', 'audio', 'video', 'embedding'].map(m => <option key={m} value={m}>{m}</option>)}</select></label></div>
+        <form className="providers-manual" onSubmit={e => { e.preventDefault(); void perform({ action: 'model.manual.add', connectionId: manualConnection, nativeModelId: manualId, displayName: manualName || manualId }, 'Manual model saved. Verify it before assignment.', () => { setManualId(''); setManualName(''); setSearchReload(n => n + 1) }) }}><h3>Add a model manually</h3><p>Use this when discovery is unavailable. Enter the exact provider model ID; model access and capabilities remain unverified until you run a probe.</p><div className="providers-fields"><label>Connection<select required value={manualConnection} onChange={e => setManualConnection(e.target.value)}><option value="">Choose connection</option>{snapshot.connections.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Exact model ID<input required maxLength={500} value={manualId} onChange={e => setManualId(e.target.value)} /></label><label>Display name (optional)<input maxLength={200} value={manualName} onChange={e => setManualName(e.target.value)} /></label></div><button disabled={pending || !manualConnection || !manualId.trim()} type="submit">Save manual model</button></form>
+        <button disabled={pending || searching} onClick={() => setSearchReload(n => n + 1)}>Restart results</button>
+      </details>
       {searchError && <div className="providers-error" role="alert">{searchError}</div>}
       <p role="status" aria-live="polite">{searching ? 'Searching catalog…' : result ? `${result.page.entries.length} of ${result.page.total ?? '?'} matching model routes` : 'Catalog results unavailable'}</p>
-      {result?.page.entries.length === 0 && <p className="providers-empty">No matching models. Add and enable a connection, discover its models, or adjust the filters.</p>}
+      {result?.page.entries.length === 0 && <p className="providers-empty">No matching models yet. Enabled connections sync automatically. Use manual model entry above if a provider has no catalog endpoint.</p>}
       <div className="model-list">{result?.page.entries.map(entry => <ModelCard key={entry.route.id} entry={entry} requirements={requirements} snapshot={snapshot} pending={pending} perform={perform} eligibility={result.eligibility[entry.route.id]} canAdd={ready && !candidateIds.includes(entry.route.id)} onAdd={() => add(entry.route)} />)}</div>
       {result?.page.nextCursor && <button disabled={searching || pending || Boolean(searchError)} onClick={() => void more()}>Load more models</button>}
     </section>
@@ -244,6 +260,6 @@ function ModelCard({ entry, requirements, snapshot, pending, perform, eligibilit
     </details>
     {v?.code && <p className="provider-failure">Verification result: {v.code}</p>}
     <p className={eligibility?.compatible ? 'provider-success' : 'providers-muted'}>{eligibility ? eligibilityReason(eligibility.code) : 'Compatibility unavailable'}</p>
-    <div className="providers-actions"><button disabled={pending || !c?.enabled || c.revision !== route.connectionRevision || route.lifecycle === 'removed'} onClick={() => void perform({ action: 'model.verify', routeId: route.id, capabilities: requirements }, 'Model verification completed. Inspect the tested capability results below.')}>Verify required capabilities</button><button disabled={pending || !canAdd || !eligibility?.compatible} onClick={onAdd}>Add candidate</button></div>
+    <div className="providers-actions"><button disabled={pending || !c?.enabled || c.revision !== route.connectionRevision || route.lifecycle === 'removed'} onClick={() => { if (window.confirm('Verify this model with live requests? This may use provider credits.')) void perform({ action: 'model.verify', routeId: route.id, capabilities: requirements }, 'Model verification completed. Inspect the tested capability results below.') }}>Verify required capabilities</button><button disabled={pending || !canAdd || !eligibility?.compatible} onClick={onAdd}>Add candidate</button></div>
   </article>
 }
