@@ -1,6 +1,6 @@
 # NTHN handoff
 
-Updated: 2026-11-03
+Updated: 2026-11-04
 
 ## What exists
 
@@ -20,14 +20,16 @@ Updated: 2026-11-03
 - ARM64-only (`arm64-v8a`).
 - Custom bootstrap built from pinned `agnostic-apollo/termux-packages` commit `fb44d31f3445d7efd2cee6dada47aa19401c1329` with `TERMUX_APP__PACKAGE_NAME="com.nthn"`.
 - Workflow: `.github/workflows/build-separate.yml` (manual `workflow_dispatch`).
-- Commit `288cba6` adds `git`, `python`, `nodejs` and fixes the `libtirpc` Automake `INSTALL` symlink.
+- Commit `fead949` adds `git`, `python`, `nodejs`, fixes the `libtirpc` Automake `INSTALL` symlink, and isolates the Node.js host ICU build from Android cross-compile flags.
 
 ## Current build
 
-- Workflow run: `41654652900` (`bootstrap` job in progress at handoff time).
-- Previous run `41639705961` failed at `libtirpc-1.3.6` because its tarball ships `INSTALL` as an absolute symlink to `/usr/share/automake-1.16/INSTALL`, while the custom Automake was installed under `/usr/local`.
+- Workflow run: `41766590366` (started 2026-11-04 03:21 UTC).
+- Run `41654652900` failed while building Node.js: the host ICU `configure` inherited the bootstrap's Android `CFLAGS`/`CPPFLAGS`/`LDFLAGS` and could not create host executables. `scripts/patch_nodejs_hostbuild.py` now runs the ICU host build in a subshell with those variables removed.
+- Earlier run `41639705961` failed at `libtirpc-1.3.6` because its tarball ships `INSTALL` as an absolute symlink to `/usr/share/automake-1.16/INSTALL`, while the custom Automake was installed under `/usr/local`.
 - `scripts/install-automake-116.sh` now copies the Automake 1.16 data files to `/usr/share/automake-1.16` before packages are built.
 - `scripts/verify_bootstrap.py` now requires `git`, `nodejs`, `python`, `bin/git`, `bin/node`, and the `bin/python`/`bin/python3` symlinks.
+- `scripts/test_bootstrap_proot.sh` was validated end-to-end against the upstream Termux bootstrap: real ARM64 `bash`, `apt`, `dpkg`, file persistence, and local `.deb` install/purge all passed.
 
 ## Commands
 

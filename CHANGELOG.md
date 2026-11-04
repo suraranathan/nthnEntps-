@@ -6,7 +6,9 @@
 - Added `git`, `python` and `nodejs` to the bootstrap's post-additional package list and extended `verify_bootstrap.py` to require them plus their command entries and Python symlinks.
 - Added `scripts/test_bootstrap_proot.sh`, a real ARM64 runtime test that binds an extracted bootstrap to `/data/data/com.nthn/files`, checks the shell/package tools and file persistence, and installs a locally built `.deb` targeting the `com.nthn` prefix.
 - Verified the `git-2.50.1.tar.xz` checksum from the corrected `www.kernel.org` URL and rewrote the stale `mirrors.kernel.org` source path in the workflow.
-- Pushed `rea-termux-analysis` commit `288cba6` and started workflow run `41654652900`; the bootstrap result is pending.
+- Pushed `rea-termux-analysis` commit `288cba6` and started workflow run `41654652900`. The run reached Node.js but failed because the host ICU build inherited the bootstrap's Android cross-compile flags.
+- Added `scripts/patch_nodejs_hostbuild.py` to run the Node.js ICU host build in a subshell without Android `CFLAGS`/`CPPFLAGS`/`CXXFLAGS`/`LDFLAGS`; pushed commit `fead949` and started run `41766590366`.
+- Validated `scripts/test_bootstrap_proot.sh` against the upstream Termux bootstrap: real ARM64 `bash`, `apt`, `dpkg`, file persistence and local `.deb` install/purge passed.
 - Committed and pushed dashboard work as `144b6ff`. The Android CI workflow built `app-debug.apk` (4,528,413 bytes; SHA-256 `07a970655e21de2f174391a730f346053155f11528647e3ff7d21473d3a9c591`). Installation and on-phone WebView checks remain pending.
 - Documented the repository boundary, verified facts, blockers and next steps in `AGENTS.md`, `IMPLEMENTATION_PLAN.md` and `HANDOFF.md`.
 
