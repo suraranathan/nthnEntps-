@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-06 — Real `com.nthn` bootstrap and APK verified
+
+- Forced the `ncurses-ui-libs` subpackage despite `--no-build-unneeded-subpackages`; `python` depends on it but its parent `ncurses` does not. Commit `6561a6e`.
+- Made `verify_bootstrap.py` recognize `bin/git`, `bin/python` and `bin/python3` as `SYMLINKS.txt` declarations rather than requiring them as ZIP files.
+- Bootstrap run `41833494838` compiled successfully in 4h 7m 56s. Archive: `bootstrap-aarch64.zip`, 103,352,884 bytes, SHA-256 `7433caf798979a446a308c4d82ada6b4461cf519252163ee6ac2616eb7476af8`, 86 installed packages.
+- Ran `scripts/test_bootstrap_proot.sh` on-device against the custom bootstrap bound at `/data/data/com.nthn/files`: bash 5.3.3, apt 2.8.1, dpkg 1.22.6, Python 3.12.11, Node v24.5.0, git 2.50.1, file persistence, local `.deb` install/status/purge and terminal input passed.
+- Added a `bootstrap_run_id` dispatch input so the APK can reuse a verified bootstrap and skip the 4-hour Node.js rebuild. The compile step now tolerates the Docker wrapper's spurious exit only when the archive exists; verification remains mandatory. Commit `9c9057f`.
+- Fixed `verify_apk.py` to trim the embedded ZIP at its end-of-central-directory; the `.so` contains trailing ELF data that previously broke byte comparison. Added `apksigner verify` to the APK workflow. Commit `a706d5c`.
+- APK run `42217391288` is green. Artifact `nthn-separate-arm64-apk` (ID `13501823023`) contains `nthn-separate.apk`, 107,716,676 bytes, SHA-256 `a4f68cef565664659ae7a115e7dda4c34462d0d58d42c0da3bf5ba16daec2afa`.
+- APK checks: package `com.nthn`, label `nthn`, native code `arm64-v8a` only, `verify_apk.py` passed, `apksigner verify` passed, embedded bootstrap matches `7433caf…` byte-for-byte.
+- Copied the APK to `/storage/emulated/0/Download/nthn-separate.apk` for manual installation. Installing still requires the user to accept the Android prompt; no adb/root is available.
+- Remaining limits: installation, real terminal input/Ctrl+C and package persistence inside the installed app remain to be checked by the user. Official Termux repository packages remain incompatible with the `com.nthn` prefix.
+
 ## 2026-11-03 — Linux environment bootstrap fixes and dashboard artifact
 
 - Fixed the custom `com.nthn` bootstrap's `libtirpc` failure by populating `/usr/share/automake-1.16` with the custom Automake 1.16 data files, so upstream tarballs that use absolute `INSTALL` symlinks resolve correctly.

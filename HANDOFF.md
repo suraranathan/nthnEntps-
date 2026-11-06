@@ -1,6 +1,6 @@
 # NTHN handoff
 
-Updated: 2026-11-04
+Updated: 2026-11-06
 
 ## What exists
 
@@ -20,22 +20,30 @@ Updated: 2026-11-04
 - ARM64-only (`arm64-v8a`).
 - Custom bootstrap built from pinned `agnostic-apollo/termux-packages` commit `fb44d31f3445d7efd2cee6dada47aa19401c1329` with `TERMUX_APP__PACKAGE_NAME="com.nthn"`.
 - Workflow: `.github/workflows/build-separate.yml` (manual `workflow_dispatch`).
-- Commit `fead949` adds `git`, `python`, `nodejs`, fixes the `libtirpc` Automake `INSTALL` symlink, and isolates the Node.js host ICU build from Android cross-compile flags.
+- Commits `6561a6e`, `9c9057f` and `a706d5c` force the missing `ncurses-ui-libs` subpackage, allow reuse of a verified bootstrap artifact, and trim the ELF trailer before comparing the embedded bootstrap.
+- Verified bootstrap: 103,352,884 bytes, SHA-256 `7433caf798979a446a308c4d82ada6b4461cf519252163ee6ac2616eb7476af8`.
+- Verified APK: 107,716,676 bytes, SHA-256 `a4f68cef565664659ae7a115e7dda4c34462d0d58d42c0da3bf5ba16daec2afa`; package `com.nthn`, label `nthn`, ARM64-only, embedded bootstrap matches byte-for-byte.
 
 ## Current build
 
-- Workflow run: `41766590366` (started 2026-11-04 03:21 UTC).
-- Run `41654652900` failed while building Node.js: the host ICU `configure` inherited the bootstrap's Android `CFLAGS`/`CPPFLAGS`/`LDFLAGS` and could not create host executables. `scripts/patch_nodejs_hostbuild.py` now runs the ICU host build in a subshell with those variables removed.
-- Earlier run `41639705961` failed at `libtirpc-1.3.6` because its tarball ships `INSTALL` as an absolute symlink to `/usr/share/automake-1.16/INSTALL`, while the custom Automake was installed under `/usr/local`.
-- `scripts/install-automake-116.sh` now copies the Automake 1.16 data files to `/usr/share/automake-1.16` before packages are built.
-- `scripts/verify_bootstrap.py` now requires `git`, `nodejs`, `python`, `bin/git`, `bin/node`, and the `bin/python`/`bin/python3` symlinks.
-- `scripts/test_bootstrap_proot.sh` was validated end-to-end against the upstream Termux bootstrap: real ARM64 `bash`, `apt`, `dpkg`, file persistence, and local `.deb` install/purge all passed.
+- Bootstrap run: `41833494838` (green bootstrap compile; the Docker wrapper returned a spurious exit 1 after the archive was created). Archive uploaded as artifact `nthn-bootstrap`.
+- APK run: `42217391288`, green. It reused the bootstrap via `bootstrap_run_id=41833494838` instead of rebuilding Node.js.
+- Bootstrap archive: `bootstrap-aarch64.zip`, 103,352,884 bytes, SHA-256 `7433caf798979a446a308c4d82ada6b4461cf519252163ee6ac2616eb7476af8`, 86 installed packages.
+- APK artifact: `nthn-separate-arm64-apk` (ID `13501823023`), containing `nthn-separate.apk` (107,716,676 bytes, SHA-256 `a4f68cef565664659ae7a115e7dda4c34462d0d58d42c0da3bf5ba16daec2afa`) and its badging file.
+- APK checks: package `com.nthn`, application label `nthn`, native code `arm64-v8a` only, `verify_apk.py` passed, `apksigner verify` passed, embedded bootstrap matches the built archive.
+- Local copy for installation: `/storage/emulated/0/Download/nthn-separate.apk`.
+- On-device proot runtime test passed: bash 5.3.3, apt 2.8.1, dpkg 1.22.6, Python 3.12.11, Node v24.5.0, git 2.50.1, persistence, local `.deb` install/purge, terminal input.
+- The bootstrap extractor and verifier were fixed: `ncurses-ui-libs` is force-built, and `bin/git`/`bin/python`/`bin/python3` are recognized through `SYMLINKS.txt`.
+- Earlier failures (`libtirpc`, host ICU, missing `ncurses-ui-libs`) remain documented below for context.
 
 ## Commands
 
 ```sh
-# Trigger the Linux environment build
+# Trigger a full bootstrap + APK build
 gh workflow run build-separate.yml --ref main -R srrnthn3-a11y/rea-termux-analysis
+
+# Reuse an already verified bootstrap without rebuilding Node.js
+gh workflow run build-separate.yml --ref main -R srrnthn3-a11y/rea-termux-analysis -f bootstrap_run_id=<verified-run-id>
 
 # Watch it
 gh run list --workflow build-separate.yml -R srrnthn3-a11y/rea-termux-analysis
@@ -51,7 +59,7 @@ python3 scripts/verify_bootstrap.py packages/bootstrap-aarch64.zip
 scripts/test_bootstrap_proot.sh packages/bootstrap-aarch64.zip
 
 # Verify the APK
-python3 scripts/verify_apk.py --apk nthn-debug.apk --bootstrap packages/bootstrap-aarch64.zip
+python3 scripts/verify_apk.py nthn-separate.apk --bootstrap packages/bootstrap-aarch64.zip
 ```
 
 Dashboard:
@@ -80,9 +88,7 @@ node node_modules/vite/bin/vite.js build
 
 ## Next steps
 
-1. Wait for run `41654652900`; if it fails, read the failing package log and fix the source/build issue.
-2. Download and statically verify the bootstrap archive.
-3. Run `scripts/test_bootstrap_proot.sh` on-device and record the output.
-4. Confirm the APK job produced `nthn-separate-arm64-apk`; download, hash and verify it.
-5. Update `PROJECT_STATUS.md`, `CHANGELOG.md`, `IMPLEMENTATION_PLAN.md` and this file with final hashes.
-6. Install the APK manually and test terminal input, Ctrl+C, package database and file persistence in the real app.
+1. Install `/storage/emulated/0/Download/nthn-separate.apk` manually and accept the Android installer prompt (no adb/root available).
+2. Launch the `nthn` app and verify the real terminal, Ctrl+C handling, package database, `apt` metadata and file persistence.
+3. Keep the dashboard and the Linux app separate; the dashboard WebView does not execute shell commands.
+4. Rebuild only when the bootstrap or app source changes. Use `-f bootstrap_run_id=<verified-run>` to reuse a previously verified bootstrap.

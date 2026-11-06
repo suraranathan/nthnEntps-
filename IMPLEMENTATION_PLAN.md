@@ -1,6 +1,6 @@
 # NTHN implementation plan
 
-Updated: 2026-11-03
+Updated: 2026-11-06
 
 ## Goal
 
@@ -27,18 +27,18 @@ Deliver a real, installable NTHN Linux environment on Android without replacing 
 - [x] Add `verify_bootstrap.py` and `verify_apk.py` and wire them into CI.
 - [x] Add `git`, `python`, `nodejs` to `PACKAGES_POST_ADDITIONAL_LIST`.
 - [x] Fix `libtirpc`'s absolute `INSTALL` symlink by populating `/usr/share/automake-1.16`.
-- [ ] Complete a green bootstrap run (`288cba6`).
-- [ ] Verify the built bootstrap archive with `scripts/verify_bootstrap.py`.
-- [ ] Run the bootstrap under proot on-device with `scripts/test_bootstrap_proot.sh`.
-- [ ] Confirm `bash`, `apt`, `dpkg`, `git`, `python`, `node`, file persistence and local `.deb` installation.
+- [x] Complete a green bootstrap run (`41833494838`).
+- [x] Verify the built bootstrap archive with `scripts/verify_bootstrap.py`.
+- [x] Run the bootstrap under proot on-device with `scripts/test_bootstrap_proot.sh`.
+- [x] Confirm `bash`, `apt`, `dpkg`, `git`, `python`, `node`, file persistence and local `.deb` installation.
 
 ## Phase 3 - Build and verify the `com.nthn` APK
 
-- [ ] Download the bootstrap artifact into `termux-src/app/src/main/cpp/`.
-- [ ] Build `assembleDebug` with the `com.nthn` patch applied.
-- [ ] Verify package name, ARM64-only ABI and embedded bootstrap with `verify_apk.py`.
-- [ ] Publish `nthn-separate-arm64-apk` with SHA-256.
-- [ ] Install on-device (requires explicit user action; no adb/root available).
+- [x] Download the bootstrap artifact into `termux-src/app/src/main/cpp/`.
+- [x] Build `assembleDebug` with the `com.nthn` patch applied.
+- [x] Verify package name, ARM64-only ABI and embedded bootstrap with `verify_apk.py`.
+- [x] Publish `nthn-separate-arm64-apk` with SHA-256.
+- [ ] Install on-device (requires explicit user action; no adb/root available). APK copied to `/storage/emulated/0/Download/nthn-separate.apk`.
 
 ## Phase 4 - Dashboard integration
 
@@ -48,9 +48,9 @@ Deliver a real, installable NTHN Linux environment on Android without replacing 
 
 ## Phase 5 - Documentation and handoff
 
-- [ ] Update `PROJECT_STATUS.md` and `CHANGELOG.md` with verified artifacts and hashes.
-- [ ] Keep `HANDOFF.md`, `IMPLEMENTATION_PLAN.md` and `AGENTS.md` current.
-- [ ] Record remaining blockers: on-device install consent, official Termux repo prefix incompatibility.
+- [x] Update `PROJECT_STATUS.md` and `CHANGELOG.md` with verified artifacts and hashes.
+- [x] Keep `HANDOFF.md`, `IMPLEMENTATION_PLAN.md` and `AGENTS.md` current.
+- [x] Record remaining blockers: on-device install consent, official Termux repo prefix incompatibility.
 
 ## Definition of done
 
