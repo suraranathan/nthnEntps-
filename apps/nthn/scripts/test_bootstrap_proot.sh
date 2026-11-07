@@ -26,11 +26,12 @@ deb_dir=$(mktemp -d "${TMPDIR:-/tmp}/nthn-deb.XXXXXX")
 cleanup() { rm -rf "$root" "$deb_dir"; }
 trap cleanup EXIT
 
-mkdir -p "$root/usr"
-unzip -q "$zip_path" -d "$root/usr"
-touch "$root/.nthn-proot-root"
+guest_prefix="$root$prefix"
+mkdir -p "$guest_prefix/usr"
+unzip -q "$zip_path" -d "$guest_prefix/usr"
+touch "$guest_prefix/.nthn-proot-root"
 
-python3 - "$root/usr" <<'PY'
+python3 - "$guest_prefix/usr" <<'PY'
 import os
 import sys
 
@@ -51,7 +52,7 @@ with open(os.path.join(usr, "SYMLINKS.txt"), encoding="utf-8") as handle:
         os.symlink(target, path)
 PY
 
-mkdir -p "$root/usr/home" "$root/usr/tmp"
+mkdir -p "$guest_prefix/usr/home" "$guest_prefix/usr/tmp"
 
 # Build a tiny package whose data path matches the bootstrap prefix. Installing
 # it exercises dpkg extraction and the dpkg database inside the bound root.
@@ -107,8 +108,11 @@ EOS
 script=${script_template//@PREFIX@/$prefix}
 
 set +e
-proot --link2symlink \
-  -b "$root:$prefix" \
+env -u LD_PRELOAD proot --link2symlink \
+  -r "$root" \
+  -b /apex \
+  -b /system \
+  -b /vendor \
   -b "$deb_dir:/nthn-test-deb" \
   -b /dev -b /proc -b /sys \
   -w "$prefix/usr/home" \
