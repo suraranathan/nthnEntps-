@@ -103,12 +103,20 @@ replace('app/src/main/java/com/termux/app/activities/HelpActivity.java', 'import
 replace('app/src/main/java/com/termux/app/activities/HelpActivity.java', '    WebView mWebView;', '    private static final String NTHN_HELP_URL = "file:///android_asset/nthn_help.html";\n\n    WebView mWebView;')
 replace('app/src/main/java/com/termux/app/activities/HelpActivity.java', 'url.equals(TermuxConstants.TERMUX_WIKI_URL) || url.startsWith(TermuxConstants.TERMUX_WIKI_URL + "/")', 'url.equals(NTHN_HELP_URL)')
 replace('app/src/main/java/com/termux/app/activities/HelpActivity.java', 'mWebView.loadUrl(TermuxConstants.TERMUX_WIKI_URL);', 'mWebView.loadUrl(NTHN_HELP_URL);')
+replace('app/src/main/java/com/termux/app/TermuxActivity.java', '        setTermuxSessionsListView();', '        setTermuxSessionsListView();\n        NthnAiInstaller.install(this);')
+replace('app/src/main/java/com/termux/app/TermuxActivity.java', '                    if (mTermuxService == null) return; // Activity might have been destroyed.', '                    if (mTermuxService == null) return; // Activity might have been destroyed.\n                    NthnAiInstaller.install(this);')
 
 for source in branding.rglob('*'):
     if source.is_file():
         target = root / source.relative_to(branding)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
+
+provider_sources = Path(__file__).resolve().parents[3] / 'apps/dashboard/server/ai'
+provider_assets = root / 'app/src/main/assets/nthn-ai/server/ai'
+provider_assets.mkdir(parents=True, exist_ok=True)
+for source in provider_sources.glob('*.ts'):
+    shutil.copyfile(source, provider_assets / source.name)
 
 # The density-specific upstream icons otherwise remain eligible on older Android versions.
 for icon in (root / 'app/src/main/res').glob('mipmap-*/ic_launcher*.png'):

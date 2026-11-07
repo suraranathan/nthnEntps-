@@ -10,6 +10,8 @@ This directory contains the build patches and verification scripts for the separ
 
 `scripts/patch_nthn.py` applies the minimal black and white nthn interface during the Android build. The source assets in `branding/` provide a new launcher monogram, notification icon, and local Help page. The patch also updates the drawer, session selection, toolbar, and visible app labels. The terminal, PTY, sessions, extra keys, command execution, and package tools remain the upstream implementations. Internal Java package names and upstream license attribution remain for compatibility and provenance.
 
+The Android patch also packages the existing Node provider services into the app and installs the `nthn-ai` terminal command after the app's bootstrap is ready. It uses an encrypted vault in `com.nthn` private storage; keys from the separate dashboard app or Termux must be entered again. Run `nthn-ai help` inside `com.nthn` for connection, model discovery, live inference verification, and selection commands. This does not start a separate backend process or require Termux to be installed.
+
 `nthn-test-app.yml` checks that the patched app compiles using an upstream bootstrap for compile testing only. `nthn-build.yml` is a legacy label-only build and does not produce `com.nthn`. Use `nthn-build-separate.yml` for the actual app.
 
 Verified on 2026-11-06:
