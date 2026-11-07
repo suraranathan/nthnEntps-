@@ -9,27 +9,27 @@
 
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/nav_home"
-        style="@style/Nthn.BottomNavItem"
+        style="@style/NthnBottomNavItem"
         android:drawableTop="@drawable/ic_nthn_home"
         android:text="Home" />
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/nav_terminal"
-        style="@style/Nthn.BottomNavItem"
+        style="@style/NthnBottomNavItem"
         android:drawableTop="@drawable/ic_nthn_terminal"
         android:text="Terminal" />
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/nav_ai"
-        style="@style/Nthn.BottomNavItem"
+        style="@style/NthnBottomNavItem"
         android:drawableTop="@drawable/ic_nthn_ai"
         android:text="AI" />
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/nav_files"
-        style="@style/Nthn.BottomNavItem"
+        style="@style/NthnBottomNavItem"
         android:drawableTop="@drawable/ic_nthn_files"
         android:text="Files" />
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/nav_settings"
-        style="@style/Nthn.BottomNavItem"
+        style="@style/NthnBottomNavItem"
         android:drawableTop="@drawable/ic_nthn_settings"
         android:text="Settings" />
 </LinearLayout>
