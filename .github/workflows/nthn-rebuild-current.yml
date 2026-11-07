@@ -1,0 +1,28 @@
+name: Rebuild current nthn app after bootstrap
+
+on:
+  workflow_run:
+    workflows: [Build independent nthn APK]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Reuse freshly compiled bootstrap with the current main branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ github.event.workflow_run.id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          compiled=$(gh run view "$SOURCE_RUN" -R "$REPOSITORY" --json jobs --jq '.jobs[] | select(.name == "bootstrap") | .steps[] | select(.name == "Compile custom ARM64 bootstrap") | .conclusion')
+          if [ "$compiled" = success ]; then
+            gh workflow run nthn-build-separate.yml --ref main -R "$REPOSITORY" -f bootstrap_run_id="$SOURCE_RUN"
+          else
+            echo 'Bootstrap was reused; no additional build needed.'
+          fi
