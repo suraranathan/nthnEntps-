@@ -1,7 +1,9 @@
 from pathlib import Path
+import shutil
 import sys
 
 root = Path(sys.argv[1]).resolve()
+branding = Path(__file__).resolve().parent.parent / 'branding'
 
 
 def replace(rel: str, old: str, new: str, count: int = 1) -> None:
@@ -26,4 +28,87 @@ replace('termux-shared/src/main/res/values/strings.xml', '<!ENTITY TERMUX_PREFIX
 replace('termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java', 'public static final String TERMUX_PACKAGE_NAME = "com.termux";', 'public static final String TERMUX_PACKAGE_NAME = "com.nthn";')
 replace('termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java', 'public static final String BUILD_CONFIG_CLASS_NAME = TERMUX_PACKAGE_NAME + ".BuildConfig";', 'public static final String BUILD_CONFIG_CLASS_NAME = "com.termux.BuildConfig";')
 replace('app/src/main/res/xml/shortcuts.xml', 'android:targetPackage="com.termux"', 'android:targetPackage="com.nthn"', 3)
-print('Patched app package ID, shared paths, resources, and shortcuts for com.nthn')
+
+# Keep the terminal implementation and change only presentation resources.
+replace('app/src/main/AndroidManifest.xml', '        android:banner="@drawable/banner"\n', '')
+replace('app/src/main/res/values/strings.xml', '<!ENTITY TERMUX_API_APP_NAME "Termux:API">', '<!ENTITY TERMUX_API_APP_NAME "nthn API">')
+replace('app/src/main/res/values/strings.xml', '<!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">', '<!ENTITY TERMUX_BOOT_APP_NAME "nthn Boot">')
+replace('app/src/main/res/values/strings.xml', '<!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">', '<!ENTITY TERMUX_FLOAT_APP_NAME "nthn Float">')
+replace('app/src/main/res/values/strings.xml', '<!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">', '<!ENTITY TERMUX_STYLING_APP_NAME "nthn Styling">')
+replace('app/src/main/res/values/strings.xml', '<!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">', '<!ENTITY TERMUX_TASKER_APP_NAME "nthn Tasker">')
+replace('app/src/main/res/values/strings.xml', '<!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">', '<!ENTITY TERMUX_WIDGET_APP_NAME "nthn Widget">')
+replace('app/src/main/res/values/strings.xml', '<resources>\n', '<resources>\n    <string name="nthn_terminal_header">nthn  /  TERMINAL</string>\n')
+replace('app/src/main/res/values/strings.xml', 'Add termux debug info to report?', 'Add nthn debug info to report?')
+replace('app/src/main/res/values/strings.xml', 'TermuxService', 'terminal service', 6)
+for extension in ('API', 'Boot', 'Float', 'Styling', 'Tasker', 'Widget'):
+    replace('termux-shared/src/main/res/values/strings.xml', f'"Termux:{extension}"', f'"nthn {extension}"')
+replace('termux-shared/src/main/res/values/strings.xml', 'Termux app crash report', 'nthn app crash report')
+replace('app/src/main/res/values/colors.xml', '<resources>\n', '<resources>\n    <color name="nthn_surface">#0B0B0B</color>\n    <color name="nthn_panel">#151515</color>\n    <color name="nthn_selected">#303030</color>\n')
+
+for variant in ('values', 'values-night'):
+    theme = f'app/src/main/res/{variant}/themes.xml'
+    old_drawer = '@color/white' if variant == 'values' else '@color/black'
+    replace(theme, f'<item name="termuxActivityDrawerBackground">{old_drawer}</item>', '<item name="termuxActivityDrawerBackground">@color/nthn_panel</item>')
+    if variant == 'values':
+        replace(theme, '<item name="termuxActivityDrawerImageTint">@color/black</item>', '<item name="termuxActivityDrawerImageTint">@color/white</item>')
+    replace(theme, '<item name="android:windowBackground">@color/black</item>', '<item name="android:windowBackground">@color/nthn_surface</item>')
+    replace(theme, '<item name="extraKeysButtonActiveTextColor">@color/red_400</item>', '<item name="extraKeysButtonActiveTextColor">@color/white</item>')
+    replace(theme, '<item name="extraKeysButtonBackgroundColor">@color/black</item>', '<item name="extraKeysButtonBackgroundColor">@color/nthn_surface</item>')
+    replace(theme, '<item name="extraKeysButtonActiveBackgroundColor">@color/grey_500</item>', '<item name="extraKeysButtonActiveBackgroundColor">@color/nthn_selected</item>')
+
+replace('app/src/main/res/values/styles.xml', '<item name="android:textColor">@color/black</item>', '<item name="android:textColor">@color/white</item>')
+
+replace('app/src/main/res/layout/activity_termux.xml', 'android:background="@color/black"', 'android:background="@color/nthn_surface"')
+replace('app/src/main/res/layout/activity_termux.xml', '''                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <ImageButton''', '''                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="18dp"
+                    android:paddingEnd="12dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/nthn_terminal_header"
+                        android:textColor="@color/white"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                    <ImageButton''')
+replace('app/src/main/res/layout/item_terminal_sessions_list.xml', 'android:padding="6dip"', 'android:paddingStart="18dp"\n    android:paddingEnd="12dp"\n    android:paddingTop="8dp"\n    android:paddingBottom="8dp"')
+replace('app/src/main/res/layout/view_terminal_toolbar_text_input.xml', 'android:textColor="@android:color/white"', 'android:textColor="@color/white"\n    android:background="@color/nthn_surface"')
+replace('app/src/main/res/drawable/current_session_black.xml', '#212325', '#303030')
+replace('app/src/main/res/drawable/session_ripple_black.xml', '@android:color/background_dark', '@color/nthn_panel')
+replace('app/src/main/java/com/termux/app/terminal/TermuxSessionsListViewController.java', '''        boolean shouldEnableDarkTheme = ThemeUtils.shouldEnableDarkTheme(mActivity, NightMode.getAppNightMode().getName());
+
+        if (shouldEnableDarkTheme) {
+            sessionTitleView.setBackground(
+                ContextCompat.getDrawable(mActivity, R.drawable.session_background_black_selected)
+            );
+        }''', '''        sessionTitleView.setBackground(
+            ContextCompat.getDrawable(mActivity, R.drawable.session_background_black_selected)
+        );''')
+replace('app/src/main/java/com/termux/app/terminal/TermuxSessionsListViewController.java', 'int defaultColor = shouldEnableDarkTheme ? Color.WHITE : Color.BLACK;', 'int defaultColor = Color.WHITE;')
+replace('app/src/main/java/com/termux/app/terminal/TermuxSessionsListViewController.java', 'Color.RED', 'Color.LTGRAY')
+
+replace('app/src/main/java/com/termux/app/activities/HelpActivity.java', 'import com.termux.shared.termux.TermuxConstants;\n', '')
+replace('app/src/main/java/com/termux/app/activities/HelpActivity.java', '    WebView mWebView;', '    private static final String NTHN_HELP_URL = "file:///android_asset/nthn_help.html";\n\n    WebView mWebView;')
+replace('app/src/main/java/com/termux/app/activities/HelpActivity.java', 'url.equals(TermuxConstants.TERMUX_WIKI_URL) || url.startsWith(TermuxConstants.TERMUX_WIKI_URL + "/")', 'url.equals(NTHN_HELP_URL)')
+replace('app/src/main/java/com/termux/app/activities/HelpActivity.java', 'mWebView.loadUrl(TermuxConstants.TERMUX_WIKI_URL);', 'mWebView.loadUrl(NTHN_HELP_URL);')
+
+for source in branding.rglob('*'):
+    if source.is_file():
+        target = root / source.relative_to(branding)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+
+# The density-specific upstream icons otherwise remain eligible on older Android versions.
+for icon in (root / 'app/src/main/res').glob('mipmap-*/ic_launcher*.png'):
+    icon.unlink()
+(root / 'app/src/main/res/drawable/banner.png').unlink()
+
+print('Patched com.nthn identity and monochrome nthn interface')

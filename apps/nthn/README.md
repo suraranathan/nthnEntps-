@@ -6,6 +6,10 @@ This directory contains the build patches and verification scripts for the separ
 
 `nthn-build-separate.yml` builds a real ARM64 Termux-derived app (`com.nthn`) and a bootstrap compiled from pinned `agnostic-apollo/termux-packages` with `TERMUX_APP__PACKAGE_NAME="com.nthn"`.
 
+## Interface
+
+`scripts/patch_nthn.py` applies the minimal black and white nthn interface during the Android build. The source assets in `branding/` provide a new launcher monogram, notification icon, and local Help page. The patch also updates the drawer, session selection, toolbar, and visible app labels. The terminal, PTY, sessions, extra keys, command execution, and package tools remain the upstream implementations. Internal Java package names and upstream license attribution remain for compatibility and provenance.
+
 `nthn-test-app.yml` checks that the patched app compiles using an upstream bootstrap for compile testing only. `nthn-build.yml` is a legacy label-only build and does not produce `com.nthn`. Use `nthn-build-separate.yml` for the actual app.
 
 Verified on 2026-11-06:
