@@ -6,6 +6,10 @@ on:
         description: 'Reuse nthn-bootstrap artifact from this run ID (skips compilation)'
         required: false
         default: ''
+      bootstrap_transfer_ref:
+        description: 'Reuse bootstrap-aarch64.zip staged on a temporary branch (skips compilation)'
+        required: false
+        default: ''
 permissions:
   contents: read
   actions: read
@@ -26,15 +30,30 @@ jobs:
           mkdir -p packages
           gh run download "${{ inputs.bootstrap_run_id }}" -n nthn-bootstrap -D packages
           test -s packages/bootstrap-aarch64.zip
+      - name: Download staged verified bootstrap
+        if: inputs.bootstrap_transfer_ref != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.bootstrap_transfer_ref }}
+          path: bootstrap-transfer
+          sparse-checkout: bootstrap-parts
+      - name: Reassemble and verify staged bootstrap
+        if: inputs.bootstrap_transfer_ref != ''
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p apps/nthn/packages
+          cat bootstrap-transfer/bootstrap-parts/bootstrap-aarch64.zip.part-* > apps/nthn/packages/bootstrap-aarch64.zip
+          echo '7433caf798979a446a308c4d82ada6b4461cf519252163ee6ac2616eb7476af8  apps/nthn/packages/bootstrap-aarch64.zip' | sha256sum -c -
+          python3 apps/nthn/scripts/verify_bootstrap.py apps/nthn/packages/bootstrap-aarch64.zip
       - name: Free space for package compilation
-        if: inputs.bootstrap_run_id == ''
+        if: inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
         run: |
           df -h /
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache /usr/local/share/powershell /usr/share/swift
           sudo apt-get clean
           df -h /
       - name: Get Termux package builder
-        if: inputs.bootstrap_run_id == ''
+        if: inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
         run: |
           git clone --depth 1 --branch infra-improvs https://github.com/agnostic-apollo/termux-packages.git packages
           test "$(git -C packages rev-parse HEAD)" = 'fb44d31f3445d7efd2cee6dada47aa19401c1329'
@@ -53,17 +72,17 @@ jobs:
           sed -i 's/^declare -a PACKAGES_POST_ADDITIONAL_LIST=()$/declare -a PACKAGES_POST_ADDITIONAL_LIST=("git" "python" "nodejs")/' packages/scripts/build-bootstraps.sh
           sed -i '/^TERMUX_PKG_BUILD_DEPENDS="python, swig"$/d; s/--with-pyunbound/--without-pyunbound/; /^TERMUX_PKG_PYTHON_COMMON_DEPS=/d; /^TERMUX_PKG_PYTHON_BUILD_DEPS=/d; s/libevent, libnghttp2, openssl, resolv-conf/libevent, libexpat, libnghttp2, openssl, resolv-conf/' packages/packages/libunbound/build.sh
       - name: Install package-builder Android SDK and NDK
-        if: inputs.bootstrap_run_id == ''
+        if: inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
         working-directory: apps/nthn/packages
         run: ./scripts/run-docker.sh ./scripts/setup-android-sdk.sh
       - name: Install Automake 1.16 in package builder
-        if: inputs.bootstrap_run_id == ''
+        if: inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
         working-directory: apps/nthn/packages
         run: |
           cp ../scripts/install-automake-116.sh .nthn-install-automake-116.sh
           ./scripts/run-docker.sh bash .nthn-install-automake-116.sh
       - name: Check host compiler
-        if: inputs.bootstrap_run_id == ''
+        if: inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
         working-directory: apps/nthn/packages
         run: |
           ./scripts/run-docker.sh bash -c '
@@ -76,13 +95,13 @@ jobs:
             echo HOST_COMPILER_OK
           '
       - name: Build pinned host Python 3.12 in package builder
-        if: inputs.bootstrap_run_id == ''
+        if: inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
         working-directory: apps/nthn/packages
         run: |
           cp ../scripts/install-python-312.sh .nthn-install-python-312.sh
           ./scripts/run-docker.sh bash .nthn-install-python-312.sh
       - name: Compile custom ARM64 bootstrap
-        if: inputs.bootstrap_run_id == ''
+        if: inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
         working-directory: apps/nthn/packages
         run: |
           set +e
@@ -94,7 +113,7 @@ jobs:
           fi
           echo "build wrapper exited $status with an archive present; verification is the gate"
       - name: Show Node.js host ICU config log
-        if: failure() && inputs.bootstrap_run_id == ''
+        if: failure() && inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
         working-directory: apps/nthn/packages
         run: |
           ./scripts/run-docker.sh bash -c 'tail -200 /home/builder/.termux-build/nodejs/host-build/icu/source/config.log || true'
