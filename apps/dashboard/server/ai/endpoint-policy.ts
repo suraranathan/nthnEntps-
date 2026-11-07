@@ -68,6 +68,83 @@ export type PinnedEndpoint = Awaited<ReturnType<typeof pinEndpoint>>
 export type ProbeResponse = { status: number; body: unknown; link?: string | null }
 export type ProbeTransport = (endpoint: PinnedEndpoint, path: string, apiKey: string | null, options?: { maxBytes?: number; body?: Record<string, unknown>; stream?: boolean; readErrors?: boolean; authStyle?: 'bearer' | 'x-api-key' | 'anthropic' | 'gemini' }) => Promise<ProbeResponse>
 
+/**
+ * Streaming variant of the pinned transport. Yields raw text chunks exactly as
+ * the provider sent them; callers are responsible for protocol framing.
+ * DNS is never resolved again after validation.
+ */
+export async function* requestPinnedStream(
+  endpoint: PinnedEndpoint,
+  path: string,
+  apiKey: string | null,
+  limits: { body?: Record<string, unknown>; maxBytes?: number; authStyle?: 'bearer' | 'x-api-key' | 'anthropic' | 'gemini'; signal?: AbortSignal; timeoutMs?: number } = {},
+): AsyncGenerator<string> {
+  const options: RequestOptions = {
+    hostname: endpoint.address, port: endpoint.url.port || undefined, path: endpoint.url.pathname.replace(/\/$/, '') + path,
+    method: 'POST', agent: false, maxHeaderSize: 16384, rejectUnauthorized: true,
+    checkServerIdentity: (_hostname, certificate) => checkServerIdentity(endpoint.host, certificate),
+    ...(endpoint.url.protocol === 'https:' && !isIP(endpoint.host) ? { servername: endpoint.host } : {}),
+    headers: {
+      Host: endpoint.url.host, Accept: 'text/event-stream', 'Accept-Encoding': 'identity', 'Content-Type': 'application/json',
+      ...(limits.authStyle === 'anthropic' ? { 'anthropic-version': '2023-06-01' } : {}),
+      ...(apiKey ? limits.authStyle === 'gemini' ? { 'x-goog-api-key': apiKey } : ['anthropic', 'x-api-key'].includes(limits.authStyle ?? '') ? { 'x-api-key': apiKey } : { Authorization: `Bearer ${apiKey}` } : {}),
+    },
+  }
+  const queue: string[] = []
+  let done = false
+  let failure: Error | null = null
+  let wake: (() => void) | null = null
+  const notify = () => { wake?.(); wake = null }
+  const request = (endpoint.url.protocol === 'https:' ? httpsRequest : httpRequest)(options, response => {
+    const status = response.statusCode ?? 0
+    if (status < 200 || status >= 300) {
+      const chunks: Buffer[] = []
+      response.on('data', (chunk: Buffer) => { if (chunks.length < 64) chunks.push(chunk) })
+      response.on('end', () => {
+        let code = 'PROBE_FAILED'
+        if (status === 401 || status === 403) code = 'AUTH_REJECTED'
+        else if (status === 429) code = 'RATE_LIMITED'
+        else if (status === 404) code = 'MODEL_UNAVAILABLE'
+        else if (status === 400 || status === 422) code = 'INCOMPATIBLE'
+        else if (status >= 300 && status < 400) code = 'REDIRECT_BLOCKED'
+        failure = new ManagementError(code)
+        done = true; notify()
+      })
+      response.on('error', () => { failure = new ManagementError('REQUEST_FAILED'); done = true; notify() })
+      return
+    }
+    let bytes = 0
+    response.on('data', (chunk: Buffer) => {
+      bytes += chunk.length
+      if (bytes > (limits.maxBytes ?? 8_000_000)) {
+        failure = new ManagementError('RESPONSE_LIMIT'); request.destroy(); return
+      }
+      queue.push(chunk.toString('utf8')); notify()
+    })
+    response.on('end', () => { done = true; notify() })
+    response.on('error', () => { failure = new ManagementError('REQUEST_FAILED'); done = true; notify() })
+  })
+  const timer = setTimeout(() => request.destroy(new Error('timeout')), limits.timeoutMs ?? 120_000)
+  timer.unref()
+  const abort = () => request.destroy(new Error('aborted'))
+  limits.signal?.addEventListener('abort', abort, { once: true })
+  request.on('close', () => clearTimeout(timer))
+  request.on('error', () => { failure = new ManagementError('REQUEST_FAILED'); done = true; notify() })
+  request.end(limits.body ? JSON.stringify(limits.body) : undefined)
+  try {
+    while (!done || queue.length > 0) {
+      if (queue.length > 0) { yield queue.shift() as string; continue }
+      if (failure) throw failure
+      await new Promise<void>(resolve => { wake = resolve })
+    }
+    if (failure) throw failure
+  } finally {
+    limits.signal?.removeEventListener('abort', abort)
+    clearTimeout(timer)
+    if (!done) request.destroy()
+  }
+}
+
 /** Connect directly to the approved IP: DNS is never resolved again after validation. */
 export const requestPinnedJson: ProbeTransport = (endpoint, path, apiKey, limits = {}) => new Promise((resolve, reject) => {
   const options: RequestOptions = {

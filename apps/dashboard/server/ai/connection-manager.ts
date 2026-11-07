@@ -5,7 +5,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { CredentialVault, createPrivateFile, readPrivateFile } from './credential-vault.ts'
 import { connectionAdapter } from './connection-adapters.ts'
-import { defaultEndpointRules, pinEndpoint, requestPinnedJson, resolveAddresses, validateEndpoint } from './endpoint-policy.ts'
+import { defaultEndpointRules, pinEndpoint, requestPinnedJson, requestPinnedStream, resolveAddresses, validateEndpoint } from './endpoint-policy.ts'
 import type { EndpointRules, ProbeTransport, Resolver } from './endpoint-policy.ts'
 import { credentialInput, exactFields, ManagementError, objectInput } from './management-types.ts'
 import type { ManagedConnection, NetworkPolicy, TestResult } from './management-types.ts'
@@ -242,6 +242,23 @@ export class ConnectionManager {
     if (response.status < 200 || response.status >= 300) throw new ManagementError('PROBE_FAILED')
     if (key && JSON.stringify(response.body)?.includes(key)) throw new ManagementError('INVALID_RESPONSE')
     return response.body
+  }
+  /**
+   * Same fixed-path, pinned-transport and vault rules as inferenceProbe, but
+   * yields the provider's raw streaming body incrementally. Protocol framing is
+   * the caller's responsibility. Does not write health/audit records itself.
+   */
+  async *streamInference(id: string, revision: number, body: Record<string, unknown>, signal?: AbortSignal): AsyncGenerator<string> {
+    const row = this.#expected(id, revision), c = row.connection, adapter = connectionAdapter(c.providerId)
+    if (!c.enabled) throw new ManagementError('CONNECTION_DISABLED')
+    if (c.credentials.state === 'missing' && c.networkPolicy === 'public') throw new ManagementError('CREDENTIAL_REQUIRED')
+    if (adapter.requiresCredential && !row.cipher) throw new ManagementError('CREDENTIAL_REQUIRED')
+    const endpoint = await pinEndpoint(c.baseUrl, c.networkPolicy, c.providerId, this.#resolver, this.#rules)
+    const key = row.cipher ? this.#vault.open(row.cipher, id + ':' + c.credentials.revision) : null
+    const model = body.model
+    if (typeof model !== 'string' || !model || model.length > 1000) throw new ManagementError('INVALID_INPUT')
+    const payload = adapter.protocol === 'gemini-generate-content' ? Object.fromEntries(Object.entries(body).filter(([name]) => name !== 'model')) : body
+    yield* requestPinnedStream(endpoint, adapter.inferencePath(model, true), key, { body: payload, authStyle: wireAuth(c), signal })
   }
   /** Sanitized OpenRouter key allowance; deprecated request-count fields are ignored. */
   async keyAllowance(id: string, revision: number): Promise<{ limit: number; remaining: number } | null> {

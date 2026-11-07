@@ -3,12 +3,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { OfficeScene } from './OfficeScene'
 import { team } from './team'
 import { useAlex } from './useAlex'
-import { AlexChat } from './AlexChat'
+import { AlexAgentChat } from './agent/AlexAgentChat'
 import { AiProviders } from './AiProviders'
 
 type Inspection = { kind: 'profile' | 'workstation' | 'room'; title: string; subtitle: string; facts: string[] }
-type Section = 'Office' | 'Agents' | 'Activity' | 'Tasks' | 'AI Providers'
-const sections: Section[] = ['Office', 'Agents', 'Activity', 'Tasks', 'AI Providers']
+type Section = 'Office' | 'Alex' | 'Agents' | 'Activity' | 'Tasks' | 'AI Providers'
+const sections: Section[] = ['Office', 'Alex', 'Agents', 'Activity', 'Tasks', 'AI Providers']
 function lastAlexRead() { try { return Number(localStorage.getItem('nthn-alex-last-read')) || 0 } catch { return 0 } }
 
 const activity = [
@@ -19,7 +19,6 @@ const activity = [
 
 function App() {
   const alex = useAlex()
-  const [chatOpen, setChatOpen] = useState(false)
   const agents = useMemo(() => team.map(agent => agent.id === '01' ? { ...agent, state: alex.status } : agent), [alex.status])
   const [selected, setSelected] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Section>('Office')
@@ -47,9 +46,9 @@ function App() {
   const selectAgent = (id: string) => {
     const agent = agents.find((item) => item.id === id)
     if (!agent) return
+    if (id === '01') { navigate('Alex'); setSelected(null); setInspection(null); return }
     navigate('Office')
     setSelected(id)
-    if (id === '01') setChatOpen(true)
     setInspection({ kind: 'profile', title: agent.name, subtitle: agent.role, facts: [`Status · ${agent.state}`, `Workstation · ${agent.id}`] })
   }
   const inspectWorkstation = (id: string) => {
@@ -86,12 +85,13 @@ function App() {
         <div className="sidebar-heading"><div><span className="eyebrow">NTHN ENTERPRISES</span><h2>Workspace</h2></div><button ref={closeButton} className="sidebar-close" aria-label="Close navigation menu" onClick={() => { setMenuOpen(false); menuButton.current?.focus() }}>×</button></div>
         <nav aria-label="Dashboard navigation">
           {sections.map(section => <button key={section} aria-current={activeTab === section ? 'page' : undefined} className={activeTab === section ? 'nav-active' : ''} onClick={() => navigate(section)}><span>{section}</span><span aria-hidden="true">↗</span></button>)}
-          <button onClick={() => { setMenuOpen(false); setChatOpen(true) }}><span>Talk to Alex</span><span>{unread ? `${unread} new` : alex.status}</span></button>
+          <button onClick={() => navigate('Alex')}><span>Talk to Alex</span><span>{unread ? `${unread} new` : alex.status}</span></button>
         </nav>
         <div className="sidebar-footer"><span className={`alex-status-dot ${alex.status}`} /> Alex · {alex.status}<p>© 2024 NTHN ENTERPRISES</p></div>
       </aside>
 
       <section className="dashboard">
+        {activeTab === 'Alex' && <AlexAgentChat />}
         {activeTab === 'AI Providers' && <AiProviders />}
         {activeTab === 'Agents' && <section className="panel agent-panel panel-current">
           <div className="panel-heading"><div><div className="eyebrow">WORKSPACE</div><h2>Team</h2></div><span className="count-chip">07</span></div>
@@ -135,8 +135,6 @@ function App() {
           <button className="add-button" onClick={() => setSelected(null)}><span>＋</span> <b>New task</b></button>
         </section>}
       </section>
-
-      <AlexChat client={alex} open={chatOpen} onClose={() => setChatOpen(false)} onOpen={() => setChatOpen(true)} showLauncher={false} />
     </main>
   )
 }

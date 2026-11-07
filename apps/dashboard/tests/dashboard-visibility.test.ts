@@ -45,14 +45,14 @@ test('office landing view and drawer navigation retain every dashboard section',
   const injected = plugin.transformIndexHtml()
   assert.match(injected[0].children, /getRegistrations/)
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
-  assert.match(app, /'Office', 'Agents', 'Activity', 'Tasks', 'AI Providers'/)
-  for (const section of ['Office', 'Agents', 'Activity', 'Tasks', 'AI Providers']) {
+  assert.match(app, /'Office', 'Alex', 'Agents', 'Activity', 'Tasks', 'AI Providers'/)
+  for (const section of ['Office', 'Alex', 'Agents', 'Activity', 'Tasks', 'AI Providers']) {
     assert.ok(app.includes(`activeTab === '${section}' &&`), `${section} has a reachable view`)
   }
   assert.match(app, /useState<Section>\('Office'\)/)
   assert.match(app, /sections\.map\(section => <button/)
   assert.match(app, /Talk to Alex/)
-  assert.match(app, /showLauncher=\{false\}/)
+  assert.match(app, /<AlexAgentChat \/>/)
   assert.match(app, /activeTab === 'AI Providers' &&/)
   assert.match(await readFile(new URL('../src/AiProviders.tsx', import.meta.url), 'utf8'), /providers-title/)
   const css = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8')

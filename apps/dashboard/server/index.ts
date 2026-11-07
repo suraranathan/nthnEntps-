@@ -10,6 +10,9 @@ import { ConnectionManager } from './ai/connection-manager.ts'
 import { AiManagementApi } from './ai/management-api.ts'
 import { endpointRulesFromEnv } from './ai/endpoint-policy.ts'
 import { AlexAssignedProvider } from './ai/alex-assigned-provider.ts'
+import { AgentChatStore } from './agent/store.ts'
+import { AlexAgent } from './agent/agent.ts'
+import { AssignedGateway, AutoGateway, RouterGateway } from './agent/gateway.ts'
 const appDirectory = fileURLToPath(new URL('../', import.meta.url))
 try { loadEnvFile(join(appDirectory, '.env.server')) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
 let providers: ReturnType<typeof providersFromEnv>
@@ -44,6 +47,17 @@ try {
 const router = new ModelRouter(providers, store.state.routing || process.env.ALEX_PROVIDER || null)
 const runtime = new AlexRuntime(store, router, resolve(appDirectory, '../../PROJECT_STATUS.md'))
 await runtime.initialize()
+const agentStore = new AgentChatStore(resolve(appDirectory, process.env.ALEX_AGENT_DATA_DIR || '.local/agent'))
+await agentStore.load()
+const agent = new AlexAgent({
+  store: agentStore,
+  gateway: new AutoGateway(
+    ai ? new AssignedGateway(ai.manager, ai.assignments) : null,
+    new RouterGateway(router),
+    () => Boolean(ai?.assignments.get('01')),
+  ),
+  workspace: process.env.ALEX_WORKSPACE_ROOT ? resolve(process.env.ALEX_WORKSPACE_ROOT) : undefined,
+})
 // Lazy initialization isolates provider storage/config failures from Alex and the office.
 const server = createApi(runtime, [], () => {
   if (!ai) {
@@ -53,7 +67,7 @@ const server = createApi(runtime, [], () => {
     catch (error) { manager.close(); throw error }
   }
   return ai
-})
+}, agent)
 const timer = setInterval(() => { void runtime.tick() }, 60000)
 timer.unref()
 let shuttingDown = false
