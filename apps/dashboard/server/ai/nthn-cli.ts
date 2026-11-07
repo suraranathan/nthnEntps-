@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, existsSync, unlinkSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
@@ -22,7 +22,8 @@ The key stays in this app's encrypted private vault. Model tests may use credits
 
 async function secretPrompt(): Promise<string> {
   if (!process.stdin.isTTY) throw new ManagementError('INVALID_INPUT')
-  const reader = createInterface({ input: process.stdin, output: process.stdout })
+  // No output stream: readline must not echo the secret even when the TTY edits input.
+  const reader = createInterface({ input: process.stdin })
   process.stdout.write('OpenRouter API key (hidden): ')
   try {
     execFileSync('stty', ['-echo'], { stdio: 'inherit' })
@@ -63,12 +64,14 @@ try {
     const active = saved.enabled ? saved : manager.setEnabled(saved.id, saved.revision, true)
     const result = await manager.test(active.id, active.revision)
     console.log(JSON.stringify({ credentials: result.connection.credentials.state, connection: result.ok ? 'connected' : result.code }))
+    if (!result.ok) process.exitCode = 1
   } else if (command === 'status') {
     console.log(JSON.stringify({ connection: connection?.health ?? null, credentials: connection?.credentials.state ?? 'missing', selectedModel: selected() }, null, 2))
   } else {
     if (!connection) throw new ManagementError('CREDENTIAL_REQUIRED')
     if (command === 'clear-key') {
       manager.setCredential(connection.id, connection.revision, null)
+      if (existsSync(selectedPath)) unlinkSync(selectedPath)
       console.log('OpenRouter credential removed.')
     } else if (command === 'test') {
       const result = await manager.test(connection.id, connection.revision)
@@ -87,7 +90,7 @@ try {
         const refresh = await catalog.refresh(connection.id)
         if (refresh.errorCode) throw new ManagementError(refresh.errorCode)
         const page = await catalog.search({ connectionIds: [connection.id], outputModality: 'text', pageSize: 100 })
-        for (const entry of page.entries) console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName}`)
+        for (const entry of page.entries) console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName}\tcontext ${entry.route.model.contextTokens ?? '?'} tokens`)
         if (page.nextCursor) console.log('More models available; refine selection by exact model ID.')
       } else if (command === 'select') {
         if (!argument) throw new ManagementError('INVALID_INPUT')
