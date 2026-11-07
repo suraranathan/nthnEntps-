@@ -26,6 +26,7 @@ import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.File;
 import java.io.IOException;
@@ -44,6 +45,9 @@ public final class NthnActivity extends AppCompatActivity {
     private File currentDirectory;
     private String screen = NthnNavigation.HOME;
     private boolean destroyed;
+    private JSONArray alexHistory = new JSONArray();
+    private static final String ALEX_PREFERENCES = "nthn-alex";
+    private static final String ALEX_HISTORY = "conversation";
 
     @Override public void onCreate(@Nullable Bundle state) {
         NthnTheme.apply(this);
@@ -57,6 +61,7 @@ public final class NthnActivity extends AppCompatActivity {
         } catch (IOException error) {
             Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
         }
+        loadAlexHistory();
         show(getIntent().getStringExtra(NthnNavigation.EXTRA_SCREEN));
     }
 
@@ -81,7 +86,7 @@ public final class NthnActivity extends AppCompatActivity {
         content.removeAllViews();
         int selected;
         if (screen.equals(NthnNavigation.AI)) {
-            title.setText("AI"); selected = R.id.nav_ai; showAi();
+            title.setText("Alex"); selected = R.id.nav_ai; showAi();
         } else if (screen.equals(NthnNavigation.FILES)) {
             title.setText("Files"); selected = R.id.nav_files; showFiles();
         } else if (screen.equals(NthnNavigation.SETTINGS)) {
@@ -156,7 +161,7 @@ public final class NthnActivity extends AppCompatActivity {
         body.addView(status);
         body.addView(label("Open"));
         body.addView(row("Terminal", v -> NthnNavigation.open(this, "terminal")));
-        body.addView(row("AI provider", v -> show(NthnNavigation.AI)));
+        body.addView(row("Alex coding agent", v -> show(NthnNavigation.AI)));
         body.addView(row("Files", v -> show(NthnNavigation.FILES)));
         if (backend == null) { status.setText("Unavailable"); return; }
         runTask(() -> backend.environmentStatus(), value -> {
@@ -169,16 +174,42 @@ public final class NthnActivity extends AppCompatActivity {
 
     private void showAi() {
         final LinearLayout body = page();
-        body.addView(heading("OpenRouter"));
-        final TextView status = text("Checking connection…", 15, false, R.color.nthn_muted);
+        body.addView(heading("Alex"));
+        body.addView(text("Coding and development assistant", 15, false, R.color.nthn_muted));
+        final TextView status = text("Choose and verify a text model before starting a chat.", 14, false, R.color.nthn_muted);
         body.addView(status);
+
+        LinearLayout conversationActions = new LinearLayout(this);
+        conversationActions.setOrientation(LinearLayout.HORIZONTAL);
+        conversationActions.addView(button("New conversation", v -> { clearAlexHistory(); showAi(); }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        conversationActions.addView(button("Test model", v -> runAi("test", null, status, null)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        body.addView(conversationActions);
+
+        body.addView(label("Conversation"));
+        final LinearLayout transcript = new LinearLayout(this);
+        transcript.setOrientation(LinearLayout.VERTICAL);
+        renderAlexHistory(transcript);
+        if (alexHistory.length() == 0) transcript.addView(text("Ask Alex to explain code, plan a feature, debug an error, or review a change. Alex replies through your selected OpenRouter model.", 15, false, R.color.nthn_muted));
+        body.addView(transcript);
+
+        final EditText prompt = new EditText(this);
+        prompt.setHint("Ask Alex about your code…");
+        prompt.setGravity(Gravity.TOP | Gravity.START);
+        prompt.setMinLines(3);
+        prompt.setMaxLines(8);
+        prompt.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        body.addView(prompt, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        body.addView(button("Send", v -> {
+            String request = prompt.getText().toString().trim();
+            if (request.isEmpty()) return;
+            prompt.setText("");
+            sendAlex(request, status);
+        }));
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         Button configure = button("Configure key", v -> configureKey(status));
-        Button test = button("Test", v -> runAi("test", null, status, null));
         actions.addView(configure, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        actions.addView(test, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         body.addView(actions);
 
         body.addView(label("Text models"));
@@ -189,6 +220,79 @@ public final class NthnActivity extends AppCompatActivity {
         body.addView(label("Credentials"));
         body.addView(row("Remove API key", v -> confirmClearKey(status)));
         runAi("status", null, status, null);
+    }
+
+    private void loadAlexHistory() {
+        String raw = getSharedPreferences(ALEX_PREFERENCES, MODE_PRIVATE).getString(ALEX_HISTORY, "");
+        if (raw == null || raw.isEmpty()) return;
+        try { alexHistory = new JSONArray(raw); }
+        catch (Exception ignored) { alexHistory = new JSONArray(); }
+    }
+
+    private void saveAlexHistory() {
+        getSharedPreferences(ALEX_PREFERENCES, MODE_PRIVATE).edit().putString(ALEX_HISTORY, alexHistory.toString()).apply();
+    }
+
+    private void clearAlexHistory() {
+        alexHistory = new JSONArray();
+        saveAlexHistory();
+    }
+
+    private void appendAlexMessage(String role, String content) {
+        if (!"user".equals(role) && !"assistant".equals(role)) return;
+        String text = content == null ? "" : content.trim();
+        if (text.isEmpty()) return;
+        while (alexHistory.length() >= 40) alexHistory.remove(0);
+        JSONObject item = new JSONObject();
+        try {
+            item.put("role", role);
+            item.put("content", text.length() > 20000 ? text.substring(0, 20000) : text);
+            alexHistory.put(item);
+            saveAlexHistory();
+        } catch (Exception ignored) { }
+    }
+
+    private void renderAlexHistory(LinearLayout transcript) {
+        for (int index = 0; index < alexHistory.length(); index++) {
+            try {
+                JSONObject item = alexHistory.getJSONObject(index);
+                String role = item.optString("role");
+                String content = item.optString("content");
+                if ((!"user".equals(role) && !"assistant".equals(role)) || content.isEmpty()) continue;
+                TextView message = text(("user".equals(role) ? "You\n" : "Alex\n") + content, 15, "user".equals(role), R.color.nthn_text);
+                message.setPadding(dp(12), dp(10), dp(12), dp(10));
+                message.setBackgroundResource(resolveSelectableBackground());
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                params.setMargins(0, 0, 0, dp(8));
+                transcript.addView(message, params);
+            } catch (Exception ignored) { }
+        }
+    }
+
+    private void sendAlex(final String request, final TextView status) {
+        if (backend == null) { status.setText("AI service unavailable until Linux setup completes."); return; }
+        appendAlexMessage("user", request);
+        status.setText("Alex is thinking…");
+        final String payload;
+        try { payload = new JSONObject().put("messages", alexHistory).toString(); }
+        catch (Exception error) { status.setText(message(error)); return; }
+        executor.execute(() -> {
+            try {
+                NthnBackend.CommandResult result = backend.ai("chat", null, payload.toCharArray());
+                main.post(() -> {
+                    if (destroyed || !screen.equals(NthnNavigation.AI)) return;
+                    if (!result.ok()) { status.setText(aiMessage(result.output)); return; }
+                    try {
+                        String reply = new JSONObject(result.output).optString("message");
+                        if (reply.isEmpty()) throw new IllegalStateException("The model returned no text.");
+                        appendAlexMessage("assistant", reply);
+                        showAi();
+                    } catch (Exception error) { status.setText(message(error)); }
+                });
+            } catch (Exception error) {
+                main.post(() -> { if (!destroyed && screen.equals(NthnNavigation.AI)) status.setText(message(error)); });
+            }
+        });
     }
 
     private void configureKey(final TextView status) {
@@ -375,7 +479,7 @@ public final class NthnActivity extends AppCompatActivity {
         themes.addView(button("Dark", v -> changeTheme(true)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         body.addView(themes);
         body.addView(label("Configuration"));
-        body.addView(row("OpenRouter", v -> show(NthnNavigation.AI)));
+        body.addView(row("Alex and OpenRouter", v -> show(NthnNavigation.AI)));
         body.addView(row("Terminal settings", v -> startActivity(new Intent(this, SettingsActivity.class))));
         body.addView(label("Environment"));
         body.addView(text("Linux prefix\n" + NthnBackend.PREFIX + "\n\nHome\n" + (backend == null ? "Unavailable" : backend.home().getAbsolutePath()), 14, false, R.color.nthn_muted));

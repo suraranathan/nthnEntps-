@@ -7,6 +7,7 @@ import { ConnectionManager } from './connection-manager.ts'
 import { CatalogService } from './catalog-service.ts'
 import { VerificationService } from './verification-service.ts'
 import { ManagementError } from './management-types.ts'
+import { connectionAdapter } from './connection-adapters.ts'
 
 const directory = resolve(fileURLToPath(new URL('../../', import.meta.url)), '.local/ai')
 const selectedPath = join(directory, 'selected-route.json')
@@ -17,6 +18,7 @@ const help = `nthn AI provider
   nthn-ai models            Refresh and list available text models
   nthn-ai select MODEL_ID   Verify real text inference and select model
   nthn-ai test              Test connection and selected model inference
+  nthn-ai chat              Send a JSON conversation on stdin to the selected model
   nthn-ai clear-key         Remove the stored API key
 The key stays in this app's encrypted private vault. Model tests may use credits.`
 
@@ -58,12 +60,62 @@ function saveSelected(routeId: string, modelId: string) {
   renameSync(temporary, selectedPath)
 }
 
+type ChatMessage = { role: 'user' | 'assistant'; content: string }
+
+function chatInput(): ChatMessage[] {
+  if (process.stdin.isTTY) throw new ManagementError('INVALID_INPUT')
+  let value: unknown
+  try { value = JSON.parse(readFileSync(0, 'utf8')) } catch { throw new ManagementError('INVALID_INPUT') }
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray((value as { messages?: unknown }).messages)) throw new ManagementError('INVALID_INPUT')
+  const messages = (value as { messages: unknown[] }).messages
+  if (messages.length < 1 || messages.length > 40) throw new ManagementError('INVALID_INPUT')
+  const result: ChatMessage[] = []
+  let characters = 0
+  for (const raw of messages) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new ManagementError('INVALID_INPUT')
+    const message = raw as { role?: unknown; content?: unknown }
+    if ((message.role !== 'user' && message.role !== 'assistant') || typeof message.content !== 'string' || !message.content.trim()) throw new ManagementError('INVALID_INPUT')
+    characters += message.content.length
+    if (message.content.length > 20_000 || characters > 60_000) throw new ManagementError('INVALID_INPUT')
+    result.push({ role: message.role, content: message.content.trim() })
+  }
+  return result
+}
+
+async function chat(connectionId: string, routeId: string, messages: ChatMessage[]) {
+  if (!catalog || !manager) throw new ManagementError('REQUEST_FAILED')
+  const entry = await catalog.getRoute(routeId)
+  if (!entry || entry.route.ref.connectionId !== connectionId || entry.route.lifecycle === 'removed') throw new ManagementError('MODEL_UNAVAILABLE')
+  const route = entry.route
+  const protocol = connectionAdapter(route.providerId).protocol
+  const system = [
+    'You are Alex, NTHN\'s coding and development assistant inside the com.nthn Android app.',
+    'Focus only on coding, software development, vibe coding, decision support and clear communication.',
+    'Be concise, explain uncertainty, and never invent command output, file contents, tests or changes.',
+    'This chat can discuss and plan work. It cannot execute terminal commands or edit files from a message; direct the user to the real Terminal or Files screens when execution is needed.',
+  ].join(' ')
+  const turns = messages.map(message => ({ role: message.role, content: message.content }))
+  const body: Record<string, unknown> = protocol === 'anthropic-messages'
+    ? { model: route.ref.nativeModelId, messages: turns, system, max_tokens: 1600 }
+    : protocol === 'gemini-generate-content'
+      ? { model: route.ref.nativeModelId, contents: turns.map(message => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }] })), systemInstruction: { parts: [{ text: system }] }, generationConfig: { maxOutputTokens: 1600 } }
+      : { model: route.ref.nativeModelId, messages: [{ role: 'system', content: system }, ...turns], stream: false, max_tokens: 1600, ...(route.providerId === 'openrouter' ? { provider: { require_parameters: true } } : {}) }
+  const data = await manager.inferenceProbe(route.ref.connectionId, route.connectionRevision, body)
+  const response = data as { choices?: { message?: { content?: unknown }; finish_reason?: string }[]; message?: { content?: unknown }; content?: { type?: string; text?: string }[]; candidates?: { content?: { parts?: { text?: string }[] } }[] }
+  const text = protocol === 'ollama-chat' ? response.message?.content
+    : protocol === 'anthropic-messages' ? response.content?.filter(part => part.type === 'text').map(part => part.text ?? '').join('')
+      : protocol === 'gemini-generate-content' ? response.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('')
+        : response.choices?.[0]?.message?.content
+  if (typeof text !== 'string' || !text.trim()) throw new ManagementError('REQUEST_FAILED')
+  console.log(JSON.stringify({ message: text.trim().slice(0, 24_000), model: route.ref.nativeModelId }))
+}
+
 let manager: ConnectionManager | undefined
 let catalog: CatalogService | undefined
 let verification: VerificationService | undefined
 try {
   const [command = 'help', argument, ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'status', 'configure', 'configure-stdin', 'models', 'select', 'test', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'status', 'configure', 'configure-stdin', 'models', 'select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); process.exit(0) }
   manager = new ConnectionManager(directory)
   const connection = manager.list().find(item => item.providerId === 'openrouter')
@@ -97,7 +149,11 @@ try {
       console.log(JSON.stringify({ connection: result.ok ? 'connected' : result.code, inference }))
     } else {
       catalog = new CatalogService(manager)
-      if (command === 'models') {
+      if (command === 'chat') {
+        const selectedRoute = selected()
+        if (!selectedRoute) throw new ManagementError('MODEL_UNAVAILABLE')
+        await chat(connection.id, selectedRoute.routeId, chatInput())
+      } else if (command === 'models') {
         const refresh = await catalog.refresh(connection.id)
         if (refresh.errorCode) throw new ManagementError(refresh.errorCode)
         const page = await catalog.search({ connectionIds: [connection.id], outputModality: 'text', pageSize: 100 })
