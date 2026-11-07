@@ -101,8 +101,8 @@ def main() -> None:
         fail("APK package id is not com.nthn")
     if not re.search(r"^application-label:'nthn'", info, re.MULTILINE):
         fail("APK application label is not nthn")
-    if not re.search(r"^launchable-activity: name='com\.termux\.app\.TermuxActivity'", info, re.MULTILINE):
-        fail("APK does not launch the Termux terminal activity")
+    if not re.search(r"^launchable-activity: name='com\.termux\.app\.NthnActivity'", info, re.MULTILINE):
+        fail("APK does not launch the NTHN home dashboard")
     native = re.search(r"^native-code: (.+)$", info, re.MULTILINE)
     if native is None or native.group(1).strip() != "'arm64-v8a'":
         fail(f"APK native code is not arm64-v8a only: {native.group(1) if native else 'none'}")

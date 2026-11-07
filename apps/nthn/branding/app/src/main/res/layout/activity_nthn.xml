@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/nthn_surface"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/nthn_title"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:gravity="center_vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:text="NTHN"
+        android:textColor="@color/nthn_text"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <FrameLayout
+        android:id="@+id/nthn_content"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <include layout="@layout/nthn_bottom_nav" />
+</LinearLayout>

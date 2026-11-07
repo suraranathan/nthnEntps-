@@ -37,14 +37,24 @@ async function secretPrompt(): Promise<string> {
   }
 }
 
-function selected(): string | null {
+function secretStdin(): string {
+  if (process.stdin.isTTY) throw new ManagementError('INVALID_INPUT')
+  return readFileSync(0, 'utf8').trim()
+}
+
+function selected(): { routeId: string, modelId: string | null } | null {
   if (!existsSync(selectedPath)) return null
-  try { const value = JSON.parse(readFileSync(selectedPath, 'utf8')); return typeof value.routeId === 'string' ? value.routeId : null }
+  try {
+    const value = JSON.parse(readFileSync(selectedPath, 'utf8'))
+    return typeof value.routeId === 'string'
+      ? { routeId: value.routeId, modelId: typeof value.modelId === 'string' ? value.modelId : null }
+      : null
+  }
   catch { return null }
 }
-function saveSelected(routeId: string) {
+function saveSelected(routeId: string, modelId: string) {
   const temporary = `${selectedPath}.${process.pid}.tmp`
-  writeFileSync(temporary, JSON.stringify({ routeId }), { mode: 0o600, flag: 'wx' })
+  writeFileSync(temporary, JSON.stringify({ routeId, modelId }), { mode: 0o600, flag: 'wx' })
   renameSync(temporary, selectedPath)
 }
 
@@ -53,12 +63,12 @@ let catalog: CatalogService | undefined
 let verification: VerificationService | undefined
 try {
   const [command = 'help', argument, ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'status', 'configure', 'models', 'select', 'test', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'status', 'configure', 'configure-stdin', 'models', 'select', 'test', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); process.exit(0) }
   manager = new ConnectionManager(directory)
   const connection = manager.list().find(item => item.providerId === 'openrouter')
-  if (command === 'configure') {
-    const key = await secretPrompt()
+  if (command === 'configure' || command === 'configure-stdin') {
+    const key = command === 'configure' ? await secretPrompt() : secretStdin()
     if (!key) throw new ManagementError('INVALID_INPUT')
     const current = connection ?? manager.add({ providerId: 'openrouter', label: 'OpenRouter', baseUrl, networkPolicy: 'public', enabled: false })
     const saved = manager.setCredential(current.id, current.revision, key)
@@ -67,7 +77,7 @@ try {
     console.log(JSON.stringify({ credentials: result.connection.credentials.state, connection: result.ok ? 'connected' : result.code }))
     if (!result.ok) process.exitCode = 1
   } else if (command === 'status') {
-    console.log(JSON.stringify({ connection: connection?.health ?? null, credentials: connection?.credentials.state ?? 'missing', selectedModel: selected() }, null, 2))
+    console.log(JSON.stringify({ connection: connection?.health ?? null, credentials: connection?.credentials.state ?? 'missing', selectedModel: selected()?.modelId ?? null }, null, 2))
   } else {
     if (!connection) throw new ManagementError('CREDENTIAL_REQUIRED')
     if (command === 'clear-key') {
@@ -77,11 +87,11 @@ try {
     } else if (command === 'test') {
       const result = await manager.test(connection.id, connection.revision)
       let inference: string | null = null
-      const routeId = selected()
-      if (result.ok && routeId) {
+      const selectedRoute = selected()
+      if (result.ok && selectedRoute) {
         catalog = new CatalogService(manager)
         verification = new VerificationService(manager, catalog)
-        const check = await verification.verify(routeId, ['text'])
+        const check = await verification.verify(selectedRoute.routeId, ['text'])
         inference = check.state === 'verified' ? 'verified' : check.code
       }
       console.log(JSON.stringify({ connection: result.ok ? 'connected' : result.code, inference }))
@@ -101,7 +111,7 @@ try {
         verification = new VerificationService(manager, catalog)
         const result = await verification.verify(route.id, ['text'])
         if (result.state !== 'verified') throw new ManagementError(result.code ?? 'REQUEST_FAILED')
-        saveSelected(route.id)
+        saveSelected(route.id, argument)
         console.log(JSON.stringify({ selected: argument, inference: 'verified', checkedAt: result.checkedAt }))
       }
     }

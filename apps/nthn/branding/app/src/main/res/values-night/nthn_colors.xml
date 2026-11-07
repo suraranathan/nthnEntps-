@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="nthn_surface">#0B0B0B</color>
+    <color name="nthn_panel">#151515</color>
+    <color name="nthn_selected">#2A2A2A</color>
+    <color name="nthn_text">#F4F4F4</color>
+    <color name="nthn_muted">#A1A1A1</color>
+    <color name="nthn_divider">#303030</color>
+</resources>

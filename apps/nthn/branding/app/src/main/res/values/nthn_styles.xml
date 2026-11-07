@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Nthn.BottomNavItem">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:drawablePadding">4dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">9dp</item>
+        <item name="android:paddingBottom">7dp</item>
+        <item name="android:textColor">@color/nthn_muted</item>
+        <item name="android:textSize">10sp</item>
+    </style>
+</resources>
