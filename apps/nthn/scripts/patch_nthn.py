@@ -26,6 +26,7 @@ replace('termux-shared/src/main/res/values/strings.xml', '<!ENTITY TERMUX_PACKAG
 replace('termux-shared/src/main/res/values/strings.xml', '<!ENTITY TERMUX_APP_NAME "Termux">', '<!ENTITY TERMUX_APP_NAME "nthn">')
 replace('termux-shared/src/main/res/values/strings.xml', '<!ENTITY TERMUX_PREFIX_DIR_PATH "/data/data/com.termux/files/usr">', '<!ENTITY TERMUX_PREFIX_DIR_PATH "/data/data/com.nthn/files/usr">')
 replace('termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java', 'public static final String TERMUX_PACKAGE_NAME = "com.termux";', 'public static final String TERMUX_PACKAGE_NAME = "com.nthn";')
+replace('termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java', 'public static final String TERMUX_APP_NAME = "Termux";', 'public static final String TERMUX_APP_NAME = "nthn";')
 replace('termux-shared/src/main/java/com/termux/shared/termux/TermuxConstants.java', 'public static final String BUILD_CONFIG_CLASS_NAME = TERMUX_PACKAGE_NAME + ".BuildConfig";', 'public static final String BUILD_CONFIG_CLASS_NAME = "com.termux.BuildConfig";')
 replace('app/src/main/res/xml/shortcuts.xml', 'android:targetPackage="com.termux"', 'android:targetPackage="com.nthn"', 3)
 
@@ -43,6 +44,9 @@ replace('app/src/main/res/values/strings.xml', 'TermuxService', 'terminal servic
 for extension in ('API', 'Boot', 'Float', 'Styling', 'Tasker', 'Widget'):
     replace('termux-shared/src/main/res/values/strings.xml', f'"Termux:{extension}"', f'"nthn {extension}"')
 replace('termux-shared/src/main/res/values/strings.xml', 'Termux app crash report', 'nthn app crash report')
+replace('termux-shared/src/main/res/values/strings.xml', 'official termux community forums', 'community forums')
+replace('termux-shared/src/main/res/values/strings.xml', 'termux session command', 'terminal session command', 2)
+replace('termux-shared/src/main/res/values/strings.xml', 'termux commands', 'terminal commands')
 replace('app/src/main/res/values/colors.xml', '<resources>\n', '<resources>\n    <color name="nthn_surface">#0B0B0B</color>\n    <color name="nthn_panel">#151515</color>\n    <color name="nthn_selected">#303030</color>\n')
 
 for variant in ('values', 'values-night'):
