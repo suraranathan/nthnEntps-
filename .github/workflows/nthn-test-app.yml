@@ -1,0 +1,40 @@
+name: Check independent nthn app build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/nthn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v4
+      - name: Get and patch app source
+        run: |
+          git clone --depth 1 --branch v0.119.0-beta.3 https://github.com/termux/termux-app.git termux-src
+          test "$(git -C termux-src rev-parse HEAD)" = 'e634d8f981f48b6b89202cf0e04533f0889e03b3'
+          python scripts/patch_nthn.py termux-src
+      - name: Supply upstream bootstrap for compile check only
+        run: |
+          curl -fL --retry 3 -o termux-src/app/src/main/cpp/bootstrap-aarch64.zip 'https://github.com/termux/termux-packages/releases/download/bootstrap-2025.03.28-r1+apt-android-7/bootstrap-aarch64.zip'
+          printf '%s  %s\n' 'c8d702b6f742935001c37cda81b8ac69504a95d5cf28f2899532dd8cd4b057eb' 'termux-src/app/src/main/cpp/bootstrap-aarch64.zip' | sha256sum -c -
+      - name: Install Android SDK components
+        run: sdkmanager 'platforms;android-30' 'build-tools;30.0.3' 'ndk;22.1.7171670'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Compile app and check identity
+        env:
+          TERMUX_PACKAGE_VARIANT: apt-android-7
+          TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS: '0'
+        run: |
+          cd termux-src
+          ./gradlew --no-daemon assembleDebug
+          "$ANDROID_HOME/build-tools/30.0.3/aapt2" dump badging app/build/outputs/apk/debug/*universal.apk | tee ../badging.txt
+          grep -q "package: name='com.nthn'" ../badging.txt
+          grep -q "application-label:'nthn'" ../badging.txt

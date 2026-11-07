@@ -1,0 +1,165 @@
+name: Build independent nthn APK
+on:
+  workflow_dispatch:
+    inputs:
+      bootstrap_run_id:
+        description: 'Reuse nthn-bootstrap artifact from this run ID (skips compilation)'
+        required: false
+        default: ''
+permissions:
+  contents: read
+  actions: read
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    defaults:
+      run:
+        working-directory: apps/nthn
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified bootstrap
+        if: inputs.bootstrap_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p packages
+          gh run download "${{ inputs.bootstrap_run_id }}" -n nthn-bootstrap -D packages
+          test -s packages/bootstrap-aarch64.zip
+      - name: Free space for package compilation
+        if: inputs.bootstrap_run_id == ''
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache /usr/local/share/powershell /usr/share/swift
+          sudo apt-get clean
+          df -h /
+      - name: Get Termux package builder
+        if: inputs.bootstrap_run_id == ''
+        run: |
+          git clone --depth 1 --branch infra-improvs https://github.com/agnostic-apollo/termux-packages.git packages
+          test "$(git -C packages rev-parse HEAD)" = 'fb44d31f3445d7efd2cee6dada47aa19401c1329'
+          sed -i 's/TERMUX_APP__PACKAGE_NAME="com.termux"/TERMUX_APP__PACKAGE_NAME="com.nthn"/' packages/scripts/properties.sh
+          grep -q 'TERMUX_APP__PACKAGE_NAME="com.nthn"' packages/scripts/properties.sh
+          sed -i 's/02072b8f0aaf26907b6b02293c875539ce52fc59079344e7cf811ab03394cfa3/b3fa774983abb5f95aecca4557d146091d8666bc65fb310d4d3e38327357ade9/' packages/x11-packages/foot/build.sh
+          sed -i 's#https://docbook.org/xml/#https://archive.docbook.org/xml/#g' packages/packages/docbook-xml/build.sh
+          grep -rl 'https://mirrors.kernel.org/gnu/' packages --include=build.sh | xargs sed -i 's#https://mirrors.kernel.org/gnu/#https://ftp.gnu.org/gnu/#g'
+          sed -i 's#https://waterlan.home.xs4all.nl/dos2unix/dos2unix-${TERMUX_PKG_VERSION}.tar.gz#https://deb.debian.org/debian/pool/main/d/dos2unix/dos2unix_${TERMUX_PKG_VERSION}.orig.tar.gz#' packages/packages/dos2unix/build.sh
+          sed -i 's#https://nano-editor.org/dist/latest/#https://nano-editor.org/dist/v8/#' packages/packages/nano/build.sh
+          sed -i 's#https://mirrors.kernel.org/pub/software/scm/git/#https://www.kernel.org/pub/software/scm/git/#' packages/packages/git/build.sh
+          python3 scripts/patch_nodejs_hostbuild.py packages/packages/nodejs/build.sh
+          python3 scripts/patch_subpackages.py packages/scripts/build/termux_create_debian_subpackages.sh
+          cp scripts/bashansi-c23.patch packages/packages/bash/bashansi-c23.patch
+          sed -i 's/PACKAGES_LIST+=("command-not-found")/: # Optional database is stale for this custom prefix/' packages/scripts/build-bootstraps.sh
+          sed -i 's/^declare -a PACKAGES_POST_ADDITIONAL_LIST=()$/declare -a PACKAGES_POST_ADDITIONAL_LIST=("git" "python" "nodejs")/' packages/scripts/build-bootstraps.sh
+          sed -i '/^TERMUX_PKG_BUILD_DEPENDS="python, swig"$/d; s/--with-pyunbound/--without-pyunbound/; /^TERMUX_PKG_PYTHON_COMMON_DEPS=/d; /^TERMUX_PKG_PYTHON_BUILD_DEPS=/d; s/libevent, libnghttp2, openssl, resolv-conf/libevent, libexpat, libnghttp2, openssl, resolv-conf/' packages/packages/libunbound/build.sh
+      - name: Install package-builder Android SDK and NDK
+        if: inputs.bootstrap_run_id == ''
+        working-directory: apps/nthn/packages
+        run: ./scripts/run-docker.sh ./scripts/setup-android-sdk.sh
+      - name: Install Automake 1.16 in package builder
+        if: inputs.bootstrap_run_id == ''
+        working-directory: apps/nthn/packages
+        run: |
+          cp ../scripts/install-automake-116.sh .nthn-install-automake-116.sh
+          ./scripts/run-docker.sh bash .nthn-install-automake-116.sh
+      - name: Check host compiler
+        if: inputs.bootstrap_run_id == ''
+        working-directory: apps/nthn/packages
+        run: |
+          ./scripts/run-docker.sh bash -c '
+            set -e
+            gcc --version | head -1
+            g++ --version | head -1
+            printf "int main(void){return 0;}\n" > /tmp/host-check.c
+            gcc /tmp/host-check.c -o /tmp/host-check
+            /tmp/host-check
+            echo HOST_COMPILER_OK
+          '
+      - name: Build pinned host Python 3.12 in package builder
+        if: inputs.bootstrap_run_id == ''
+        working-directory: apps/nthn/packages
+        run: |
+          cp ../scripts/install-python-312.sh .nthn-install-python-312.sh
+          ./scripts/run-docker.sh bash .nthn-install-python-312.sh
+      - name: Compile custom ARM64 bootstrap
+        if: inputs.bootstrap_run_id == ''
+        working-directory: apps/nthn/packages
+        run: |
+          set +e
+          ./scripts/run-docker.sh env ACLOCAL_PATH=/usr/share/aclocal ./scripts/build-bootstraps.sh --architectures aarch64 --no-build-unneeded-subpackages
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ ! -s bootstrap-aarch64.zip ]; then
+            exit "$status"
+          fi
+          echo "build wrapper exited $status with an archive present; verification is the gate"
+      - name: Show Node.js host ICU config log
+        if: failure() && inputs.bootstrap_run_id == ''
+        working-directory: apps/nthn/packages
+        run: |
+          ./scripts/run-docker.sh bash -c 'tail -200 /home/builder/.termux-build/nodejs/host-build/icu/source/config.log || true'
+      - name: Check bootstrap output
+        run: test -s packages/bootstrap-aarch64.zip
+      - name: Verify custom bootstrap contents
+        run: python3 scripts/verify_bootstrap.py packages/bootstrap-aarch64.zip
+      - name: Record bootstrap checksum
+        run: sha256sum packages/bootstrap-aarch64.zip > packages/bootstrap-aarch64.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nthn-bootstrap
+          path: |
+            apps/nthn/packages/bootstrap-aarch64.zip
+            apps/nthn/packages/bootstrap-aarch64.sha256
+          retention-days: 7
+  app:
+    needs: bootstrap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/nthn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v4
+      - name: Get exact Termux app source
+        run: |
+          git clone --depth 1 --branch v0.119.0-beta.3 https://github.com/termux/termux-app.git termux-src
+          test "$(git -C termux-src rev-parse HEAD)" = 'e634d8f981f48b6b89202cf0e04533f0889e03b3'
+          python scripts/patch_nthn.py termux-src
+      - uses: actions/download-artifact@v4
+        with:
+          name: nthn-bootstrap
+          path: apps/nthn/termux-src/app/src/main/cpp
+      - name: Install Android SDK components
+        run: sdkmanager 'platforms;android-30' 'build-tools;30.0.3' 'ndk;22.1.7171670'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Build separate app
+        env:
+          TERMUX_PACKAGE_VARIANT: apt-android-7
+          TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS: '0'
+        working-directory: apps/nthn/termux-src
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Package and verify APK
+        run: |
+          cp termux-src/app/build/outputs/apk/debug/*universal.apk nthn-separate.apk
+          "$ANDROID_HOME/build-tools/30.0.3/aapt2" dump badging nthn-separate.apk | tee nthn-badging.txt
+          grep -q "package: name='com.nthn'" nthn-badging.txt
+          grep -q "application-label:'nthn'" nthn-badging.txt
+          python3 scripts/verify_apk.py nthn-separate.apk \
+            --aapt2 "$ANDROID_HOME/build-tools/30.0.3/aapt2" \
+            --bootstrap termux-src/app/src/main/cpp/bootstrap-aarch64.zip
+          "$ANDROID_HOME/build-tools/30.0.3/apksigner" verify --verbose nthn-separate.apk
+          sha256sum nthn-separate.apk > nthn-separate.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nthn-separate-arm64-apk
+          path: |
+            apps/nthn/nthn-separate.apk
+            apps/nthn/nthn-separate.sha256
+            apps/nthn/nthn-badging.txt
+          retention-days: 7

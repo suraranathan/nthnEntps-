@@ -1,0 +1,49 @@
+name: Legacy label-only Termux APK (com.termux)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/nthn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v4
+      - name: Get exact Termux source
+        run: |
+          git clone --depth 1 --branch v0.119.0-beta.3 https://github.com/termux/termux-app.git termux-src
+          test "$(git -C termux-src rev-parse HEAD)" = 'e634d8f981f48b6b89202cf0e04533f0889e03b3'
+      - name: Rename app display label
+        run: |
+          sed -i 's/<!ENTITY TERMUX_APP_NAME "Termux">/<!ENTITY TERMUX_APP_NAME "nthn">/' termux-src/app/src/main/res/values/strings.xml
+          sed -i 's/manifestPlaceholders.TERMUX_APP_NAME = "Termux"/manifestPlaceholders.TERMUX_APP_NAME = "nthn"/' termux-src/app/build.gradle
+          grep -q '<!ENTITY TERMUX_APP_NAME "nthn">' termux-src/app/src/main/res/values/strings.xml
+      - name: Install Android SDK components
+        run: |
+          sdkmanager 'platforms;android-30' 'build-tools;30.0.3' 'ndk;22.1.7171670'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Build Android 7+ debug APKs
+        env:
+          TERMUX_PACKAGE_VARIANT: apt-android-7
+          TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS: '1'
+        working-directory: apps/nthn/termux-src
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Package nthn APK
+        run: |
+          cp termux-src/app/build/outputs/apk/debug/*arm64-v8a.apk nthn.apk
+          sha256sum nthn.apk > nthn.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nthn-arm64-apk
+          path: |
+            apps/nthn/nthn.apk
+            apps/nthn/nthn.sha256
+          retention-days: 7

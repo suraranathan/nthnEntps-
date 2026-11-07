@@ -6,4 +6,6 @@ Alex requires a configured real model; none is selected or faked by default. The
 
 See [dashboard setup](apps/dashboard/README.md), [Alex architecture](docs/ALEX_ARCHITECTURE.md), [project status](PROJECT_STATUS.md), and [changelog](CHANGELOG.md) for configuration, current limitations and verification.
 
+The separate `com.nthn` Termux-derived Android app and its custom ARM64 bootstrap build are in [apps/nthn](apps/nthn/README.md). Run the manual `nthn-build-separate.yml` workflow to build its APK. This app remains separate from the dashboard APK.
+
 Phase 2 adds [encrypted provider connection management](docs/PROVIDER_CONNECTIONS.md) and an [automatic searchable model catalog](docs/MODEL_CATALOG.md). Catalog listings preserve separate provider routes and do not claim verified inference access.

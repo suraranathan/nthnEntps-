@@ -1,6 +1,6 @@
 # NTHN handoff
 
-Updated: 2026-11-06
+Updated: 2026-11-07
 
 ## What exists
 
@@ -13,18 +13,18 @@ Updated: 2026-11-06
 - Latest verified CI APK: `app-debug.apk`, 4,528,413 bytes, SHA-256 `07a970655e21de2f174391a730f346053155f11528647e3ff7d21473d3a9c591`.
 - Commit `144b6ff` ("Complete Alex personality, follow-ups and office layout work") pushed to `main`.
 
-### Linux environment (`rea-termux-analysis`)
+### Linux environment (`apps/nthn`)
 
 - Independent fork of Termux `v0.119.0-beta.3` with application id `com.nthn`.
 - Real Termux terminal, PTY, sessions and package tools; not a WebView simulator.
 - ARM64-only (`arm64-v8a`).
 - Custom bootstrap built from pinned `agnostic-apollo/termux-packages` commit `fb44d31f3445d7efd2cee6dada47aa19401c1329` with `TERMUX_APP__PACKAGE_NAME="com.nthn"`.
-- Workflow: `.github/workflows/build-separate.yml` (manual `workflow_dispatch`).
+- Workflow: `.github/workflows/nthn-build-separate.yml` (manual `workflow_dispatch`).
 - Commits `6561a6e`, `9c9057f` and `a706d5c` force the missing `ncurses-ui-libs` subpackage, allow reuse of a verified bootstrap artifact, and trim the ELF trailer before comparing the embedded bootstrap.
 - Verified bootstrap: 103,352,884 bytes, SHA-256 `7433caf798979a446a308c4d82ada6b4461cf519252163ee6ac2616eb7476af8`.
 - Verified APK: 107,716,676 bytes, SHA-256 `a4f68cef565664659ae7a115e7dda4c34462d0d58d42c0da3bf5ba16daec2afa`; package `com.nthn`, label `nthn`, ARM64-only, embedded bootstrap matches byte-for-byte.
 
-## Current build
+## Last verified build (former `rea-termux-analysis` repository)
 
 - Bootstrap run: `41833494838` (green bootstrap compile; the Docker wrapper returned a spurious exit 1 after the archive was created). Archive uploaded as artifact `nthn-bootstrap`.
 - APK run: `42217391288`, green. It reused the bootstrap via `bootstrap_run_id=41833494838` instead of rebuilding Node.js.
@@ -39,27 +39,27 @@ Updated: 2026-11-06
 ## Commands
 
 ```sh
-# Trigger a full bootstrap + APK build
-gh workflow run build-separate.yml --ref main -R srrnthn3-a11y/rea-termux-analysis
+# Trigger a full bootstrap + APK build in the new repository
+gh workflow run nthn-build-separate.yml --ref main -R srrnthn3-a11y/nthnEntps
 
-# Reuse an already verified bootstrap without rebuilding Node.js
-gh workflow run build-separate.yml --ref main -R srrnthn3-a11y/rea-termux-analysis -f bootstrap_run_id=<verified-run-id>
+# Reuse a bootstrap from an earlier nthnEntps run without rebuilding Node.js
+gh workflow run nthn-build-separate.yml --ref main -R srrnthn3-a11y/nthnEntps -f bootstrap_run_id=<nthnEntps-run-id>
 
 # Watch it
-gh run list --workflow build-separate.yml -R srrnthn3-a11y/rea-termux-analysis
-gh run watch <run-id> -R srrnthn3-a11y/rea-termux-analysis
+gh run list --workflow nthn-build-separate.yml -R srrnthn3-a11y/nthnEntps
+gh run watch <run-id> -R srrnthn3-a11y/nthnEntps
 
 # Download artifacts
-gh run download <run-id> -R srrnthn3-a11y/rea-termux-analysis
+gh run download <run-id> -R srrnthn3-a11y/nthnEntps
 
 # Verify the bootstrap archive
-python3 scripts/verify_bootstrap.py packages/bootstrap-aarch64.zip
+python3 apps/nthn/scripts/verify_bootstrap.py packages/bootstrap-aarch64.zip
 
 # Run the bootstrap on-device through proot (real ARM64 execution test)
-scripts/test_bootstrap_proot.sh packages/bootstrap-aarch64.zip
+apps/nthn/scripts/test_bootstrap_proot.sh packages/bootstrap-aarch64.zip
 
 # Verify the APK
-python3 scripts/verify_apk.py nthn-separate.apk --bootstrap packages/bootstrap-aarch64.zip
+python3 apps/nthn/scripts/verify_apk.py nthn-separate.apk --bootstrap packages/bootstrap-aarch64.zip
 ```
 
 Dashboard:
@@ -75,7 +75,7 @@ node node_modules/vite/bin/vite.js build
 
 ## Verification method
 
-- `scripts/test_bootstrap_proot.sh` extracts the archive, reconstructs `SYMLINKS.txt`, binds it to `/data/data/com.nthn/files`, and runs the real ARM64 binaries under proot.
+- `apps/nthn/scripts/test_bootstrap_proot.sh` extracts the archive, reconstructs `SYMLINKS.txt`, binds it to `/data/data/com.nthn/files`, and runs the real ARM64 binaries under proot.
 - It checks `bash`, `apt`, `dpkg`, `git`, `python`, `node`, filesystem persistence, and installation of a locally built `.deb` whose payload targets the `com.nthn` prefix.
 - The proot test is a userspace/runtime check. It is not an APK install and does not prove Android package installation.
 

@@ -20,3 +20,13 @@ __pycache__/
 
 # Alex private conversations, structured memory, audit and runtime lock
 apps/dashboard/.local/
+
+# Generated nthn terminal build files
+apps/nthn/packages/
+apps/nthn/termux-src/
+apps/nthn/target/
+apps/nthn/results/
+apps/nthn/*.apk
+apps/nthn/*.sha256
+apps/nthn/*-badging.txt
+apps/nthn/badging.txt

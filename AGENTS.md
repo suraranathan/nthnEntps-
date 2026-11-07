@@ -3,7 +3,7 @@
 ## Repositories
 
 - `nthnEntps` (this repo): React/Vite/TypeScript dashboard, Node backend, Capacitor Android app (`com.nthnentps.dashboard`).
-- `srrnthn3-a11y/rea-termux-analysis`: independent Termux-based ARM64 Linux app (`com.nthn`) and its custom bootstrap workflow. Do not merge the repositories or move files between them.
+- `apps/nthn`: independent Termux-based ARM64 Linux app (`com.nthn`) and its custom bootstrap workflow. It shares this repository with the dashboard but remains a separate Android app.
 
 ## Dashboard commands
 
@@ -31,7 +31,7 @@ The dashboard backend must run in Termux on `127.0.0.1:3001`; Vite serves `127.0
 ## Android CI
 
 - `nthnEntps/.github/workflows/android-debug-apk.yml` builds the dashboard APK on pushes to `main`.
-- `rea-termux-analysis/.github/workflows/build-separate.yml` builds the custom ARM64 bootstrap and the `com.nthn` Termux APK. It is manual (`workflow_dispatch`).
+- `.github/workflows/nthn-build-separate.yml` builds the custom ARM64 bootstrap and the `com.nthn` Termux APK. It is manual (`workflow_dispatch`).
 
 ## Linux environment facts
 

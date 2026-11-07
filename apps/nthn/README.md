@@ -1,0 +1,21 @@
+# nthn Android terminal
+
+This directory contains the build patches and verification scripts for the separate `com.nthn` Android terminal. The workflows are at the repository root in `.github/workflows/`. The `nthn-analyze.yml` workflow runs REA 6.8.0 on the official Termux v0.119.0-beta.3 Android 7+ ARM64 APK. It verifies the APK against the SHA-256 of the installed copy before analysis. The JADX engine JAR is pinned to the SHA-256 published in REA's documentation. Results are kept as a short-lived Actions artifact.
+
+## Separate `com.nthn` bootstrap and APK
+
+`nthn-build-separate.yml` builds a real ARM64 Termux-derived app (`com.nthn`) and a bootstrap compiled from pinned `agnostic-apollo/termux-packages` with `TERMUX_APP__PACKAGE_NAME="com.nthn"`.
+
+`nthn-test-app.yml` checks that the patched app compiles using an upstream bootstrap for compile testing only. `nthn-build.yml` is a legacy label-only build and does not produce `com.nthn`. Use `nthn-build-separate.yml` for the actual app.
+
+Verified on 2026-11-06:
+
+- Bootstrap `41833494838`: `bootstrap-aarch64.zip`, 103,352,884 bytes, SHA-256 `7433caf798979a446a308c4d82ada6b4461cf519252163ee6ac2616eb7476af8`; 86 packages; proot runtime test passed (bash 5.3.3, apt 2.8.1, dpkg 1.22.6, Python 3.12.11, Node v24.5.0, git 2.50.1, persistence, local `.deb` install/purge).
+- APK `42217391288`: `nthn-separate.apk`, 107,716,676 bytes, SHA-256 `a4f68cef565664659ae7a115e7dda4c34462d0d58d42c0da3bf5ba16daec2afa`; package `com.nthn`, label `nthn`, arm64-v8a only; embedded bootstrap matches byte-for-byte; `verify_apk.py` and `apksigner verify` passed.
+
+The verified run IDs above belong to the former `rea-termux-analysis` repository. Run this workflow once without an input to build a bootstrap in `nthnEntps`. Then reuse that new run ID without rebuilding Node.js:
+
+```sh
+gh workflow run nthn-build-separate.yml --ref main -R srrnthn3-a11y/nthnEntps
+gh workflow run nthn-build-separate.yml --ref main -R srrnthn3-a11y/nthnEntps -f bootstrap_run_id=<nthnEntps-run-id>
+```
