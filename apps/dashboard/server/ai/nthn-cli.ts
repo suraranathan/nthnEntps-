@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, renameSync, existsSync, unlinkSync } from 'node:fs'
-import { resolve, join } from 'node:path'
+import { resolve, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import { createInterface } from 'node:readline/promises'
@@ -22,16 +22,17 @@ The key stays in this app's encrypted private vault. Model tests may use credits
 
 async function secretPrompt(): Promise<string> {
   if (!process.stdin.isTTY) throw new ManagementError('INVALID_INPUT')
+  const stty = join(dirname(process.execPath), 'stty')
+  execFileSync(stty, ['-echo'], { stdio: 'inherit' })
   // No output stream: readline must not echo the secret even when the TTY edits input.
   const reader = createInterface({ input: process.stdin })
   process.stdout.write('OpenRouter API key (hidden): ')
   try {
-    execFileSync('stty', ['-echo'], { stdio: 'inherit' })
     const secret = await reader.question('')
     process.stdout.write('\n')
     return secret.trim()
   } finally {
-    execFileSync('stty', ['echo'], { stdio: 'inherit' })
+    execFileSync(stty, ['echo'], { stdio: 'inherit' })
     reader.close()
   }
 }
