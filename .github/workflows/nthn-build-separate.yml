@@ -176,7 +176,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: nthn-separate-arm64-apk
+          name: nthn-android-apk
           path: |
             apps/nthn/nthn-separate.apk
             apps/nthn/nthn-separate.sha256
