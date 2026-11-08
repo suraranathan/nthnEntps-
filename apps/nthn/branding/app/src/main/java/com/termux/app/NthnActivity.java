@@ -57,7 +57,7 @@ public final class NthnActivity extends AppCompatActivity {
         super.onCreate(state);
         setContentView(R.layout.activity_nthn);
         content = findViewById(R.id.nthn_content);
-        title = findViewById(R.id.nthn_title);
+        title = null;
         try {
             backend = new NthnBackend(this);
             currentDirectory = backend.home();
