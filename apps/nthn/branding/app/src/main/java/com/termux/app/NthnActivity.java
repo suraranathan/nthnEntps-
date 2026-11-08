@@ -66,6 +66,11 @@ public final class NthnActivity extends AppCompatActivity {
         }
         loadAlexHistory();
         show(getIntent().getStringExtra(NthnNavigation.EXTRA_SCREEN));
+        TermuxInstaller.setupBootstrapIfNeeded(this, () -> {
+            if (destroyed) return;
+            NthnAiInstaller.install(this);
+            show(screen);
+        });
     }
 
     @Override protected void onNewIntent(Intent intent) {
