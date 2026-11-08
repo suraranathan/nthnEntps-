@@ -154,8 +154,8 @@ public final class NthnActivity extends AppCompatActivity {
 
     private void showHome() {
         final LinearLayout body = page();
-        body.addView(heading("Your Linux workspace"));
-        body.addView(text("Local tools, files and AI in one place.", 15, false, R.color.nthn_muted));
+        body.addView(heading("NTHN"));
+        body.addView(text("Your Linux workspace · local tools, files and Alex.", 14, false, R.color.nthn_muted));
         body.addView(label("Environment"));
         final TextView status = text("Checking…", 16, false, R.color.nthn_text);
         body.addView(status);

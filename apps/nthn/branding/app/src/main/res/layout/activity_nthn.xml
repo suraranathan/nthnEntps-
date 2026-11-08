@@ -9,13 +9,14 @@
     <TextView
         android:id="@+id/nthn_title"
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="58dp"
         android:gravity="center_vertical"
         android:paddingStart="24dp"
         android:paddingEnd="24dp"
         android:text="NTHN"
         android:textColor="@color/nthn_text"
-        android:textSize="20sp"
+        android:textSize="18sp"
+        android:letterSpacing="0.12"
         android:textStyle="bold" />
 
     <FrameLayout

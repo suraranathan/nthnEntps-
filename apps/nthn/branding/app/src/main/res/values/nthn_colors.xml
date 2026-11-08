@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="nthn_surface">#FAFAFA</color>
+    <color name="nthn_surface">#F6F7F9</color>
     <color name="nthn_panel">#FFFFFF</color>
-    <color name="nthn_selected">#E8E8E8</color>
-    <color name="nthn_text">#111111</color>
-    <color name="nthn_muted">#686868</color>
-    <color name="nthn_divider">#DEDEDE</color>
+    <color name="nthn_selected">#E7ECF2</color>
+    <color name="nthn_text">#0D1117</color>
+    <color name="nthn_muted">#6B7280</color>
+    <color name="nthn_divider">#1A000000</color>
+    <color name="nthn_accent">#0A66FF</color>
+    <color name="nthn_on_accent">#FFFFFFFF</color>
 </resources>

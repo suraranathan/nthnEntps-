@@ -7,6 +7,7 @@ import android.widget.TextView;
 
 import androidx.core.content.ContextCompat;
 import androidx.core.widget.TextViewCompat;
+import android.graphics.drawable.Drawable;
 
 import com.termux.R;
 
@@ -34,6 +35,8 @@ final class NthnNavigation {
             id == selectedId ? R.color.nthn_text : R.color.nthn_muted);
         view.setTextColor(color);
         TextViewCompat.setCompoundDrawableTintList(view, android.content.res.ColorStateList.valueOf(color));
+        Drawable[] icons = view.getCompoundDrawablesRelative();
+        for (Drawable icon : icons) if (icon != null) icon.setTint(color);
         view.setSelected(id == selectedId);
         view.setOnClickListener(v -> open(activity, screen));
     }
