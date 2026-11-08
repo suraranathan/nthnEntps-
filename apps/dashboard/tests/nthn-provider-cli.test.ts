@@ -13,6 +13,7 @@ test('packaged nthn provider command runs in isolated app storage', () => {
   for (const name of readdirSync(source).filter(name => name.endsWith('.ts'))) copyFileSync(join(source, name), join(target, name))
   const cli = join(target, 'nthn-cli.ts')
   assert.match(execFileSync(process.execPath, [cli, 'help'], { encoding: 'utf8' }), /nthn-ai select MODEL_ID/)
+  assert.match(execFileSync(process.execPath, [cli, 'help'], { encoding: 'utf8' }), /nthn-ai auto-select/)
   const state = JSON.parse(execFileSync(process.execPath, [cli, 'status'], { encoding: 'utf8' }))
   assert.deepEqual(state, { connection: null, credentials: 'missing', selectedModel: null })
   assert.equal(statSync(join(root, '.local/ai/master.key')).mode & 0o077, 0)

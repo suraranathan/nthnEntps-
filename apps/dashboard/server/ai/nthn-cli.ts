@@ -16,6 +16,7 @@ const help = `nthn AI provider
   nthn-ai status            Connection and selected model
   nthn-ai configure         Enter an OpenRouter API key privately
   nthn-ai models            Refresh and list available text models
+  nthn-ai auto-select       Verify and choose a suitable text model automatically
   nthn-ai select MODEL_ID   Verify real text inference and select model
   nthn-ai test              Test connection and selected model inference
   nthn-ai chat              Send a JSON conversation on stdin to the selected model
@@ -58,6 +59,35 @@ function saveSelected(routeId: string, modelId: string) {
   const temporary = `${selectedPath}.${process.pid}.tmp`
   writeFileSync(temporary, JSON.stringify({ routeId, modelId }), { mode: 0o600, flag: 'wx' })
   renameSync(temporary, selectedPath)
+}
+
+function rankForAlex(name: string, modelId: string): number {
+  const value = `${name} ${modelId}`.toLowerCase()
+  if (/\b(code|coder|coding|devstral)\b/.test(value)) return 0
+  if (/\b(reason|thinking|opus|sonnet|gpt|gemini|deepseek|qwen)\b/.test(value)) return 1
+  return 2
+}
+
+async function autoSelect(connectionId: string): Promise<{ modelId: string; routeId: string }> {
+  if (!catalog || !verification || !manager) throw new ManagementError('REQUEST_FAILED')
+  const refresh = await catalog.refresh(connectionId)
+  if (refresh.errorCode) throw new ManagementError(refresh.errorCode)
+  const candidates: import('./contracts.ts').CatalogEntry[] = []
+  let cursor: string | undefined
+  do {
+    const page = await catalog.search({ connectionIds: [connectionId], outputModality: 'text', pageSize: 100, ...(cursor ? { cursor } : {}) })
+    candidates.push(...page.entries.filter(entry => entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable'))
+    cursor = page.nextCursor ?? undefined
+  } while (cursor)
+  candidates.sort((left, right) => rankForAlex(left.route.model.displayName, left.route.ref.nativeModelId) - rankForAlex(right.route.model.displayName, right.route.ref.nativeModelId)
+    || left.route.ref.nativeModelId.localeCompare(right.route.ref.nativeModelId))
+  for (const candidate of candidates) {
+    const result = await verification.verify(candidate.route.id, ['text'])
+    if (result.state !== 'verified') continue
+    saveSelected(candidate.route.id, candidate.route.ref.nativeModelId)
+    return { modelId: candidate.route.ref.nativeModelId, routeId: candidate.route.id }
+  }
+  throw new ManagementError('MODEL_UNAVAILABLE')
 }
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
@@ -115,7 +145,7 @@ let catalog: CatalogService | undefined
 let verification: VerificationService | undefined
 try {
   const [command = 'help', argument, ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'status', 'configure', 'configure-stdin', 'models', 'select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'status', 'configure', 'configure-stdin', 'models', 'select', 'auto-select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); process.exit(0) }
   manager = new ConnectionManager(directory)
   const connection = manager.list().find(item => item.providerId === 'openrouter')
@@ -149,10 +179,18 @@ try {
       console.log(JSON.stringify({ connection: result.ok ? 'connected' : result.code, inference }))
     } else {
       catalog = new CatalogService(manager)
-      if (command === 'chat') {
-        const selectedRoute = selected()
-        if (!selectedRoute) throw new ManagementError('MODEL_UNAVAILABLE')
-        await chat(connection.id, selectedRoute.routeId, chatInput())
+      if (command === 'chat' || command === 'auto-select') {
+        verification = new VerificationService(manager, catalog)
+        let selectedRoute = selected()
+        if (command === 'auto-select' || !selectedRoute) {
+          const automatic = await autoSelect(connection.id)
+          selectedRoute = { routeId: automatic.routeId, modelId: automatic.modelId }
+        }
+        if (command === 'auto-select') {
+          console.log(JSON.stringify({ selected: selectedRoute.modelId, inference: 'verified', automatic: true }))
+        } else {
+          await chat(connection.id, selectedRoute.routeId, chatInput())
+        }
       } else if (command === 'models') {
         const refresh = await catalog.refresh(connection.id)
         if (refresh.errorCode) throw new ManagementError(refresh.errorCode)
