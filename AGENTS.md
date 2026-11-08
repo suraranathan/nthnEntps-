@@ -37,7 +37,7 @@ The dashboard backend must run in Termux on `127.0.0.1:3001`; Vite serves `127.0
 
 - `apps/nthn/VERSION` is the single source of truth for the app version. Keep it in `MAJOR.MINOR` format, such as `0.1`.
 - Every new `com.nthn` app update that will produce an APK artifact must increment the version before the workflow is run. Advance versions in order (`0.1`, `0.2`, `0.3`, and so on); never reuse or lower a published version.
-- The workflow normalizes a two-part version to Android semantic version form (`0.1` becomes Android `versionName` `0.1.0`), derives an increasing Android `versionCode`, and publishes `nthn-V<version>.apk` inside the `nthn-V<version>-android-apk` artifact.
+- The workflow normalizes a two-part version to Android semantic version form (`0.1` becomes Android `versionName` `0.1.0`), derives an increasing Android `versionCode`, publishes `nthn-V<version>.apk` inside the `nthn-V<version>-android-apk` artifact, and attaches the APK directly to the matching `v<version>` GitHub Release.
 - Bootstrap-only rebuilds may keep the app version when the packaged app source and behavior have not changed.
 
 ## Linux environment facts

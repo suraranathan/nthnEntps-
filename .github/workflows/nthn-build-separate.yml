@@ -11,7 +11,7 @@ on:
         required: false
         default: ''
 permissions:
-  contents: read
+  contents: write
   actions: read
 jobs:
   bootstrap:
@@ -195,3 +195,18 @@ jobs:
             apps/nthn/nthn-V${{ env.NTHN_APP_VERSION }}.sha256
             apps/nthn/nthn-badging.txt
           retention-days: 7
+      - name: Publish direct APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${NTHN_APP_VERSION}"
+          apk="nthn-V${NTHN_APP_VERSION}.apk"
+          checksum="nthn-V${NTHN_APP_VERSION}.sha256"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$apk" "$checksum" --clobber
+          else
+            gh release create "$tag" "$apk" "$checksum" \
+              --target "$GITHUB_SHA" \
+              --title "nthn V${NTHN_APP_VERSION}" \
+              --notes "Installable ARM64 Android APK for com.nthn. Download the APK directly and open it with Android's package installer."
+          fi

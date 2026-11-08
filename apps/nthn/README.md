@@ -8,7 +8,7 @@ This directory contains the build patches and verification scripts for the separ
 
 ## Versioning
 
-`VERSION` is the app version source. Before publishing an APK for an app update, increment it sequentially (`0.1`, `0.2`, `0.3`, and so on). The build applies it to Android and publishes `nthn-V<version>.apk` in an artifact named `nthn-V<version>-android-apk`.
+`VERSION` is the app version source. Before publishing an APK for an app update, increment it sequentially (`0.1`, `0.2`, `0.3`, and so on). The build applies it to Android, publishes `nthn-V<version>.apk` in an artifact named `nthn-V<version>-android-apk`, and attaches the APK itself to the matching GitHub Release for direct installation without extracting an Actions artifact ZIP.
 
 ## Interface
 
