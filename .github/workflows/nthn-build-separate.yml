@@ -204,6 +204,7 @@ jobs:
           checksum="nthn-V${NTHN_APP_VERSION}.sha256"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" "$checksum" --clobber
+            gh release edit "$tag" --draft=false --target "$GITHUB_SHA"
           else
             gh release create "$tag" "$apk" "$checksum" \
               --target "$GITHUB_SHA" \
