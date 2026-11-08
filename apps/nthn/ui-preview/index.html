@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#171512" />
+  <title>NTHN chat</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #ece8df;
+      --muted: #999287;
+      --faint: #68635c;
+      --canvas: #171512;
+      --sidebar: #1d1a16;
+      --surface: #24201b;
+      --surface-strong: #2a251f;
+      --line: #39342d;
+      --line-soft: #2c2823;
+      --accent: #d97757;
+      --accent-soft: #3d2820;
+      --success: #91a987;
+      --danger: #db8b81;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, textarea, input { font: inherit; }
+    button { color: inherit; }
+
+    button:focus-visible,
+    textarea:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 276px minmax(0, 1fr);
+      height: 100dvh;
+    }
+
+    .sidebar {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      background: var(--sidebar);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-height: 70px;
+      padding: max(16px, env(safe-area-inset-top)) 18px 14px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border: 1px solid #61584d;
+      border-radius: 8px;
+      color: var(--accent);
+      font: 700 13px/1 var(--mono);
+      letter-spacing: -0.04em;
+    }
+
+    .brand-copy { min-width: 0; }
+    .brand-name { font: 600 14px/1.2 var(--mono); letter-spacing: 0.02em; }
+    .brand-subtitle { margin-top: 3px; color: var(--faint); font: 11px/1.2 var(--mono); }
+
+    .sidebar-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 18px 10px;
+      color: var(--muted);
+      font: 12px/1 var(--mono);
+    }
+
+    .add-provider {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .add-provider:hover { border-color: var(--line); background: var(--surface); color: var(--ink); }
+
+    .provider-list {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: 3px;
+      padding: 0 10px;
+      overflow-y: auto;
+    }
+
+    .provider {
+      display: grid;
+      grid-template-columns: 31px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 9px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .provider:hover { background: var(--surface); }
+    .provider[aria-current="true"] { border-color: #493b32; background: var(--accent-soft); }
+
+    .provider-icon {
+      display: grid;
+      width: 31px;
+      height: 31px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: #d8d1c7;
+      font: 600 12px/1 var(--mono);
+    }
+
+    .provider-name { overflow: hidden; font-size: 13px; font-weight: 550; text-overflow: ellipsis; }
+    .provider-model { margin-top: 3px; overflow: hidden; color: var(--faint); font: 10px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+    .status-dot.connected { background: var(--success); box-shadow: 0 0 0 3px rgb(145 169 135 / 10%); }
+
+    .provider-note {
+      margin: auto 18px 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line-soft);
+      color: var(--faint);
+      font: 10px/1.55 var(--mono);
+    }
+
+    .workspace { display: flex; min-width: 0; flex-direction: column; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 58px;
+      padding: max(10px, env(safe-area-inset-top)) 22px 10px;
+      border-bottom: 1px solid var(--line-soft);
+      background: rgb(23 21 18 / 92%);
+      backdrop-filter: blur(12px);
+    }
+
+    .menu-button {
+      display: none;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+
+    .thread-title { min-width: 0; flex: 1; }
+    .thread-name { overflow: hidden; font: 500 13px/1.3 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .thread-meta { margin-top: 3px; color: var(--faint); font: 10px/1.2 var(--mono); }
+
+    .model-chip {
+      max-width: 38vw;
+      overflow: hidden;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--muted);
+      font: 10px/1 var(--mono);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .conversation {
+      flex: 1;
+      overflow-y: auto;
+      scrollbar-color: var(--line) transparent;
+    }
+
+    .messages {
+      width: min(100%, 820px);
+      margin: 0 auto;
+      padding: 46px 34px 30px;
+    }
+
+    .message {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+
+    .message-mark {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--muted);
+      font: 600 10px/1 var(--mono);
+    }
+
+    .message.assistant .message-mark { border-color: #604334; color: var(--accent); }
+
+    .message-author { margin: 3px 0 9px; color: var(--muted); font: 11px/1 var(--mono); }
+    .message-body { max-width: 68ch; color: #dcd7ce; font-size: 14px; line-height: 1.72; }
+    .message-body p { margin: 0 0 12px; }
+    .message-body p:last-child { margin-bottom: 0; }
+
+    .code-line {
+      margin: 14px 0 2px;
+      padding: 11px 13px;
+      border-left: 2px solid var(--accent);
+      background: #1d1a16;
+      color: #c8c1b7;
+      font: 12px/1.55 var(--mono);
+    }
+
+    .composer-wrap {
+      padding: 0 24px max(20px, env(safe-area-inset-bottom));
+      background: linear-gradient(to bottom, transparent, var(--canvas) 18px);
+    }
+
+    .composer {
+      width: min(100%, 820px);
+      margin: 0 auto;
+      border: 1px solid #494239;
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: 0 18px 48px rgb(0 0 0 / 18%);
+    }
+
+    .composer textarea {
+      display: block;
+      width: 100%;
+      min-height: 70px;
+      max-height: 180px;
+      resize: none;
+      padding: 15px 16px 8px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .composer textarea::placeholder { color: #777067; }
+
+    .composer-footer { display: flex; align-items: center; gap: 10px; padding: 8px 9px 9px 15px; }
+    .composer-hint { flex: 1; color: var(--faint); font: 10px/1.2 var(--mono); }
+
+    .send-button {
+      display: grid;
+      width: 33px;
+      height: 33px;
+      place-items: center;
+      border: 0;
+      border-radius: 7px;
+      background: var(--accent);
+      color: #1d1410;
+      cursor: pointer;
+      font: 700 16px/1 var(--mono);
+    }
+
+    .send-button:disabled { cursor: not-allowed; opacity: 0.35; }
+
+    .backdrop { display: none; }
+
+    dialog {
+      width: min(92vw, 430px);
+      padding: 0;
+      border: 1px solid #50483e;
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 30px 90px rgb(0 0 0 / 45%);
+    }
+
+    dialog::backdrop { background: rgb(0 0 0 / 58%); backdrop-filter: blur(2px); }
+    .dialog-head { display: flex; align-items: center; justify-content: space-between; padding: 17px 18px; border-bottom: 1px solid var(--line); }
+    .dialog-title { font: 600 13px/1 var(--mono); }
+    .dialog-close { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 18px; }
+    .dialog-body { display: grid; gap: 15px; padding: 18px; }
+    .field { display: grid; gap: 7px; }
+    .field label { color: var(--muted); font: 10px/1 var(--mono); }
+    .field input {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 12px/1.2 var(--mono);
+    }
+    .security-note { color: var(--faint); font: 10px/1.5 var(--mono); }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 0 18px 18px; }
+    .button { padding: 9px 13px; border: 1px solid var(--line); border-radius: 7px; background: transparent; cursor: pointer; font: 11px/1 var(--mono); }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: #1d1410; font-weight: 700; }
+
+    @media (max-width: 720px) {
+      .app { display: block; }
+      .sidebar {
+        position: fixed;
+        z-index: 20;
+        inset: 0 auto 0 0;
+        width: min(84vw, 300px);
+        transform: translateX(-102%);
+        transition: transform 180ms ease-out;
+        box-shadow: 24px 0 60px rgb(0 0 0 / 35%);
+      }
+      .app.sidebar-open .sidebar { transform: translateX(0); }
+      .backdrop { position: fixed; z-index: 15; inset: 0; border: 0; background: rgb(0 0 0 / 50%); }
+      .app.sidebar-open .backdrop { display: block; }
+      .workspace { height: 100dvh; }
+      .menu-button { display: grid; }
+      .topbar { padding-inline: 14px; }
+      .messages { padding: 32px 18px 20px; }
+      .message { grid-template-columns: 24px minmax(0, 1fr); gap: 11px; margin-bottom: 26px; }
+      .message-mark { width: 24px; height: 24px; }
+      .message-body { font-size: 13.5px; line-height: 1.65; }
+      .composer-wrap { padding-inline: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+      .composer textarea { min-height: 64px; }
+      .composer-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="provider-sidebar" aria-label="AI providers">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">N</div>
+        <div class="brand-copy">
+          <div class="brand-name">nthn</div>
+          <div class="brand-subtitle">AI workspace</div>
+        </div>
+      </div>
+
+      <div class="sidebar-heading">
+        <span>Providers</span>
+        <button class="add-provider" id="add-provider" aria-label="Add API provider" title="Add API provider">+</button>
+      </div>
+
+      <div class="provider-list" id="provider-list">
+        <button class="provider" data-provider="Anthropic" data-model="claude-sonnet-4-5">
+          <span class="provider-icon">A</span>
+          <span><span class="provider-name">Anthropic</span><span class="provider-model">claude-sonnet-4-5</span></span>
+          <span class="status-dot connected" aria-label="Connected"></span>
+        </button>
+        <button class="provider" data-provider="OpenAI" data-model="gpt-5">
+          <span class="provider-icon">O</span>
+          <span><span class="provider-name">OpenAI</span><span class="provider-model">gpt-5</span></span>
+          <span class="status-dot" aria-label="Not connected"></span>
+        </button>
+        <button class="provider" data-provider="Google" data-model="gemini-2.5-pro">
+          <span class="provider-icon">G</span>
+          <span><span class="provider-name">Google</span><span class="provider-model">gemini-2.5-pro</span></span>
+          <span class="status-dot" aria-label="Not connected"></span>
+        </button>
+        <button class="provider" data-provider="OpenRouter" data-model="choose a model" aria-current="true">
+          <span class="provider-icon">R</span>
+          <span><span class="provider-name">OpenRouter</span><span class="provider-model">choose a model</span></span>
+          <span class="status-dot" aria-label="Not connected"></span>
+        </button>
+        <button class="provider" data-provider="xkiro" data-model="choose a model">
+          <span class="provider-icon">X</span>
+          <span><span class="provider-name">xkiro</span><span class="provider-model">choose a model</span></span>
+          <span class="status-dot" aria-label="Not connected"></span>
+        </button>
+        <button class="provider" data-provider="Mistral" data-model="mistral-large">
+          <span class="provider-icon">M</span>
+          <span><span class="provider-name">Mistral</span><span class="provider-model">mistral-large</span></span>
+          <span class="status-dot" aria-label="Not connected"></span>
+        </button>
+      </div>
+
+      <p class="provider-note">API keys remain in app-private storage when this interface is moved into com.nthn.</p>
+    </aside>
+
+    <button class="backdrop" id="backdrop" aria-label="Close provider sidebar"></button>
+
+    <main class="workspace">
+      <header class="topbar">
+        <button class="menu-button" id="menu-button" aria-controls="provider-sidebar" aria-expanded="false" aria-label="Open providers">☰</button>
+        <div class="thread-title">
+          <div class="thread-name">New conversation</div>
+          <div class="thread-meta" id="provider-meta">Anthropic · connected</div>
+        </div>
+        <div class="model-chip" id="model-chip">claude-sonnet-4-5</div>
+      </header>
+
+      <section class="conversation" id="conversation" aria-label="Conversation" aria-live="polite">
+        <div class="messages" id="messages">
+          <article class="message user">
+            <div class="message-mark" aria-hidden="true">You</div>
+            <div>
+              <div class="message-author">you</div>
+              <div class="message-body"><p>Help me understand this project before we change anything.</p></div>
+            </div>
+          </article>
+
+          <article class="message assistant">
+            <div class="message-mark" aria-hidden="true">N</div>
+            <div>
+              <div class="message-author">nthn</div>
+              <div class="message-body">
+                <p>I’ll inspect the repository structure first, then map the parts that matter to your request.</p>
+                <div class="code-line">› Reading project files…<br>› Finding app entry points…<br>✓ Ready to discuss the change</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="message user">
+            <div class="message-mark" aria-hidden="true">You</div>
+            <div>
+              <div class="message-author">you</div>
+              <div class="message-body"><p>Start with the smallest safe change and show me what you touched.</p></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <div class="composer-wrap">
+        <form class="composer" id="composer">
+          <textarea id="message-input" rows="2" placeholder="Message nthn…" aria-label="Message nthn"></textarea>
+          <div class="composer-footer">
+            <span class="composer-hint">Enter to send · Shift + Enter for a new line</span>
+            <button class="send-button" id="send-button" type="submit" aria-label="Send message" disabled>↑</button>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="provider-dialog">
+    <form method="dialog" id="provider-form">
+      <div class="dialog-head">
+        <div class="dialog-title" id="dialog-title">Connect Anthropic</div>
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field">
+          <label for="api-key">API key</label>
+          <input id="api-key" type="password" placeholder="Enter API key" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="model-name">Model</label>
+          <input id="model-name" type="text" value="claude-sonnet-4-5" />
+        </div>
+        <div class="security-note">Web preview only. This form does not store or send credentials.</div>
+      </div>
+      <div class="dialog-actions">
+        <button class="button" value="cancel">Cancel</button>
+        <button class="button primary" id="save-provider" value="save">Save provider</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const app = document.querySelector('#app');
+    const menuButton = document.querySelector('#menu-button');
+    const backdrop = document.querySelector('#backdrop');
+    const input = document.querySelector('#message-input');
+    const sendButton = document.querySelector('#send-button');
+    const messages = document.querySelector('#messages');
+    const conversation = document.querySelector('#conversation');
+    const dialog = document.querySelector('#provider-dialog');
+    const dialogTitle = document.querySelector('#dialog-title');
+    const modelInput = document.querySelector('#model-name');
+    const apiKeyInput = document.querySelector('#api-key');
+    let activeProvider = document.querySelector('.provider[aria-current="true"]');
+
+    function setSidebar(open) {
+      app.classList.toggle('sidebar-open', open);
+      menuButton.setAttribute('aria-expanded', String(open));
+    }
+
+    function selectProvider(button) {
+      activeProvider?.setAttribute('aria-current', 'false');
+      activeProvider = button;
+      button.setAttribute('aria-current', 'true');
+      const connected = button.querySelector('.status-dot').classList.contains('connected');
+      document.querySelector('#provider-meta').textContent = `${button.dataset.provider} · ${connected ? 'connected' : 'not connected'}`;
+      document.querySelector('#model-chip').textContent = button.dataset.model;
+      setSidebar(false);
+    }
+
+    function openProviderDialog(button) {
+      if (button && window.NthnAI && button.dataset.provider === 'OpenRouter') {
+        setSidebar(false);
+        window.NthnAI.configure();
+        return;
+      }
+      const provider = button?.dataset.provider || 'API provider';
+      const model = button?.dataset.model === 'choose a model' ? '' : button?.dataset.model || '';
+      dialogTitle.textContent = `Connect ${provider}`;
+      modelInput.value = model;
+      apiKeyInput.value = '';
+      dialog.showModal();
+      setTimeout(() => apiKeyInput.focus(), 0);
+    }
+
+    document.querySelectorAll('.provider').forEach((button) => {
+      button.addEventListener('click', () => {
+        selectProvider(button);
+        if (!button.querySelector('.status-dot').classList.contains('connected')) openProviderDialog(button);
+      });
+    });
+
+    document.querySelector('#add-provider').addEventListener('click', () => openProviderDialog());
+    menuButton.addEventListener('click', () => setSidebar(!app.classList.contains('sidebar-open')));
+    backdrop.addEventListener('click', () => setSidebar(false));
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setSidebar(false);
+    });
+
+    input.addEventListener('input', () => {
+      sendButton.disabled = !input.value.trim();
+      input.style.height = 'auto';
+      input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+    });
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        if (input.value.trim()) document.querySelector('#composer').requestSubmit();
+      }
+    });
+
+    document.querySelector('#composer').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+
+      const article = document.createElement('article');
+      article.className = 'message user';
+      const mark = document.createElement('div');
+      mark.className = 'message-mark';
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = 'You';
+      const content = document.createElement('div');
+      const author = document.createElement('div');
+      author.className = 'message-author';
+      author.textContent = 'you';
+      const body = document.createElement('div');
+      body.className = 'message-body';
+      const paragraph = document.createElement('p');
+      paragraph.textContent = text;
+      body.append(paragraph);
+      content.append(author, body);
+      article.append(mark, content);
+      messages.append(article);
+      if (window.NthnAI) window.NthnAI.send(text);
+
+      input.value = '';
+      input.style.height = 'auto';
+      sendButton.disabled = true;
+      conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
+    });
+
+    document.querySelector('#provider-form').addEventListener('submit', () => {
+      apiKeyInput.value = '';
+    });
+
+    window.nthnEvent = (kind, value) => {
+      if (kind === 'status' || kind === 'error') {
+        document.querySelector('#provider-meta').textContent = value;
+        const openrouter = document.querySelector('[data-provider="OpenRouter"] .status-dot');
+        const connected = /connected/i.test(value) && !/not connected|credentials missing/i.test(value);
+        openrouter.classList.toggle('connected', connected);
+        openrouter.setAttribute('aria-label', connected ? 'Connected' : 'Not connected');
+      }
+      if (kind === 'reply' || kind === 'error') {
+        const article = document.createElement('article');
+        article.className = 'message assistant';
+        const mark = document.createElement('div'); mark.className = 'message-mark'; mark.textContent = 'N';
+        const wrap = document.createElement('div');
+        const author = document.createElement('div'); author.className = 'message-author'; author.textContent = 'nthn';
+        const body = document.createElement('div'); body.className = 'message-body';
+        const paragraph = document.createElement('p'); paragraph.textContent = value; body.append(paragraph);
+        wrap.append(author, body); article.append(mark, wrap); messages.append(article);
+        conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
+      }
+    };
+
+    document.querySelector('#provider-form').addEventListener('submit', (event) => {
+      if (window.NthnAI) event.preventDefault();
+    });
+    document.querySelector('#provider-list').addEventListener('click', (event) => {
+      const button = event.target.closest('.provider');
+      if (button && window.NthnAI && button.dataset.provider !== 'OpenRouter') {
+        document.querySelector('#provider-meta').textContent = `${button.dataset.provider} · backend setup pending`;
+      }
+    });
+    if (window.NthnAI) {
+      window.NthnAI.status();
+      try {
+        for (const item of JSON.parse(window.NthnAI.history())) {
+          const article = document.createElement('article'); article.className = `message ${item.role}`;
+          const mark = document.createElement('div'); mark.className = 'message-mark'; mark.textContent = item.role === 'user' ? 'You' : 'N';
+          const wrap = document.createElement('div');
+          const author = document.createElement('div'); author.className = 'message-author'; author.textContent = item.role === 'user' ? 'you' : 'nthn';
+          const body = document.createElement('div'); body.className = 'message-body';
+          const paragraph = document.createElement('p'); paragraph.textContent = item.content; body.append(paragraph);
+          wrap.append(author, body); article.append(mark, wrap); messages.append(article);
+        }
+      } catch (_) { }
+    }
+  </script>
+</body>
+</html>

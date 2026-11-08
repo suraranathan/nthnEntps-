@@ -133,11 +133,27 @@ for source in branding.rglob('*'):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
 
+replace('app/src/main/AndroidManifest.xml', '<application', '<application\n        android:usesCleartextTraffic="false"', 1)
+replace('app/src/main/res/layout/activity_nthn.xml', '        android:layout_height="0dp"\n        android:layout_weight="1" />', '        android:layout_height="match_parent" />')
+
+# Load the NTHN preview as the native dashboard's WebView document.
+replace('app/src/main/res/layout/activity_nthn.xml', '''    <TextView
+        android:id="@+id/nthn_title"''', '''    <TextView
+        android:id="@+id/nthn_title"''')
+replace('app/src/main/res/layout/activity_nthn.xml', '''        android:background="@color/nthn_surface"
+        android:fitsSystemWindows="true"
+        android:orientation="vertical">''', '''        android:background="@color/nthn_surface"
+        android:fitsSystemWindows="true"
+        android:orientation="vertical">''')
+
 provider_sources = Path(__file__).resolve().parents[3] / 'apps/dashboard/server/ai'
 provider_assets = root / 'app/src/main/assets/nthn-ai/server/ai'
 provider_assets.mkdir(parents=True, exist_ok=True)
 for source in provider_sources.glob('*.ts'):
     shutil.copyfile(source, provider_assets / source.name)
+
+chat_ui = Path(__file__).resolve().parents[3] / 'apps/nthn/ui-preview/index.html'
+shutil.copyfile(chat_ui, root / 'app/src/main/assets/nthn_chat.html')
 
 # The density-specific upstream icons otherwise remain eligible on older Android versions.
 for icon in (root / 'app/src/main/res').glob('mipmap-*/ic_launcher*.png'):

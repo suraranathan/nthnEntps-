@@ -6,24 +6,10 @@
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/nthn_title"
-        android:layout_width="match_parent"
-        android:layout_height="58dp"
-        android:gravity="center_vertical"
-        android:paddingStart="24dp"
-        android:paddingEnd="24dp"
-        android:text="NTHN"
-        android:textColor="@color/nthn_text"
-        android:textSize="18sp"
-        android:letterSpacing="0.12"
-        android:textStyle="bold" />
-
     <FrameLayout
         android:id="@+id/nthn_content"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <include layout="@layout/nthn_bottom_nav" />
 </LinearLayout>

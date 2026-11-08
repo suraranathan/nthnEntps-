@@ -17,6 +17,9 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.JavascriptInterface;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -86,13 +89,13 @@ public final class NthnActivity extends AppCompatActivity {
         content.removeAllViews();
         int selected;
         if (screen.equals(NthnNavigation.AI)) {
-            title.setText("Alex"); selected = R.id.nav_ai; showAi();
+            if (title != null) title.setText("Alex"); selected = R.id.nav_ai; showAi();
         } else if (screen.equals(NthnNavigation.FILES)) {
-            title.setText("Files"); selected = R.id.nav_files; showFiles();
+            if (title != null) title.setText("Files"); selected = R.id.nav_files; showFiles();
         } else if (screen.equals(NthnNavigation.SETTINGS)) {
-            title.setText("Settings"); selected = R.id.nav_settings; showSettings();
+            if (title != null) title.setText("Settings"); selected = R.id.nav_settings; showSettings();
         } else {
-            title.setText("NTHN"); selected = R.id.nav_home; showHome();
+            if (title != null) title.setText("NTHN"); selected = R.id.nav_home; showHome();
         }
         NthnNavigation.attach(this, selected);
     }
@@ -173,53 +176,80 @@ public final class NthnActivity extends AppCompatActivity {
     }
 
     private void showAi() {
-        final LinearLayout body = page();
-        body.addView(heading("Alex"));
-        body.addView(text("Coding and development assistant", 15, false, R.color.nthn_muted));
-        final TextView status = text("Choose and verify a text model before starting a chat.", 14, false, R.color.nthn_muted);
-        body.addView(status);
+        WebView web = new WebView(this);
+        web.setBackgroundColor(android.graphics.Color.rgb(23, 21, 18));
+        web.getSettings().setJavaScriptEnabled(true);
+        web.getSettings().setDomStorageEnabled(false);
+        web.setWebViewClient(new WebViewClient());
+        web.addJavascriptInterface(new AiWebBridge(web), "NthnAI");
+        content.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        web.loadUrl("file:///android_asset/nthn_chat.html");
+    }
 
-        LinearLayout conversationActions = new LinearLayout(this);
-        conversationActions.setOrientation(LinearLayout.HORIZONTAL);
-        conversationActions.addView(button("New conversation", v -> { clearAlexHistory(); showAi(); }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        conversationActions.addView(button("Test model", v -> runAi("test", null, status, null)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        body.addView(conversationActions);
+    private final class AiWebBridge {
+        private final WebView web;
+        AiWebBridge(WebView web) { this.web = web; }
 
-        body.addView(label("Conversation"));
-        final LinearLayout transcript = new LinearLayout(this);
-        transcript.setOrientation(LinearLayout.VERTICAL);
-        renderAlexHistory(transcript);
-        if (alexHistory.length() == 0) transcript.addView(text("Ask Alex to explain code, plan a feature, debug an error, or review a change. Alex replies through your selected OpenRouter model.", 15, false, R.color.nthn_muted));
-        body.addView(transcript);
+        @JavascriptInterface public String history() { return alexHistory.toString(); }
 
-        final EditText prompt = new EditText(this);
-        prompt.setHint("Ask Alex about your code…");
-        prompt.setGravity(Gravity.TOP | Gravity.START);
-        prompt.setMinLines(3);
-        prompt.setMaxLines(8);
-        prompt.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        body.addView(prompt, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        body.addView(button("Send", v -> {
-            String request = prompt.getText().toString().trim();
-            if (request.isEmpty()) return;
-            prompt.setText("");
-            sendAlex(request, status);
-        }));
+        @JavascriptInterface public void send(String request) {
+            if (request == null || request.trim().isEmpty()) return;
+            appendAlexMessage("user", request);
+            final String payload;
+            try { payload = new JSONObject().put("messages", alexHistory).toString(); }
+            catch (Exception error) { deliver("error", message(error)); return; }
+            executor.execute(() -> {
+                try {
+                    NthnBackend.CommandResult result = backend.ai("chat", null, payload.toCharArray());
+                    if (!result.ok()) { deliver("error", aiMessage(result.output)); return; }
+                    String reply = new JSONObject(result.output).optString("message");
+                    if (reply.isEmpty()) throw new IOException("The model returned no text.");
+                    appendAlexMessage("assistant", reply);
+                    deliver("reply", reply);
+                } catch (Exception error) { deliver("error", message(error)); }
+            });
+        }
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        Button configure = button("Configure key", v -> configureKey(status));
-        actions.addView(configure, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        body.addView(actions);
+        @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebKey()); }
+        @JavascriptInterface public void newConversation() { clearAlexHistory(); }
+        @JavascriptInterface public void status() {
+            executor.execute(() -> {
+                try { NthnBackend.CommandResult result = backend.ai("status", null, null); deliver("status", aiMessage(result.output)); }
+                catch (Exception error) { deliver("error", message(error)); }
+            });
+        }
 
-        body.addView(label("Text models"));
-        final LinearLayout models = new LinearLayout(this);
-        models.setOrientation(LinearLayout.VERTICAL);
-        body.addView(button("Refresh models", v -> loadModels(status, models)));
-        body.addView(models);
-        body.addView(label("Credentials"));
-        body.addView(row("Remove API key", v -> confirmClearKey(status)));
-        runAi("status", null, status, null);
+        private void deliver(String event, String value) {
+            try {
+                String encoded = org.json.JSONObject.quote(value == null ? "" : value);
+                main.post(() -> { if (!destroyed) web.evaluateJavascript("window.nthnEvent(" + org.json.JSONObject.quote(event) + "," + encoded + ")", null); });
+            } catch (Exception ignored) { }
+        }
+    }
+
+    private void configureWebKey() {
+        EditText key = new EditText(this);
+        key.setSingleLine(true);
+        key.setHint("OpenRouter API key");
+        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        FrameLayout frame = new FrameLayout(this);
+        frame.setPadding(dp(20), 0, dp(20), 0);
+        frame.addView(key);
+        new AlertDialog.Builder(this).setTitle("Connect OpenRouter")
+            .setMessage("The key is stored in the encrypted private vault.")
+            .setView(frame).setNegativeButton("Cancel", null)
+            .setPositiveButton("Save and test", (dialog, which) -> {
+                char[] secret = key.getText().toString().trim().toCharArray();
+                key.setText("");
+                if (secret.length == 0) return;
+                executor.execute(() -> {
+                    try {
+                        NthnBackend.CommandResult result = backend.ai("configure-stdin", null, secret);
+                        String state = result.ok() ? "OpenRouter connected" : aiMessage(result.output);
+                        main.post(() -> { if (!destroyed) ((WebView) content.getChildAt(0)).evaluateJavascript("window.nthnEvent('status'," + org.json.JSONObject.quote(state) + ")", null); });
+                    } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); }
+                });
+            }).show();
     }
 
     private void loadAlexHistory() {
