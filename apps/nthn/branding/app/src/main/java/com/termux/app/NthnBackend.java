@@ -150,29 +150,57 @@ final class NthnBackend {
         if (!node.canExecute() || !script.isFile()) throw new IOException("AI service is unavailable until Linux setup completes");
         List<String> invocation = new ArrayList<>();
         invocation.add(node.getAbsolutePath());
+        invocation.add("--no-warnings");
         invocation.add(script.getAbsolutePath());
         invocation.add(command);
         if (argument != null) invocation.add(argument);
         ProcessBuilder builder = new ProcessBuilder(invocation);
-        builder.redirectErrorStream(true);
+        builder.redirectErrorStream(false);
         activeProcess = builder.start();
         try {
+            StringBuilder stdout = new StringBuilder();
+            StringBuilder stderr = new StringBuilder();
+            IOException[] streamErrors = new IOException[2];
+            Thread stdoutReader = collect(activeProcess.getInputStream(), stdout, streamErrors, 0);
+            Thread stderrReader = collect(activeProcess.getErrorStream(), stderr, streamErrors, 1);
+            stdoutReader.start();
+            stderrReader.start();
             try (OutputStream input = activeProcess.getOutputStream()) {
                 if (secret != null) input.write(new String(secret).getBytes(StandardCharsets.UTF_8));
             }
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(activeProcess.getInputStream(), StandardCharsets.UTF_8))) {
+            int exitCode = activeProcess.waitFor();
+            stdoutReader.join();
+            stderrReader.join();
+            if (streamErrors[0] != null) throw streamErrors[0];
+            if (streamErrors[1] != null) throw streamErrors[1];
+            return new CommandResult(exitCode, exitCode == 0 ? stdout.toString() : failureOutput(stdout, stderr));
+        } finally {
+            activeProcess = null;
+            if (secret != null) Arrays.fill(secret, '\0');
+        }
+    }
+
+    private static Thread collect(final InputStream input, final StringBuilder output,
+                                  final IOException[] errors, final int index) {
+        return new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (output.length() > 0) output.append('\n');
                     output.append(line);
                 }
-            }
-            return new CommandResult(activeProcess.waitFor(), output.toString());
-        } finally {
-            activeProcess = null;
-            if (secret != null) Arrays.fill(secret, '\0');
+            } catch (IOException error) { errors[index] = error; }
+        }, "nthn-ai-output-" + index);
+    }
+
+    private static String failureOutput(StringBuilder stdout, StringBuilder stderr) {
+        String[] lines = stderr.toString().trim().split("\\r?\\n");
+        for (int index = lines.length - 1; index >= 0; index--) {
+            String line = lines[index].trim();
+            if (line.startsWith("{") && line.endsWith("}")) return line;
         }
+        String error = stderr.toString().trim();
+        return error.isEmpty() ? stdout.toString() : error;
     }
 
     synchronized void stop() {

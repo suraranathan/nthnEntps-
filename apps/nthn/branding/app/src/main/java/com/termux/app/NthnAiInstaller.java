@@ -20,7 +20,7 @@ final class NthnAiInstaller {
             File root = new File(context.getFilesDir(), "nthn-ai");
             copyAssets(context, "nthn-ai", root);
             File launcher = new File(PREFIX, "bin/nthn-ai");
-            byte[] script = ("#!" + PREFIX + "/bin/sh\nexec " + PREFIX + "/bin/node " +
+            byte[] script = ("#!" + PREFIX + "/bin/sh\nexec " + PREFIX + "/bin/node --no-warnings " +
                 new File(root, "server/ai/nthn-cli.ts").getAbsolutePath() + " \"$@\"\n")
                 .getBytes(StandardCharsets.UTF_8);
             try (FileOutputStream out = new FileOutputStream(launcher)) { out.write(script); out.getFD().sync(); }
