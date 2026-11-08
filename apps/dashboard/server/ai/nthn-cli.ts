@@ -8,6 +8,7 @@ import { CatalogService } from './catalog-service.ts'
 import { VerificationService } from './verification-service.ts'
 import { ManagementError } from './management-types.ts'
 import { connectionAdapter } from './connection-adapters.ts'
+import { connectionSummary, selectionIsCurrent } from './nthn-cli-state.ts'
 
 const directory = resolve(fileURLToPath(new URL('../../', import.meta.url)), '.local/ai')
 const selectedPath = join(directory, 'selected-route.json')
@@ -154,12 +155,13 @@ try {
     if (!key) throw new ManagementError('INVALID_INPUT')
     const current = connection ?? manager.add({ providerId: 'openrouter', label: 'OpenRouter', baseUrl, networkPolicy: 'public', enabled: false })
     const saved = manager.setCredential(current.id, current.revision, key)
+    if (existsSync(selectedPath)) unlinkSync(selectedPath)
     const active = saved.enabled ? saved : manager.setEnabled(saved.id, saved.revision, true)
     const result = await manager.test(active.id, active.revision)
     console.log(JSON.stringify({ credentials: result.connection.credentials.state, connection: result.ok ? 'connected' : result.code }))
     if (!result.ok) process.exitCode = 1
   } else if (command === 'status') {
-    console.log(JSON.stringify({ connection: connection?.health ?? null, credentials: connection?.credentials.state ?? 'missing', selectedModel: selected()?.modelId ?? null }, null, 2))
+    console.log(JSON.stringify({ connection: connectionSummary(connection), credentials: connection?.credentials.state ?? 'missing', selectedModel: selected()?.modelId ?? null }, null, 2))
   } else {
     if (!connection) throw new ManagementError('CREDENTIAL_REQUIRED')
     if (command === 'clear-key') {
@@ -182,6 +184,7 @@ try {
       if (command === 'chat' || command === 'auto-select') {
         verification = new VerificationService(manager, catalog)
         let selectedRoute = selected()
+        if (selectedRoute && !selectionIsCurrent(selectedRoute, await catalog.getRoute(selectedRoute.routeId), connection)) selectedRoute = null
         if (command === 'auto-select' || !selectedRoute) {
           const automatic = await autoSelect(connection.id)
           selectedRoute = { routeId: automatic.routeId, modelId: automatic.modelId }
