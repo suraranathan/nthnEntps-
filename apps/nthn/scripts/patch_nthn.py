@@ -4,6 +4,16 @@ import sys
 
 root = Path(sys.argv[1]).resolve()
 branding = Path(__file__).resolve().parent.parent / 'branding'
+version_file = Path(__file__).resolve().parent.parent / 'VERSION'
+app_version = version_file.read_text().strip()
+version_parts = app_version.split('.')
+if len(version_parts) not in (2, 3) or any(not part.isdigit() for part in version_parts):
+    raise RuntimeError('apps/nthn/VERSION must use MAJOR.MINOR or MAJOR.MINOR.PATCH format')
+major, minor, patch = (int(part) for part in (*version_parts, '0')[:3])
+if minor > 999 or patch > 999:
+    raise RuntimeError('minor and patch versions must be between 0 and 999')
+android_version_name = app_version if len(version_parts) == 3 else f'{app_version}.0'
+version_code = 10_000 + major * 1_000_000 + minor * 1_000 + patch
 
 
 def replace(rel: str, old: str, new: str, count: int = 1) -> None:
@@ -18,7 +28,7 @@ def replace(rel: str, old: str, new: str, count: int = 1) -> None:
 replace('app/build.gradle', 'applicationId "com.termux"', 'applicationId "com.nthn"')
 replace('app/build.gradle', 'manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"', 'manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.nthn"')
 replace('app/build.gradle', 'manifestPlaceholders.TERMUX_APP_NAME = "Termux"', 'manifestPlaceholders.TERMUX_APP_NAME = "nthn"')
-replace('app/build.gradle', '        versionCode 1022\n', '        versionCode 1022\n\n        ndk { abiFilters "arm64-v8a" }\n')
+replace('app/build.gradle', '        versionCode 1022\n        versionName "0.119.0-beta.3"\n', f'        versionCode {version_code}\n        versionName "{android_version_name}"\n\n        ndk {{ abiFilters "arm64-v8a" }}\n')
 replace('app/build.gradle', 'def downloadBootstrap(String arch, String expectedChecksum, String version) {', 'def downloadBootstrap(String arch, String expectedChecksum, String version) {\n    return // Use the custom ARM64 bootstrap supplied by this build.')
 replace('app/src/main/res/values/strings.xml', '<!ENTITY TERMUX_PACKAGE_NAME "com.termux">', '<!ENTITY TERMUX_PACKAGE_NAME "com.nthn">')
 replace('app/src/main/res/values/strings.xml', '<!ENTITY TERMUX_APP_NAME "Termux">', '<!ENTITY TERMUX_APP_NAME "nthn">')

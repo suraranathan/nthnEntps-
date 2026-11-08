@@ -140,6 +140,17 @@ jobs:
         working-directory: apps/nthn
     steps:
       - uses: actions/checkout@v4
+      - name: Read app version
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          case "$version" in
+            ''|*[!0-9.]*|.*|*.|*..*) echo "VERSION must use MAJOR.MINOR or MAJOR.MINOR.PATCH" >&2; exit 1 ;;
+          esac
+          fields="$(awk -F. '{print NF}' VERSION)"
+          test "$fields" -eq 2 || test "$fields" -eq 3
+          echo "NTHN_APP_VERSION=$version" >> "$GITHUB_ENV"
+          if [ "$fields" -eq 2 ]; then version_name="${version}.0"; else version_name="$version"; fi
+          echo "NTHN_ANDROID_VERSION_NAME=$version_name" >> "$GITHUB_ENV"
       - uses: android-actions/setup-android@v4
       - name: Get exact Termux app source
         run: |
@@ -164,21 +175,23 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug
       - name: Package and verify APK
         run: |
-          cp termux-src/app/build/outputs/apk/debug/*universal.apk nthn-separate.apk
-          "$ANDROID_HOME/build-tools/30.0.3/aapt2" dump badging nthn-separate.apk | tee nthn-badging.txt
+          apk="nthn-V${NTHN_APP_VERSION}.apk"
+          cp termux-src/app/build/outputs/apk/debug/*universal.apk "$apk"
+          "$ANDROID_HOME/build-tools/30.0.3/aapt2" dump badging "$apk" | tee nthn-badging.txt
           grep -q "package: name='com.nthn'" nthn-badging.txt
           grep -q "application-label:'nthn'" nthn-badging.txt
-          python3 scripts/verify_apk.py nthn-separate.apk \
+          grep -q "versionName='${NTHN_ANDROID_VERSION_NAME}'" nthn-badging.txt
+          python3 scripts/verify_apk.py "$apk" \
             --aapt2 "$ANDROID_HOME/build-tools/30.0.3/aapt2" \
             --bootstrap termux-src/app/src/main/cpp/bootstrap-aarch64.zip
-          "$ANDROID_HOME/build-tools/30.0.3/apksigner" verify --verbose nthn-separate.apk
-          sha256sum nthn-separate.apk > nthn-separate.sha256
+          "$ANDROID_HOME/build-tools/30.0.3/apksigner" verify --verbose "$apk"
+          sha256sum "$apk" > "nthn-V${NTHN_APP_VERSION}.sha256"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: nthn-android-apk
+          name: nthn-V${{ env.NTHN_APP_VERSION }}-android-apk
           path: |
-            apps/nthn/nthn-separate.apk
-            apps/nthn/nthn-separate.sha256
+            apps/nthn/nthn-V${{ env.NTHN_APP_VERSION }}.apk
+            apps/nthn/nthn-V${{ env.NTHN_APP_VERSION }}.sha256
             apps/nthn/nthn-badging.txt
           retention-days: 7

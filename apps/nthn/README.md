@@ -6,6 +6,10 @@ This directory contains the build patches and verification scripts for the separ
 
 `nthn-build-separate.yml` builds a real ARM64 Termux-derived app (`com.nthn`) and a bootstrap compiled from pinned `agnostic-apollo/termux-packages` with `TERMUX_APP__PACKAGE_NAME="com.nthn"`.
 
+## Versioning
+
+`VERSION` is the app version source. Before publishing an APK for an app update, increment it sequentially (`0.1`, `0.2`, `0.3`, and so on). The build applies it to Android and publishes `nthn-V<version>.apk` in an artifact named `nthn-V<version>-android-apk`.
+
 ## Interface
 
 `scripts/patch_nthn.py` applies the native NTHN interface during the Android build. The app launches to a minimal Home dashboard with Home, Terminal, AI, Files, and Settings navigation. Light and dark themes are stored in app-private preferences. Home reports the real custom-prefix state, Terminal retains the upstream PTY/session implementation, AI wraps the existing encrypted provider service, and Files is confined to the app's real Linux home directory. The source assets in `branding/` also provide the launcher monogram, notification icon, and local Help page. Internal Java package names and upstream license attribution remain for compatibility and provenance.
