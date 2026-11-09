@@ -172,6 +172,22 @@ test('development tools read, search, write and edit inside the allowed workspac
   assert.throws(() => approval.consume(ticket.id, 'conversation', 'write_file', signature), (error: unknown) => error instanceof PermissionError && error.code === 'approval-missing')
 })
 
+test('an empty workspace gives Jef a grounded project and runtime status', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'nthn-agent-empty-'))
+  t.after(async () => { await rm(directory, { recursive: true, force: true }) })
+  const paths = new PathPolicy({ root: directory, writablePrefixes: ['.'] })
+  const result = await new ToolRegistry().execute('list_dir', { path: '.' }, { workspace: directory, paths, signal: new AbortController().signal })
+  assert.match(result.summary, /no project files/i)
+  const store = new AgentChatStore(join(directory, 'chats'))
+  await store.load()
+  const gateway = new FakeGateway([['No project files are here.']])
+  const agent = new AlexAgent({ store, gateway, workspace: directory })
+  const conversation = await agent.newConversation()
+  await agent.run(conversation.id, 'Check the app', () => {})
+  const prompt = gateway.calls[0][0].content
+  assert.match(prompt, /empty workspace.*does not mean.*Linux.*uninstalled/i)
+})
+
 test('mobile tool policy allows workspace projects but approval-gates every executable action', async t => {
   const { workspace } = await workspaceFixture(t)
   const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })

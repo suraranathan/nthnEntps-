@@ -352,7 +352,10 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
           .sort((a, b) => a.name.localeCompare(b.name))
           .map(entry => `${entry.isDirectory() ? 'dir ' : 'file'} ${entry.name}`)
         const output = clampOutput(lines.join('\n'))
-        return { ok: true, summary: `${lines.length} entr${lines.length === 1 ? 'y' : 'ies'} in ${target.relative}.`, output: output.text, truncated: output.truncated }
+        const summary = lines.length === 0 && (target.relative === '' || target.relative === '.')
+          ? '0 entries in workspace root; no project files are visible here.'
+          : `${lines.length} entr${lines.length === 1 ? 'y' : 'ies'} in ${target.relative}.`
+        return { ok: true, summary, output: output.text, truncated: output.truncated }
       },
     },
     {

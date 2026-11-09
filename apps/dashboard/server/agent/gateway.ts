@@ -211,6 +211,8 @@ export class ResolvedRouteGateway implements Gateway {
       let toolBuffer = ''
       let emitted = false
       let raw = ''
+      const bufferSeedText = route.providerId === 'openrouter' && /^bytedance-seed\/seed-2\.0-code(?:$|[-:])/i.test(route.ref.nativeModelId)
+      let seedText = ''
       try {
         for await (const chunk of this.manager.streamInference(route.ref.connectionId, route.connectionRevision, body, options.signal)) {
           raw += chunk
@@ -229,9 +231,17 @@ export class ResolvedRouteGateway implements Gateway {
               }
             } catch { /* SSE text and incomplete lines are handled by the text parser. */ }
           }
-          for (const delta of parser.push(chunk)) if (delta) { emitted = true; yield delta }
+          for (const delta of parser.push(chunk)) if (delta) {
+            emitted = true
+            if (bufferSeedText) seedText += delta
+            else yield delta
+          }
         }
-        for (const delta of parser.flush()) if (delta) { emitted = true; yield delta }
+        for (const delta of parser.flush()) if (delta) {
+          emitted = true
+          if (bufferSeedText) seedText += delta
+          else yield delta
+        }
       } catch (error) {
         const failure = friendly(error)
         if (!emitted && !options.signal?.aborted && ['REQUEST_FAILED', 'DNS_FAILED', 'RATE_LIMITED', 'PROBE_FAILED', 'MODEL_UNAVAILABLE', 'INSUFFICIENT_CREDITS'].includes(failure.code)) {
@@ -243,7 +253,17 @@ export class ResolvedRouteGateway implements Gateway {
       }
       if (!emitted) {
         const text = fallbackText(raw, protocol)
-        if (text) yield text
+        if (text) {
+          if (bufferSeedText) seedText += text
+          else yield text
+        }
+      }
+      if (bufferSeedText && seedText) {
+        const marker = /<\/think_never_used_[^>]*>/g
+        let last: RegExpExecArray | null = null
+        for (let match = marker.exec(seedText); match; match = marker.exec(seedText)) last = match
+        const visible = last ? seedText.slice(last.index + last[0].length) : seedText
+        if (visible) yield visible
       }
       for (const call of [...calls.entries()].sort(([a], [b]) => a - b).map(([, value]) => value)) {
         let args: unknown

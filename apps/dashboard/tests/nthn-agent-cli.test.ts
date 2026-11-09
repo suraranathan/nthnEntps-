@@ -79,6 +79,19 @@ test('OpenRouter assembles fragmented parallel tool calls and returns matching r
   assert.deepEqual((bodies[1].messages as any[]).filter(item => item.role === 'tool').map(item => item.tool_call_id), ['a', 'b'])
 })
 
+test('Seed model hides a streamed internal draft before its final answer', async () => {
+  const route = { ref: { connectionId: 'account', nativeModelId: 'bytedance-seed/seed-2.0-code' }, providerId: 'openrouter', connectionRevision: 1 } as ModelRoute
+  const gateway = new gatewayModule.ResolvedRouteGateway({ async *streamInference() {
+    yield 'data: {"choices":[{"delta":{"content":"I should inspect the files first."}}]}\n\n'
+    yield 'data: {"choices":[{"delta":{"content":"</think_never_used_abc123>"}}]}\n\n'
+    yield 'data: {"choices":[{"delta":{"content":"No project files are in this workspace."}}]}\n\n'
+    yield 'data: [DONE]\n\n'
+  } }, async () => route)
+  const output: unknown[] = []
+  for await (const item of gateway.stream([{ role: 'user', content: 'Inspect' }])) output.push(item)
+  assert.deepEqual(output, ['No project files are in this workspace.'])
+})
+
 test('mobile snapshot exposes persistent messages and one exact pending approval', async () => {
   const modulePath = resolve('server/agent/nthn-agent-mobile.ts')
   assert.equal(existsSync(modulePath), true)

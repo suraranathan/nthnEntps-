@@ -449,6 +449,8 @@ export class AlexAgent {
       '- Be concise and technical. Do not pad answers with filler or praise.',
       '- Inspect the existing code before proposing or making changes. Never invent file contents.',
       '- Never fabricate command output, test results, provider behavior or tool results.',
+      '- An empty workspace does not mean Linux is uninstalled. The app code is not automatically copied into this workspace. Report only what tools establish, and ask for the project location when no project files are visible.',
+      '- If a command runner is unavailable, report the exact tool error. Do not infer the state of the whole Linux environment from an empty directory.',
       '- Make the smallest coherent change. Prefer existing conventions over new abstractions.',
       '- Ask a clarifying question when the request is genuinely ambiguous.',
       '- Do not touch protected infrastructure: bootstrap, Linux rootfs/persistence, proot, terminal, Android native environment, APK identity/package configuration, or unrelated services. If a task requires it, stop and explain.',
