@@ -1,0 +1,58 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.nthnentps.linuxprobe'
+    compileSdk 36
+    ndkVersion '27.2.12479018'
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '0.1-probe'
+    }
+
+    flavorDimensions 'executionPolicy'
+    productFlavors {
+        current {
+            dimension 'executionPolicy'
+            applicationId 'com.nthnentps.linuxprobe.current'
+            targetSdk 36
+        }
+        legacy {
+            dimension 'executionPolicy'
+            applicationId 'com.nthnentps.linuxprobe.legacy'
+            targetSdk 28
+        }
+    }
+
+    sourceSets.main.assets.srcDir "$buildDir/generated/probe/assets"
+    sourceSets.main.jniLibs.srcDir "$buildDir/generated/probe/jniLibs"
+}
+
+// The NDK compiler produces both a real PIE/Bionic executable and the PTY JNI
+// library. Generated binaries stay under build/ and never alter source files.
+tasks.register('compileProbeNative') {
+    inputs.files('src/main/c/native_probe.c', 'src/main/c/pty_probe.c')
+    outputs.files("$buildDir/generated/probe/assets/native-probe",
+                  "$buildDir/generated/probe/jniLibs/arm64-v8a/libptyprobe.so")
+    doLast {
+        def ndk = android.ndkDirectory
+        def toolchain = new File(ndk, 'toolchains/llvm/prebuilt/linux-x86_64/bin')
+        def clang = new File(toolchain, 'aarch64-linux-android24-clang')
+        if (!clang.isFile()) throw new GradleException("ARM64 NDK clang missing: $clang")
+        def assets = file("$buildDir/generated/probe/assets")
+        def libs = file("$buildDir/generated/probe/jniLibs/arm64-v8a")
+        assets.mkdirs()
+        libs.mkdirs()
+        exec {
+            commandLine clang.absolutePath, '-O2', '-fPIE', '-pie',
+                'src/main/c/native_probe.c', '-o', new File(assets, 'native-probe').absolutePath
+        }
+        exec {
+            commandLine clang.absolutePath, '-O2', '-fPIC', '-shared',
+                'src/main/c/pty_probe.c', '-o', new File(libs, 'libptyprobe.so').absolutePath
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn tasks.named('compileProbeNative') }

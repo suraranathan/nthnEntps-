@@ -30,3 +30,8 @@ apps/nthn/*.apk
 apps/nthn/*.sha256
 apps/nthn/*-badging.txt
 apps/nthn/badging.txt
+
+# Local build downloads and bootstrap transfer worktrees
+.artifacts/
+.bootstrap-chunk-transfer/
+.bootstrap-transfer/
