@@ -50,7 +50,9 @@ final class NthnBackend {
 
     private final Context context;
     private final File home;
-    private Process activeProcess;
+    private volatile Process activeProcess;
+
+    interface LineListener { void onLine(String line); }
 
     NthnBackend(Context context) throws IOException {
         this.context = context.getApplicationContext();
@@ -151,7 +153,15 @@ final class NthnBackend {
         return nodeCommand(new File(context.getFilesDir(), "nthn-ai/server/agent/nthn-agent-cli.ts"), command, null, request);
     }
 
+    synchronized CommandResult agentStream(String command, char[] request, LineListener listener) throws IOException, InterruptedException {
+        return nodeCommand(new File(context.getFilesDir(), "nthn-ai/server/agent/nthn-agent-cli.ts"), command, null, request, listener);
+    }
+
     private CommandResult nodeCommand(File script, String command, String argument, char[] inputData) throws IOException, InterruptedException {
+        return nodeCommand(script, command, argument, inputData, null);
+    }
+
+    private CommandResult nodeCommand(File script, String command, String argument, char[] inputData, LineListener listener) throws IOException, InterruptedException {
         NthnAiInstaller.install(context);
         File node = new File(PREFIX, "bin/node");
         if (!node.canExecute() || !script.isFile()) throw new IOException("AI service is unavailable until Linux setup completes");
@@ -172,8 +182,8 @@ final class NthnBackend {
             StringBuilder stdout = new StringBuilder();
             StringBuilder stderr = new StringBuilder();
             IOException[] streamErrors = new IOException[2];
-            Thread stdoutReader = collect(activeProcess.getInputStream(), stdout, streamErrors, 0);
-            Thread stderrReader = collect(activeProcess.getErrorStream(), stderr, streamErrors, 1);
+            Thread stdoutReader = collect(activeProcess.getInputStream(), stdout, streamErrors, 0, listener);
+            Thread stderrReader = collect(activeProcess.getErrorStream(), stderr, streamErrors, 1, null);
             stdoutReader.start();
             stderrReader.start();
             try (OutputStream input = activeProcess.getOutputStream()) {
@@ -192,13 +202,19 @@ final class NthnBackend {
     }
 
     private static Thread collect(final InputStream input, final StringBuilder output,
-                                  final IOException[] errors, final int index) {
+                                  final IOException[] errors, final int index, final LineListener listener) {
         return new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if (output.length() > 0) output.append('\n');
-                    output.append(line);
+                    if (listener != null) {
+                        output.setLength(0);
+                        output.append(line);
+                        listener.onLine(line);
+                    } else {
+                        if (output.length() > 0) output.append('\n');
+                        output.append(line);
+                    }
                 }
             } catch (IOException error) { errors[index] = error; }
         }, "nthn-ai-output-" + index);
@@ -214,7 +230,8 @@ final class NthnBackend {
         return error.isEmpty() ? stdout.toString() : error;
     }
 
-    synchronized void stop() {
-        if (activeProcess != null) activeProcess.destroy();
+    void stop() {
+        Process process = activeProcess;
+        if (process != null) process.destroy();
     }
 }

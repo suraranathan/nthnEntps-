@@ -186,6 +186,9 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   await agent.run(conversation.id, 'Check the app', () => {})
   const prompt = gateway.calls[0][0].content
   assert.match(prompt, /empty workspace.*does not mean.*Linux.*uninstalled/i)
+  assert.match(prompt, /casual conversation/i)
+  assert.match(prompt, /selected project workspace/i)
+  assert.match(prompt, /native tool calls/i)
 })
 
 test('mobile tool policy allows workspace projects but approval-gates every executable action', async t => {
@@ -200,6 +203,17 @@ test('mobile tool policy allows workspace projects but approval-gates every exec
   assert.equal(tools.list().find(tool => tool.name === 'run_command')?.requiresApproval, true)
   assert.equal(tools.list().find(tool => tool.name === 'run_tests')?.requiresApproval, true)
   assert.equal(tools.list().find(tool => tool.name === 'run_build')?.requiresApproval, true)
+})
+
+test('mobile run_tests uses the selected project test script by default', async t => {
+  const { directory } = await workspaceFixture(t)
+  const project = join(directory, 'project')
+  await mkdir(project)
+  await writeFile(join(project, 'package.json'), JSON.stringify({ scripts: { test: "node -e 'console.log(\"PROJECT_TEST_OK\")'" } }))
+  const tools = new ToolRegistry({ taskRoot: '.' })
+  const result = await tools.execute('run_tests', {}, { workspace: project, paths: new PathPolicy({ root: project, writablePrefixes: ['.'] }), signal: new AbortController().signal })
+  assert.equal(result.ok, true, result.output)
+  assert.match(result.output, /PROJECT_TEST_OK/)
 })
 
 test('mobile tools cannot follow sensitive symlinks, search secrets or traverse command arguments', async t => {

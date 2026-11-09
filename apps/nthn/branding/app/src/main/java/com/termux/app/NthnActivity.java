@@ -3,6 +3,7 @@ package com.termux.app;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -108,7 +109,7 @@ public final class NthnActivity extends AppCompatActivity {
     private LinearLayout page() {
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(24), dp(14), dp(24), dp(32));
+        body.setPadding(dp(22), dp(22), dp(22), dp(36));
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(body, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -142,13 +143,21 @@ public final class NthnActivity extends AppCompatActivity {
     private TextView row(String value, View.OnClickListener listener) {
         TextView view = text(value, 16, false, R.color.nthn_text);
         view.setGravity(Gravity.CENTER_VERTICAL);
-        view.setMinHeight(dp(54));
-        view.setPadding(dp(2), 0, dp(2), 0);
+        view.setMinHeight(dp(58));
+        view.setPadding(dp(12), 0, dp(12), 0);
         view.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_nthn_chevron, 0);
         view.setCompoundDrawablePadding(dp(12));
         view.setBackgroundResource(resolveSelectableBackground());
         view.setOnClickListener(listener);
         return view;
+    }
+
+    private GradientDrawable panelBackground() {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(ContextCompat.getColor(this, R.color.nthn_panel));
+        shape.setCornerRadius(dp(16));
+        shape.setStroke(dp(1), ContextCompat.getColor(this, R.color.nthn_divider));
+        return shape;
     }
 
     private Button button(String value, View.OnClickListener listener) {
@@ -162,14 +171,23 @@ public final class NthnActivity extends AppCompatActivity {
 
     private void showHome() {
         final LinearLayout body = page();
-        body.addView(heading("NTHN"));
-        body.addView(text("Your Linux workspace · local tools, files and Jef.", 14, false, R.color.nthn_muted));
-        body.addView(label("Environment"));
+        body.addView(label("NTHN WORKSPACE"));
+        body.addView(heading("Make something today."));
+        body.addView(text("Code with Jef, work in the terminal, and keep your projects here.", 15, false, R.color.nthn_muted));
+        LinearLayout environmentCard = new LinearLayout(this);
+        environmentCard.setOrientation(LinearLayout.VERTICAL);
+        environmentCard.setPadding(dp(18), dp(16), dp(18), dp(16));
+        environmentCard.setBackground(panelBackground());
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardParams.setMargins(0, dp(28), 0, dp(6));
+        body.addView(environmentCard, cardParams);
+        environmentCard.addView(text("LINUX ENVIRONMENT", 11, true, R.color.nthn_accent));
         final TextView status = text("Checking…", 16, false, R.color.nthn_text);
-        body.addView(status);
-        body.addView(label("Open"));
-        body.addView(row("Terminal", v -> NthnNavigation.open(this, "terminal")));
+        status.setPadding(0, dp(10), 0, 0);
+        environmentCard.addView(status);
+        body.addView(label("WORKSPACE"));
         body.addView(row("Jef coding agent", v -> show(NthnNavigation.AI)));
+        body.addView(row("Terminal", v -> NthnNavigation.open(this, "terminal")));
         body.addView(row("Files", v -> show(NthnNavigation.FILES)));
         if (backend == null) { status.setText("Unavailable"); return; }
         runTask(() -> backend.environmentStatus(), value -> {
@@ -196,6 +214,7 @@ public final class NthnActivity extends AppCompatActivity {
         AiWebBridge(WebView web) { this.web = web; }
 
         @JavascriptInterface public String history() { return "[]"; }
+        @JavascriptInterface public boolean darkTheme() { return NthnTheme.isDark(NthnActivity.this); }
 
         @JavascriptInterface public void send(String request) {
             if (request == null || request.trim().isEmpty()) return;
@@ -205,7 +224,7 @@ public final class NthnActivity extends AppCompatActivity {
             executor.execute(() -> {
                 try {
                     if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
-                    NthnBackend.CommandResult result = backend.agent("chat", payload.toCharArray());
+                    NthnBackend.CommandResult result = backend.agentStream("chat-stream", payload.toCharArray(), line -> deliver("progress", line));
                     if (!result.ok()) { deliver("error", aiMessage(result.output)); return; }
                     deliver("snapshot", result.output);
                 } catch (Exception error) { deliver("error", message(error)); }
@@ -213,6 +232,20 @@ public final class NthnActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebProvider(this)); }
+        @JavascriptInterface public void workspace(String path) {
+            if (path == null || path.length() > 500) { deliver("error", "Choose a project folder inside Linux home."); return; }
+            final String payload;
+            try { payload = new JSONObject().put("path", path).toString(); }
+            catch (Exception error) { deliver("error", message(error)); return; }
+            executor.execute(() -> {
+                try {
+                    if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
+                    NthnBackend.CommandResult result = backend.agent("workspace", payload.toCharArray());
+                    if (!result.ok()) { deliver("error", aiMessage(result.output)); return; }
+                    deliver("snapshot", result.output);
+                } catch (Exception error) { deliver("error", message(error)); }
+            });
+        }
         @JavascriptInterface public void newConversation() {
             executor.execute(() -> {
                 try {
@@ -232,7 +265,7 @@ public final class NthnActivity extends AppCompatActivity {
             executor.execute(() -> {
                 try {
                     if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
-                    NthnBackend.CommandResult result = backend.agent("approve", payload.toCharArray());
+                    NthnBackend.CommandResult result = backend.agentStream("approve-stream", payload.toCharArray(), line -> deliver("progress", line));
                     if (!result.ok()) { deliver("error", aiMessage(result.output)); return; }
                     deliver("snapshot", result.output);
                 } catch (Exception error) { deliver("error", message(error)); }

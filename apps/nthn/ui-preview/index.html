@@ -3,26 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#171512" />
-  <title>NTHN chat</title>
+<meta name="theme-color" content="#0b111b" />
+  <title>Jef · NTHN</title>
   <style>
     :root {
       color-scheme: dark;
-      --ink: #ece8df;
-      --muted: #999287;
-      --faint: #68635c;
-      --canvas: #171512;
-      --sidebar: #1d1a16;
-      --surface: #24201b;
-      --surface-strong: #2a251f;
-      --line: #39342d;
-      --line-soft: #2c2823;
-      --accent: #d97757;
-      --accent-soft: #3d2820;
-      --success: #91a987;
-      --danger: #db8b81;
+      --ink: #eef5f7;
+      --muted: #aabac5;
+      --faint: #81919e;
+      --canvas: #0b111b;
+      --sidebar: #101a25;
+      --surface: #172331;
+      --surface-strong: #1d2c3b;
+      --line: #334454;
+      --line-soft: #243443;
+      --accent: #68dce4;
+      --accent-soft: #173d47;
+      --success: #8de6af;
+      --danger: #f4a5a5;
       --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       --mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --ink: #102733;
+      --muted: #526977;
+      --faint: #647d8a;
+      --canvas: #f1f6f8;
+      --sidebar: #eaf2f5;
+      --surface: #ffffff;
+      --surface-strong: #e5f1f4;
+      --line: #bdced6;
+      --line-soft: #d5e2e7;
+      --accent: #087c8f;
+      --accent-soft: #d7edef;
+      --success: #188451;
+      --danger: #b54242;
     }
 
     * { box-sizing: border-box; }
@@ -77,7 +94,7 @@
       width: 30px;
       height: 30px;
       place-items: center;
-      border: 1px solid #61584d;
+      border: 1px solid #54858c;
       border-radius: 8px;
       color: var(--accent);
       font: 700 13px/1 var(--mono);
@@ -135,7 +152,7 @@
     }
 
     .provider:hover { background: var(--surface); }
-    .provider[aria-current="true"] { border-color: #493b32; background: var(--accent-soft); }
+    .provider[aria-current="true"] { border-color: #3d7b86; background: var(--accent-soft); }
 
     .provider-icon {
       display: grid;
@@ -145,7 +162,7 @@
       border: 1px solid var(--line);
       border-radius: 7px;
       background: var(--surface);
-      color: #d8d1c7;
+      color: #d8e9ed;
       font: 600 12px/1 var(--mono);
     }
 
@@ -153,7 +170,7 @@
     .provider-model { margin-top: 3px; overflow: hidden; color: var(--faint); font: 10px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 
     .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
-    .status-dot.connected { background: var(--success); box-shadow: 0 0 0 3px rgb(145 169 135 / 10%); }
+    .status-dot.connected { background: var(--success); box-shadow: 0 0 0 3px rgb(141 230 175 / 12%); }
 
     .provider-note {
       margin: auto 18px 18px;
@@ -163,7 +180,7 @@
       font: 10px/1.55 var(--mono);
     }
 
-    .workspace { display: flex; min-width: 0; flex-direction: column; }
+    .workspace { display: flex; min-width: 0; flex-direction: column; background: linear-gradient(165deg, #122334 0, var(--canvas) 240px); }
 
     .topbar {
       display: flex;
@@ -172,7 +189,7 @@
       min-height: 58px;
       padding: max(10px, env(safe-area-inset-top)) 22px 10px;
       border-bottom: 1px solid var(--line-soft);
-      background: rgb(23 21 18 / 92%);
+      background: rgb(11 17 27 / 92%);
       backdrop-filter: blur(12px);
     }
 
@@ -188,7 +205,7 @@
     }
 
     .thread-title { min-width: 0; flex: 1; }
-    .thread-name { overflow: hidden; font: 500 13px/1.3 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .thread-name { overflow: hidden; font: 600 14px/1.3 var(--sans); text-overflow: ellipsis; white-space: nowrap; }
     .thread-meta { margin-top: 3px; color: var(--faint); font: 10px/1.2 var(--mono); }
 
     .model-chip {
@@ -202,6 +219,35 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+    .workspace-switch {
+      max-width: 34vw;
+      overflow: hidden;
+      padding: 7px 10px;
+      border: 1px solid #457282;
+      border-radius: 7px;
+      background: #193746;
+      color: #b8edf0;
+      cursor: pointer;
+      font: 11px/1 var(--mono);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .workspace-switch:hover { background: #215064; }
+
+    .activity-status { display: none; align-items: center; gap: 9px; width: min(100%, 820px); margin: 0 auto; padding: 0 34px 12px; color: var(--accent); font: 12px/1.3 var(--mono); }
+    .activity-status.visible { display: flex; }
+    .activity-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .35; transform: scale(.72); } }
+
+    .welcome { max-width: 680px; margin: 8vh auto 0; padding: 0 8px; }
+    .welcome-kicker { color: var(--accent); font: 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+    .welcome h1 { margin: 17px 0 12px; font: 600 clamp(28px, 4vw, 42px)/1.12 var(--sans); letter-spacing: -.04em; }
+    .welcome p { max-width: 58ch; color: var(--muted); line-height: 1.6; }
+    .welcome-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 25px; }
+    .welcome-actions button { padding: 10px 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; }
+    .welcome-actions button:hover { border-color: #5fa3ae; background: var(--surface-strong); }
 
     .conversation {
       flex: 1;
@@ -233,27 +279,35 @@
       font: 600 10px/1 var(--mono);
     }
 
-    .message.assistant .message-mark { border-color: #604334; color: var(--accent); }
+    .message.assistant .message-mark { border-color: #54858c; color: var(--accent); }
 
     .message-author { margin: 3px 0 9px; color: var(--muted); font: 11px/1 var(--mono); }
-    .message-body { max-width: 68ch; color: #dcd7ce; font-size: 14px; line-height: 1.72; }
-    .message-body p { margin: 0 0 12px; }
+    .message-body { max-width: 68ch; color: #ddeaf0; font-size: 14px; line-height: 1.72; }
+    .message-body p { margin: 0 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
     .message-body p:last-child { margin-bottom: 0; }
 
     .code-line {
       margin: 14px 0 2px;
       padding: 11px 13px;
       border-left: 2px solid var(--accent);
-      background: #1d1a16;
-      color: #c8c1b7;
+      background: #111d2a;
+      color: #c8dae4;
       font: 12px/1.55 var(--mono);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
 
-    .approval-card { margin-top: 14px; padding: 13px; border: 1px solid #604334; border-radius: 8px; background: var(--accent-soft); }
+    .tool-details { margin: 10px 0; border: 1px solid var(--line); border-radius: 8px; background: #111d2a; overflow: hidden; }
+    .tool-details summary { padding: 10px 12px; color: #c8dae4; cursor: pointer; font: 12px/1.4 var(--mono); }
+    .tool-details summary::marker { color: var(--accent); }
+    .tool-details pre { margin: 0; padding: 12px; border-top: 1px solid var(--line-soft); color: var(--muted); font: 11px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .tool-details.failed summary, .tool-details.denied summary { color: var(--danger); }
+
+    .approval-card { margin-top: 14px; padding: 13px; border: 1px solid #54858c; border-radius: 8px; background: var(--accent-soft); }
     .approval-card p { color: var(--ink); font: 12px/1.5 var(--mono); }
     .approval-actions { display: flex; gap: 8px; margin-top: 10px; }
     .approval-actions button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; font: 11px/1 var(--mono); }
-    .approval-actions .approve { border-color: var(--accent); background: var(--accent); color: #1d1410; font-weight: 700; }
+    .approval-actions .approve { border-color: var(--accent); background: var(--accent); color: #09202a; font-weight: 700; }
     .thread-action { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; font: 11px/1 var(--mono); }
 
     .composer-wrap {
@@ -264,7 +318,7 @@
     .composer {
       width: min(100%, 820px);
       margin: 0 auto;
-      border: 1px solid #494239;
+      border: 1px solid #446174;
       border-radius: 10px;
       background: var(--surface);
       box-shadow: 0 18px 48px rgb(0 0 0 / 18%);
@@ -285,7 +339,7 @@
       line-height: 1.5;
     }
 
-    .composer textarea::placeholder { color: #777067; }
+    .composer textarea::placeholder { color: #8a9ba9; }
 
     .composer-footer { display: flex; align-items: center; gap: 10px; padding: 8px 9px 9px 15px; }
     .composer-hint { flex: 1; color: var(--faint); font: 10px/1.2 var(--mono); }
@@ -298,7 +352,7 @@
       border: 0;
       border-radius: 7px;
       background: var(--accent);
-      color: #1d1410;
+      color: #09202a;
       cursor: pointer;
       font: 700 16px/1 var(--mono);
     }
@@ -310,7 +364,7 @@
     dialog {
       width: min(92vw, 430px);
       padding: 0;
-      border: 1px solid #50483e;
+      border: 1px solid #446174;
       border-radius: 12px;
       background: var(--surface);
       color: var(--ink);
@@ -336,7 +390,20 @@
     .security-note { color: var(--faint); font: 10px/1.5 var(--mono); }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 0 18px 18px; }
     .button { padding: 9px 13px; border: 1px solid var(--line); border-radius: 7px; background: transparent; cursor: pointer; font: 11px/1 var(--mono); }
-    .button.primary { border-color: var(--accent); background: var(--accent); color: #1d1410; font-weight: 700; }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: #09202a; font-weight: 700; }
+
+    .project-list { display: grid; gap: 7px; max-height: 38vh; overflow-y: auto; }
+    .project-choice { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); color: var(--ink); text-align: left; cursor: pointer; }
+    .project-choice:hover { border-color: var(--accent); }
+    .project-choice[aria-current="true"] { border-color: #5fa3ae; background: var(--accent-soft); }
+
+    :root[data-theme="light"] .workspace { background: linear-gradient(165deg, #dceef2 0, var(--canvas) 240px); }
+    :root[data-theme="light"] .topbar { background: rgb(241 246 248 / 92%); }
+    :root[data-theme="light"] .workspace-switch { background: #d7edef; border-color: #7bb3bb; color: #0b5665; }
+    :root[data-theme="light"] .message-body { color: #203b48; }
+    :root[data-theme="light"] .code-line, :root[data-theme="light"] .tool-details { background: #edf4f6; color: #294a57; }
+    :root[data-theme="light"] .tool-details summary, :root[data-theme="light"] .tool-details pre { color: #294a57; }
+    :root[data-theme="light"] .send-button, :root[data-theme="light"] .button.primary, :root[data-theme="light"] .approval-actions .approve { color: #ffffff; }
 
     @media (max-width: 720px) {
       .app { display: block; }
@@ -355,7 +422,11 @@
       .workspace { height: 100dvh; }
       .menu-button { display: grid; }
       .topbar { padding-inline: 14px; }
+      .workspace-switch { max-width: 29vw; }
+      .model-chip { display: none; }
       .messages { padding: 32px 18px 20px; }
+      .activity-status { padding-inline: 18px; }
+      .welcome { margin-top: 5vh; }
       .message { grid-template-columns: 24px minmax(0, 1fr); gap: 11px; margin-bottom: 26px; }
       .message-mark { width: 24px; height: 24px; }
       .message-body { font-size: 13.5px; line-height: 1.65; }
@@ -365,7 +436,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
     }
   </style>
 </head>
@@ -376,7 +447,7 @@
         <div class="brand-mark" aria-hidden="true">N</div>
         <div class="brand-copy">
           <div class="brand-name">nthn</div>
-          <div class="brand-subtitle">AI workspace</div>
+          <div class="brand-subtitle">Build with Jef</div>
         </div>
       </div>
 
@@ -393,7 +464,7 @@
         </button>
       </div>
 
-      <p class="provider-note">Add provider accounts here. Keys stay in the app's encrypted private vault.</p>
+      <p class="provider-note">Add accounts for automatic model selection. Keys stay in the app's encrypted private vault.</p>
     </aside>
 
     <button class="backdrop" id="backdrop" aria-label="Close provider sidebar"></button>
@@ -405,6 +476,7 @@
           <div class="thread-name">New conversation</div>
           <div class="thread-meta" id="provider-meta">Checking AI providers…</div>
         </div>
+        <button class="workspace-switch" id="workspace-switch" type="button" aria-label="Choose project folder">~/</button>
         <button class="thread-action" id="new-conversation" type="button">New</button>
         <div class="model-chip" id="model-chip">automatic</div>
       </header>
@@ -414,9 +486,11 @@
         </div>
       </section>
 
+      <div class="activity-status" id="activity-status" role="status"><span class="activity-dot" aria-hidden="true"></span><span>Jef is working…</span></div>
+
       <div class="composer-wrap">
         <form class="composer" id="composer">
-          <textarea id="message-input" rows="2" placeholder="Message nthn…" aria-label="Message nthn"></textarea>
+          <textarea id="message-input" rows="2" placeholder="Ask Jef to inspect, build, fix, or just talk…" aria-label="Message Jef"></textarea>
           <div class="composer-footer">
             <span class="composer-hint">Enter to send · Shift + Enter for a new line</span>
             <button class="send-button" id="send-button" type="submit" aria-label="Send message" disabled>↑</button>
@@ -450,7 +524,20 @@
     </form>
   </dialog>
 
+  <dialog id="workspace-dialog" aria-labelledby="workspace-dialog-title">
+    <form id="workspace-form">
+      <div class="dialog-head"><span class="dialog-title" id="workspace-dialog-title">Choose a project</span><button type="button" class="dialog-close" id="close-workspace" aria-label="Close">×</button></div>
+      <div class="dialog-body">
+        <p class="security-note">Jef can work in a folder inside Linux home. Each project has its own conversation.</p>
+        <div class="project-list" id="project-list"></div>
+        <div class="field"><label for="workspace-path">Or enter a relative folder path</label><input id="workspace-path" type="text" placeholder="my-project or projects/my-app" autocomplete="off" /></div>
+      </div>
+      <div class="dialog-actions"><button class="button" type="button" id="cancel-workspace">Cancel</button><button class="button primary" type="submit">Use project</button></div>
+    </form>
+  </dialog>
+
   <script>
+    if (window.NthnAI?.darkTheme && !window.NthnAI.darkTheme()) document.documentElement.dataset.theme = 'light';
     const app = document.querySelector('#app');
     const menuButton = document.querySelector('#menu-button');
     const backdrop = document.querySelector('#backdrop');
@@ -463,8 +550,24 @@
     const modelInput = document.querySelector('#model-name');
     const apiKeyInput = document.querySelector('#api-key');
     const providerList = document.querySelector('#provider-list');
+    const workspaceDialog = document.querySelector('#workspace-dialog');
+    const workspacePath = document.querySelector('#workspace-path');
+    const projectList = document.querySelector('#project-list');
+    const activityStatus = document.querySelector('#activity-status');
     let activeProvider = document.querySelector('.provider[aria-current="true"]');
     let currentSnapshot = null;
+    let busy = false;
+    let liveMessageId = null;
+    let liveBody = null;
+
+    function setBusy(value) {
+      busy = value;
+      activityStatus.classList.toggle('visible', value);
+      input.disabled = value;
+      sendButton.disabled = value || !input.value.trim();
+      document.querySelector('#new-conversation').disabled = value;
+      document.querySelector('#workspace-switch').disabled = value;
+    }
 
     function setSidebar(open) {
       app.classList.toggle('sidebar-open', open);
@@ -513,14 +616,92 @@
         body.append(paragraph);
       }
       for (const call of item.toolCalls || []) {
-        const output = document.createElement('div');
-        output.className = 'code-line';
-        output.textContent = `${call.status === 'succeeded' ? '✓' : call.status === 'failed' ? '×' : '›'} ${call.summary || call.tool}${call.output ? `\n${call.output}` : ''}`;
-        body.append(output);
+        const detail = document.createElement('details');
+        detail.className = `tool-details ${call.status}`;
+        const title = document.createElement('summary');
+        title.textContent = `${call.status === 'succeeded' ? '✓' : call.status === 'failed' || call.status === 'denied' ? '×' : '›'} ${call.summary || call.tool} · ${call.status}`;
+        detail.append(title);
+        if (call.output) {
+          const output = document.createElement('pre');
+          output.textContent = call.output;
+          detail.append(output);
+        }
+        body.append(detail);
       }
       wrap.append(author, body);
       article.append(mark, wrap);
       messages.append(article);
+      return article;
+    }
+
+    function renderProgress(raw) {
+      let packet;
+      try { packet = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (_) { return; }
+      const progress = packet?.progress;
+      if (!progress || !busy) return;
+      const activityText = activityStatus.querySelector('span:last-child');
+      if (progress.type === 'start') {
+        liveMessageId = progress.messageId;
+        liveBody = appendMessage({ role: 'assistant', content: '' }).querySelector('.message-body');
+        activityText.textContent = 'Jef is thinking…';
+      } else if (progress.type === 'delta') {
+        if (liveMessageId !== progress.messageId || !liveBody) {
+          liveMessageId = progress.messageId;
+          liveBody = appendMessage({ role: 'assistant', content: '' }).querySelector('.message-body');
+        }
+        let paragraph = liveBody.querySelector('p');
+        if (!paragraph) { paragraph = document.createElement('p'); liveBody.append(paragraph); }
+        paragraph.textContent += progress.text || '';
+        activityText.textContent = 'Jef is writing…';
+      } else if (progress.type === 'tool' || progress.type === 'tool-output') {
+        activityText.textContent = `${progress.type === 'tool' ? 'Running' : 'Finished'} · ${progress.summary || progress.tool}`;
+        if (progress.type === 'tool-output' && liveBody) {
+          const output = document.createElement('div'); output.className = 'code-line';
+          output.textContent = `${progress.status === 'succeeded' ? '✓' : '×'} ${progress.summary || progress.tool}${progress.output ? `\n${progress.output}` : ''}`;
+          liveBody.append(output);
+        }
+      } else if (progress.type === 'approval') {
+        activityText.textContent = 'Jef is waiting for your approval…';
+      } else if (progress.type === 'done') {
+        activityText.textContent = 'Finishing…';
+      }
+      conversation.scrollTop = conversation.scrollHeight;
+    }
+
+    function showWelcome(snapshot) {
+      const empty = snapshot?.workspaceStatus === 'empty';
+      const welcome = document.createElement('div'); welcome.className = 'welcome';
+      const kicker = document.createElement('div'); kicker.className = 'welcome-kicker'; kicker.textContent = empty ? 'Project needed' : 'Jef coding workspace';
+      const heading = document.createElement('h1'); heading.textContent = empty ? 'Give Jef a project to work on.' : 'What are we building today?';
+      const description = document.createElement('p');
+      description.textContent = empty
+        ? 'Your selected folder has no visible project files. Create or clone a project in Terminal or Files, then choose its folder here. You can still chat with Jef.'
+        : 'Jef can inspect your files, propose edits, run allowed development commands, and explain what changed. You approve file changes and commands before they run.';
+      const actions = document.createElement('div'); actions.className = 'welcome-actions';
+      const choose = document.createElement('button'); choose.type = 'button'; choose.textContent = 'Choose project'; choose.addEventListener('click', () => workspaceDialog.showModal()); actions.append(choose);
+      if (!empty) for (const suggestion of ['Inspect this project', 'Find and fix an issue', 'Explain this codebase']) {
+        const button = document.createElement('button'); button.type = 'button'; button.textContent = suggestion;
+        button.addEventListener('click', () => { input.value = suggestion; input.dispatchEvent(new Event('input')); input.focus(); });
+        actions.append(button);
+      }
+      welcome.append(kicker, heading, description, actions); messages.append(welcome);
+    }
+
+    function renderProjects(snapshot) {
+      projectList.textContent = '';
+      const choices = [{ label: 'Linux home', path: '.' }, ...(snapshot.projects || []).map(path => ({ label: path, path }))];
+      for (const choice of choices) {
+        const button = document.createElement('button'); button.className = 'project-choice'; button.type = 'button';
+        button.textContent = choice.label; button.setAttribute('aria-current', String(choice.path === snapshot.workspaceRelative));
+        button.addEventListener('click', () => selectWorkspace(choice.path)); projectList.append(button);
+      }
+    }
+
+    function selectWorkspace(path) {
+      if (busy) return;
+      workspaceDialog.close();
+      if (window.NthnAI) { setBusy(true); window.NthnAI.workspace(path); }
+      else renderSnapshot({ messages: [], title: 'New conversation', workspaceRelative: path, workspaceStatus: 'empty', projects: currentSnapshot?.projects || [] });
     }
 
     function renderSnapshot(raw) {
@@ -529,10 +710,15 @@
       const snapshot = envelope?.snapshot || envelope;
       if (!snapshot || !Array.isArray(snapshot.messages)) return;
       currentSnapshot = snapshot;
+      liveMessageId = null;
+      liveBody = null;
       messages.textContent = '';
-      snapshot.messages.forEach(appendMessage);
+      if (!snapshot.messages.length) showWelcome(snapshot);
+      else snapshot.messages.filter(item => item.role !== 'tool').forEach(appendMessage);
       document.querySelector('.thread-name').textContent = snapshot.title || 'New conversation';
       document.querySelector('#model-chip').textContent = snapshot.model || 'automatic';
+      document.querySelector('#workspace-switch').textContent = snapshot.workspaceRelative && snapshot.workspaceRelative !== '.' ? `⌁ ${snapshot.workspaceRelative}` : '⌁ Linux home';
+      renderProjects(snapshot);
       document.querySelector('#provider-meta').textContent = snapshot.workspaceStatus === 'empty'
         ? `Empty workspace · ${snapshot.workspace}`
         : snapshot.workspaceStatus === 'unavailable'
@@ -552,13 +738,14 @@
         const deny = document.createElement('button'); deny.textContent = 'Deny';
         const decide = (approved) => {
           approve.disabled = true; deny.disabled = true;
-          if (window.NthnAI) window.NthnAI.approve(pendingApproval.conversationId, pendingApproval.approvalId, approved);
+          if (window.NthnAI) { setBusy(true); window.NthnAI.approve(pendingApproval.conversationId, pendingApproval.approvalId, approved); }
         };
         approve.addEventListener('click', () => decide(true));
         deny.addEventListener('click', () => decide(false));
         actions.append(approve, deny); card.append(text, actions); wrap.append(author, card); article.append(mark, wrap); messages.append(article);
       }
       conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
+      setBusy(false);
     }
 
     function renderAccounts(raw) {
@@ -583,7 +770,11 @@
     }
 
     document.querySelector('#add-provider').addEventListener('click', openProviderDialog);
-    document.querySelector('#new-conversation').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.newConversation(); else renderSnapshot({ messages: [], title: 'New conversation' }); });
+    document.querySelector('#workspace-switch').addEventListener('click', () => { if (!busy) workspaceDialog.showModal(); });
+    document.querySelector('#close-workspace').addEventListener('click', () => workspaceDialog.close());
+    document.querySelector('#cancel-workspace').addEventListener('click', () => workspaceDialog.close());
+    document.querySelector('#workspace-form').addEventListener('submit', event => { event.preventDefault(); if (workspacePath.value.trim()) selectWorkspace(workspacePath.value.trim()); });
+    document.querySelector('#new-conversation').addEventListener('click', () => { if (window.NthnAI) { setBusy(true); window.NthnAI.newConversation(); } else renderSnapshot({ messages: [], title: 'New conversation', workspaceRelative: currentSnapshot?.workspaceRelative || '.', projects: currentSnapshot?.projects || [] }); });
     menuButton.addEventListener('click', () => setSidebar(!app.classList.contains('sidebar-open')));
     backdrop.addEventListener('click', () => setSidebar(false));
     window.addEventListener('keydown', (event) => {
@@ -591,7 +782,7 @@
     });
 
     input.addEventListener('input', () => {
-      sendButton.disabled = !input.value.trim();
+      sendButton.disabled = busy || !input.value.trim();
       input.style.height = 'auto';
       input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
     });
@@ -606,9 +797,10 @@
     document.querySelector('#composer').addEventListener('submit', (event) => {
       event.preventDefault();
       const text = input.value.trim();
-      if (!text) return;
+      if (!text || busy) return;
+      if (!currentSnapshot?.messages?.length) messages.textContent = '';
       appendMessage({ role: 'user', content: text });
-      if (window.NthnAI) window.NthnAI.send(text);
+      if (window.NthnAI) { setBusy(true); window.NthnAI.send(text); }
 
       input.value = '';
       input.style.height = 'auto';
@@ -625,8 +817,10 @@
         document.querySelector('#provider-meta').textContent = value;
       }
       if (kind === 'accounts') renderAccounts(value);
+      if (kind === 'progress') renderProgress(value);
       if (kind === 'snapshot') renderSnapshot(value);
       if (kind === 'error') {
+        setBusy(false);
         appendMessage({ role: 'assistant', content: value });
         conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
       }
@@ -636,9 +830,9 @@
       if (window.NthnAI) event.preventDefault();
     });
     if (window.NthnAI) {
-      messages.textContent = '';
+      showWelcome(null);
       window.NthnAI.status();
-    }
+    } else showWelcome(null);
   </script>
 </body>
 </html>

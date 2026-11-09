@@ -11,19 +11,24 @@ import { AlexAgent, type AgentEvent } from './agent.ts'
 import { ResolvedRouteGateway } from './gateway.ts'
 import { AgentChatStore } from './store.ts'
 import { PermissionError } from './permissions.ts'
-import { mobileAgentSnapshot } from './nthn-agent-mobile.ts'
+import { mobileAgentProgress, mobileAgentSnapshot } from './nthn-agent-mobile.ts'
+import { chooseMobileWorkspace, listMobileProjects, loadMobileWorkspace } from './mobile-workspace.ts'
 
 const appRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)))
 const providerDirectory = resolve(appRoot, '.local/ai')
 const agentDirectory = resolve(appRoot, '.local/agent')
 const selectedPath = join(providerDirectory, 'selected-route.json')
-const workspace = resolve(process.env.NTHN_AGENT_WORKSPACE || process.env.HOME || join(appRoot, 'workspace'))
+const home = resolve(process.env.NTHN_AGENT_WORKSPACE || process.env.HOME || join(appRoot, 'workspace'))
 const help = `nthn Jef coding agent
   nthn-agent state
   nthn-agent chat < request.json
+  nthn-agent chat-stream < request.json
   nthn-agent new
+  nthn-agent workspace < request.json
   nthn-agent approve < request.json
+  nthn-agent approve-stream < request.json
 Chat JSON: {"text":"...","conversationId":"optional"}
+Workspace JSON: {"path":"project-folder"} or {"path":"."} for Linux home
 Approval JSON: {"conversationId":"...","approvalId":"...","approved":true}`
 
 function input(): Record<string, unknown> {
@@ -102,17 +107,24 @@ async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
 
 async function main(): Promise<void> {
   const [command = 'help', ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'state', 'chat', 'new', 'approve'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); return }
+
+  let choice = loadMobileWorkspace(home, agentDirectory)
+  if (command === 'workspace') {
+    const body = input()
+    if (typeof body.path !== 'string') throw new ManagementError('INVALID_INPUT')
+    choice = chooseMobileWorkspace(home, agentDirectory, body.path)
+  }
 
   manager = new ConnectionManager(providerDirectory)
   catalog = new CatalogService(manager)
   verification = new VerificationService(manager, catalog)
   const saved = selected()
   const gateway = new ResolvedRouteGateway(manager, resolveRoute, saved?.modelId ? { provider: 'configured', model: saved.modelId, transport: 'streaming' } : null)
-  const store = new AgentChatStore(agentDirectory)
+  const store = new AgentChatStore(choice.storeDirectory)
   const agent = new AlexAgent({
-    store, gateway, workspace, name: 'Jef',
+    store, gateway, workspace: choice.workspace, name: 'Jef',
     writablePrefixes: ['.'],
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],
     protectedPaths: ['provider vault', 'credentials', 'Android app files outside Linux home'],
@@ -122,20 +134,30 @@ async function main(): Promise<void> {
   })
   await agent.load()
   const events: AgentEvent[] = []
+  const streaming = command === 'chat-stream' || command === 'approve-stream'
+  const emit = (event: AgentEvent): void => {
+    if (!streaming) { events.push(event); return }
+    const progress = mobileAgentProgress(event)
+    if (progress) console.log(JSON.stringify({ progress }))
+  }
   if (command === 'new') {
     await agent.newConversation()
-  } else if (command === 'chat') {
+  } else if (command === 'chat' || command === 'chat-stream') {
     const body = input()
     if (typeof body.text !== 'string') throw new ManagementError('INVALID_INPUT')
     let conversationId = typeof body.conversationId === 'string' ? body.conversationId : agent.state().activeId
     if (!conversationId || !agent.conversation(conversationId)) conversationId = (await agent.newConversation()).id
-    await agent.run(conversationId, body.text, event => events.push(event))
-  } else if (command === 'approve') {
+    await agent.run(conversationId, body.text, emit)
+  } else if (command === 'approve' || command === 'approve-stream') {
     const body = input()
     if (typeof body.conversationId !== 'string' || typeof body.approvalId !== 'string' || typeof body.approved !== 'boolean') throw new ManagementError('INVALID_INPUT')
-    await agent.approve(body.conversationId, body.approvalId, body.approved, event => events.push(event))
+    await agent.approve(body.conversationId, body.approvalId, body.approved, emit)
   }
-  console.log(JSON.stringify({ snapshot: mobileAgentSnapshot(agent.state()), events }))
+  console.log(JSON.stringify({ snapshot: {
+    ...mobileAgentSnapshot(agent.state()),
+    workspaceRelative: choice.relative,
+    projects: listMobileProjects(home),
+  }, events }))
 }
 
 try { await main() }

@@ -146,12 +146,12 @@ export async function runProcess(
       const prefix = resolvePath(process.execPath, '../..')
       const proot = join(prefix, 'bin/proot')
       if (!existsSync(proot)) {
-        resolve({ ok: false, summary: 'The confined command runner is unavailable.', output: 'Install the app Linux environment before running commands.' })
+        resolve({ ok: false, summary: 'The confined command runner (proot) is unavailable.', output: 'The app runtime is missing proot. Reopen NTHN after updating, then try again.' })
         return
       }
       const guestCwd = '/' + relative(context.workspace, cwd).split('\\').join('/')
       sandboxCwd = guestCwd
-      const bindings = [prefix, '/system', '/apex', '/vendor', '/proc'].filter(path => existsSync(path))
+      const bindings = [prefix, '/system', '/apex', '/vendor', '/proc', '/linkerconfig'].filter(path => existsSync(path))
       program = proot
       args = ['--kill-on-exit', '-r', context.workspace]
       for (const binding of bindings) args.push('-b', `${binding}:${binding}`)
@@ -333,6 +333,7 @@ export class ToolRegistry {
 
 function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const taskRoot = options.taskRoot ?? 'apps/dashboard'
+  const defaultTestCommand = taskRoot === '.' ? 'npm test' : 'node --test --test-concurrency=1 tests/*.test.ts'
   const commandApproval = options.requireCommandApproval ?? false
   const sandboxCommands = options.sandboxCommands ?? false
   return [
@@ -472,13 +473,13 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
     },
     {
       name: 'run_tests',
-      description: 'Run the dashboard test suite (node --test). Optional command override must remain a test command.',
+      description: 'Run the selected project test suite. Optional command override must remain a test command.',
       requiresApproval: commandApproval,
       required: [],
       arguments: { command: 'string' },
-      summarize: args => `Run tests: ${stringArg(args, 'command', 'node --test --test-concurrency=1 tests/*.test.ts')}`,
+      summarize: args => `Run tests: ${stringArg(args, 'command', defaultTestCommand)}`,
       execute: async (args, context) => {
-        const command = stringArg(args, 'command', 'node --test --test-concurrency=1 tests/*.test.ts')
+        const command = stringArg(args, 'command', defaultTestCommand)
         if (!/\b(test|spec|node\s+--test)\b/.test(command)) return { ok: false, summary: 'run_tests only accepts test commands.', output: command }
         const cwd = await context.paths.resolveExisting(taskRoot)
         return await runProcess(command, context, cwd, context.timeoutMs ?? 120_000, sandboxCommands)
@@ -486,7 +487,7 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
     },
     {
       name: 'run_build',
-      description: 'Run the dashboard production build (npm run build). Optional command override must remain a build/typecheck command.',
+      description: 'Run the selected project build (npm run build). Optional command override must remain a build/typecheck command.',
       requiresApproval: commandApproval,
       required: [],
       arguments: { command: 'string' },

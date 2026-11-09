@@ -32,8 +32,16 @@ REQUIRED_BOOTSTRAP_FILES = (
     "bin/apt",
     "bin/apt-get",
     "bin/dpkg",
+    "bin/proot",
     "var/lib/dpkg/status",
     "SYMLINKS.txt",
+)
+
+REQUIRED_RUNTIME_ASSETS = (
+    "assets/nthn-ai/runtime/bin/proot",
+    "assets/nthn-ai/runtime/libexec/proot/loader",
+    "assets/nthn-ai/runtime/lib/libtalloc.so.2",
+    "assets/nthn-ai/runtime/lib/libandroid-shmem.so",
 )
 
 
@@ -112,6 +120,9 @@ def main() -> None:
         if bad is not None:
             fail(f"corrupt APK member {bad!r}")
         names = zf.namelist()
+        for required in REQUIRED_RUNTIME_ASSETS:
+            if required not in names or zf.getinfo(required).file_size == 0:
+                fail(f"missing proot upgrade asset {required!r}")
         abi_dirs = sorted({name.split("/")[1] for name in names if name.startswith("lib/")})
         if abi_dirs != ["arm64-v8a"]:
             fail(f"unexpected native ABI directories: {abi_dirs}")

@@ -1,4 +1,4 @@
-import type { AgentState } from './agent.ts'
+import type { AgentState, AgentEvent } from './agent.ts'
 import type { AgentMessage, ToolCallRecord } from './store.ts'
 import { readdirSync } from 'node:fs'
 
@@ -19,6 +19,25 @@ export interface MobileAgentSnapshot {
   model: string | null
   workspace: string
   workspaceStatus: 'empty' | 'populated' | 'unavailable'
+}
+
+export function mobileAgentProgress(event: AgentEvent): Record<string, unknown> | null {
+  switch (event.type) {
+    case 'start': case 'done': case 'cancelled':
+      return { type: event.type, messageId: event.messageId }
+    case 'delta':
+      return { type: 'delta', messageId: event.messageId, text: event.text }
+    case 'tool': case 'tool-output': case 'approval':
+      return {
+        type: event.type, messageId: event.messageId, tool: event.call.tool,
+        status: event.call.status, summary: event.call.summary ?? event.call.tool,
+        ...(event.type === 'tool-output' && event.call.output ? { output: event.call.output.slice(0, 2000) } : {}),
+      }
+    case 'error':
+      return { type: 'error', message: event.message, code: event.code }
+    case 'decision':
+      return null
+  }
 }
 
 export function mobileAgentSnapshot(state: AgentState): MobileAgentSnapshot {

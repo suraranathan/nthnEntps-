@@ -124,6 +124,17 @@ test('the packaged agent CLI entry point exists', () => {
   assert.equal(existsSync(resolve('server/agent/nthn-agent-cli.ts')), true)
 })
 
+test('mobile progress reports tool activity without exposing tool arguments', async () => {
+  const mobile = await import('../server/agent/nthn-agent-mobile.ts')
+  const event = { type: 'tool-output', conversationId: 'c', messageId: 'm', call: {
+    id: 'call', tool: 'write_file', arguments: { content: 'private source text' }, status: 'succeeded', summary: 'Wrote app.ts', output: 'Wrote app.ts',
+  } } as unknown as import('../server/agent/agent.ts').AgentEvent
+  const progress = mobile.mobileAgentProgress(event)
+  assert.deepEqual(progress, { type: 'tool-output', messageId: 'm', tool: 'write_file', status: 'succeeded', summary: 'Wrote app.ts', output: 'Wrote app.ts' })
+  assert.doesNotMatch(JSON.stringify(progress), /private source text/)
+  assert.deepEqual(mobile.mobileAgentProgress({ type: 'delta', conversationId: 'c', messageId: 'm', text: 'Hello' }), { type: 'delta', messageId: 'm', text: 'Hello' })
+})
+
 test('mobile snapshot distinguishes empty and populated project workspaces', async () => {
   const root = mkdtempSync(join(tmpdir(), 'nthn-workspace-'))
   try {
