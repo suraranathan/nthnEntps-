@@ -20,6 +20,8 @@ Jef works in a selected project folder inside `/data/data/com.nthn/files/home`. 
 
 V1.2 bundles an editable snapshot of the tracked NTHN repository source at `~/nthnEntps` inside the app's Linux home. Jef selects this project on first use. The installer creates it once and preserves edits across app updates. This snapshot includes NTHN's Android overlay, agent and workflows; it is not the full upstream Termux checkout or a Git clone. The APK records the source revision in `assets/nthn-source-commit.txt`.
 
+V1.3 tells Jef where its agent loop and system prompt live (`apps/dashboard/server/agent/agent.ts`), where the mobile and provider prompts live (`apps/dashboard/server/agent/nthn-agent-cli.ts` and `apps/dashboard/server/ai/nthn-cli.ts`), and where the NTHN backend lives (`apps/dashboard/server/`). Jef can inspect and propose edits to these source files in the selected `nthnEntps` workspace. File changes and commands still require user approval, and private credentials remain inaccessible. The bundled source is a development copy; editing it does not change the running Jef service. Build and install a new APK to apply app changes. Existing source copies are preserved across updates.
+
 `nthn-test-app.yml` checks that the patched app compiles using an upstream bootstrap for compile testing only. `nthn-build.yml` is a legacy label-only build and does not produce `com.nthn`. Use `nthn-build-separate.yml` for the actual app.
 
 Verified on 2026-11-06:

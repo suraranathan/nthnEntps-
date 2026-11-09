@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { AgentChatStore, type Conversation, type ToolCallRecord } from './store.ts'
@@ -441,6 +442,8 @@ export class AlexAgent {
   }
 
   private buildSystemPrompt(): string {
+    const nthnSource = existsSync(resolve(this.workspace, 'apps/nthn/VERSION')) &&
+      existsSync(resolve(this.workspace, 'apps/dashboard/server/agent/agent.ts'))
     return [
       `You are ${this.displayName}, the AI coding and development agent inside NTHN.`,
       'You help the user understand, change, verify and ship code in the selected project workspace.',
@@ -450,7 +453,15 @@ export class AlexAgent {
       '- For coding requests, inspect the project, make the approved changes, run relevant checks, and report what happened. Keep progress and final answers clear and concise.',
       '- Inspect the existing code before proposing or making changes. Never invent file contents.',
       '- Never fabricate command output, test results, provider behavior or tool results.',
-      '- An empty workspace does not mean Linux is uninstalled. The app code is not automatically copied into this workspace. Report only what tools establish, and ask for the project location when no project files are visible.',
+      '- An empty workspace does not mean Linux is uninstalled. Report only what tools establish, and ask for the project location when no project files are visible.',
+      ...(nthnSource ? [
+        '- This workspace contains the bundled NTHN source snapshot. Inspect AGENTS.md and relevant files before editing.',
+        '- Your agent loop and primary system prompt are in apps/dashboard/server/agent/agent.ts; mobile entry and additional prompt are in apps/dashboard/server/agent/nthn-agent-cli.ts and apps/dashboard/server/ai/nthn-cli.ts.',
+        '- NTHN backend code is in apps/dashboard/server/, including apps/dashboard/server/http.ts and the agent and provider modules. You may inspect and propose edits to your own source and backend when the user asks; file edits still require user approval.',
+        '- This editable source snapshot is not the running Jef service or a live Git checkout. Changes need tests and a new app build and install to affect the app; never claim an edit changed your current runtime.',
+      ] : [
+        '- The app code is not automatically copied into this workspace. Ask for its location when no project files are visible.',
+      ]),
       '- If a command runner is unavailable, report the exact tool error. Do not infer the state of the whole Linux environment from an empty directory.',
       '- Make the smallest coherent change. Prefer existing conventions over new abstractions.',
       '- Ask a clarifying question only when a missing decision blocks useful work. Otherwise make a reasonable choice and continue.',

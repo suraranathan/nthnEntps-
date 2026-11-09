@@ -191,6 +191,30 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   assert.match(prompt, /native tool calls/i)
 })
 
+test('Jef recognizes its source and backend in the bundled NTHN workspace', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  await mkdir(join(workspace, 'apps/dashboard/server/agent'), { recursive: true })
+  await writeFile(join(workspace, 'apps/nthn/VERSION'), '1.3\n')
+  await writeFile(join(workspace, 'apps/dashboard/server/agent/agent.ts'), 'export const agent = true\n')
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  assert.equal(await paths.resolveExisting('apps/dashboard/server/agent/agent.ts'), join(workspace, 'apps/dashboard/server/agent/agent.ts'))
+  assert.equal(await paths.resolveForWrite('apps/dashboard/server/agent/agent.ts'), join(workspace, 'apps/dashboard/server/agent/agent.ts'))
+  assert.equal(await paths.resolveForWrite('apps/dashboard/server/http.ts'), join(workspace, 'apps/dashboard/server/http.ts'))
+  await assert.rejects(() => paths.resolveForWrite('apps/nthn/VERSION'), (error: unknown) => error instanceof PermissionError && error.code === 'protected-project')
+  const store = new AgentChatStore(join(directory, 'chats'))
+  await store.load()
+  const gateway = new FakeGateway([['I can inspect this source.']])
+  const agent = new AlexAgent({ store, gateway, workspace, name: 'Jef', writablePrefixes: ['.'] })
+  const conversation = await agent.newConversation()
+  await agent.run(conversation.id, 'Where is your source?', () => {})
+  const prompt = gateway.calls[0][0].content
+  assert.match(prompt, /apps\/dashboard\/server\/agent\/agent\.ts/)
+  assert.match(prompt, /apps\/dashboard\/server\/ai\/nthn-cli\.ts/)
+  assert.match(prompt, /apps\/dashboard\/server\/http\.ts/)
+  assert.match(prompt, /source snapshot.*not.*running/i)
+  assert.match(prompt, /approval/i)
+})
+
 test('mobile tool policy allows workspace projects but approval-gates every executable action', async t => {
   const { workspace } = await workspaceFixture(t)
   const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
