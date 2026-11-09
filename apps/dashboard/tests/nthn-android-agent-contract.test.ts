@@ -26,9 +26,9 @@ test('native bridge invokes Alex with the private Linux workspace and exact appr
   assert.match(activity, /backend\.agent\("chat"/)
   assert.match(activity, /@JavascriptInterface public void approve\(String conversationId, String approvalId, boolean approved\)/)
   assert.match(activity, /backend\.agent\("approve"/)
-  assert.match(activity, /backend\.ai\("add-account-stdin"/)
+  assert.match(activity, /"add-account-stdin" : "add-provider-stdin"/)
   assert.match(activity, /deliver\("accounts"/)
-  assert.match(activity, /configureWebKey\(this\)/)
+  assert.match(activity, /configureWebProvider\(this\)/)
   assert.match(activity, /bridge\.deliver\("accounts"/)
 })
 

@@ -533,7 +533,11 @@
       snapshot.messages.forEach(appendMessage);
       document.querySelector('.thread-name').textContent = snapshot.title || 'New conversation';
       document.querySelector('#model-chip').textContent = snapshot.model || 'automatic';
-      if (snapshot.provider) document.querySelector('#provider-meta').textContent = `${snapshot.provider} · connected`;
+      document.querySelector('#provider-meta').textContent = snapshot.workspaceStatus === 'empty'
+        ? `Empty workspace · ${snapshot.workspace}`
+        : snapshot.workspaceStatus === 'unavailable'
+          ? `Workspace unavailable · ${snapshot.workspace}`
+          : `${snapshot.provider || 'AI'} · ${snapshot.workspace}`;
       const pendingApproval = snapshot.pendingApproval;
       if (pendingApproval) {
         const article = document.createElement('article');

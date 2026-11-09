@@ -11,7 +11,12 @@ export interface ChatTurn {
   role: ChatRole
   content: string
   name?: string
+  toolCallId?: string
+  toolCalls?: { id: string; name: string; arguments: Record<string, unknown> }[]
 }
+
+export interface NativeToolCall { kind: 'tool_call'; id: string; name: string; arguments: Record<string, unknown> }
+export interface ToolSchema { name: string; description: string; arguments: Record<string, string> }
 
 export interface GatewayInfo {
   provider: string
@@ -30,7 +35,7 @@ export class GatewayError extends Error {
 
 export interface Gateway {
   info(): GatewayInfo | null
-  stream(messages: ChatTurn[], options?: { signal?: AbortSignal; maxTokens?: number }): AsyncGenerator<string>
+  stream(messages: ChatTurn[], options?: { signal?: AbortSignal; maxTokens?: number; tools?: ToolSchema[] }): AsyncGenerator<string | NativeToolCall>
 }
 
 function friendly(error: unknown): GatewayError {
@@ -71,7 +76,7 @@ function turnsForProvider(messages: ChatTurn[]): { system: string; turns: { role
   return { system, turns }
 }
 
-export function requestBody(route: ModelRoute, messages: ChatTurn[], stream: boolean, maxTokens = 4000): Record<string, unknown> {
+export function requestBody(route: ModelRoute, messages: ChatTurn[], stream: boolean, maxTokens = 4000, tools: ToolSchema[] = []): Record<string, unknown> {
   const protocol = connectionAdapter(route.providerId).protocol
   const model = route.ref.nativeModelId
   const { system, turns } = turnsForProvider(messages)
@@ -89,14 +94,35 @@ export function requestBody(route: ModelRoute, messages: ChatTurn[], stream: boo
       generationConfig: { maxOutputTokens: maxTokens },
     }
   }
+  const native = route.providerId === 'openrouter' && tools.length > 0
+  const definitions = tools.map(tool => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: {
+        type: 'object',
+        properties: Object.fromEntries(Object.entries(tool.arguments).map(([key, type]) => [key, type === 'string[]' ? { type: 'array', items: { type: 'string' } } : { type }])),
+        additionalProperties: false,
+      },
+    },
+  }))
   return {
     model,
-    messages: [
+    messages: native ? [
+      ...(system ? [{ role: 'system', content: system }] : []),
+      ...messages.filter(turn => turn.role !== 'system').map(turn => turn.role === 'tool' && turn.toolCallId
+        ? { role: 'tool', tool_call_id: turn.toolCallId, content: turn.content }
+        : turn.role === 'assistant' && turn.toolCalls?.length
+          ? { role: 'assistant', content: turn.content || null, tool_calls: turn.toolCalls.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } })) }
+          : { role: turn.role === 'tool' ? 'user' : turn.role, content: turn.content }),
+    ] : [
       ...(system ? [{ role: 'system', content: system }] : []),
       ...turns.map(turn => ({ role: turn.role, content: turn.content })),
     ],
     stream,
     max_tokens: maxTokens,
+    ...(native ? { tools: definitions, tool_choice: 'auto' } : {}),
     ...(route.providerId === 'openrouter' ? { provider: { require_parameters: true } } : {}),
   }
 }
@@ -170,7 +196,7 @@ export class ResolvedRouteGateway implements Gateway {
 
   info(): GatewayInfo | null { return this.last }
 
-  async *stream(messages: ChatTurn[], options: { signal?: AbortSignal; maxTokens?: number } = {}): AsyncGenerator<string> {
+  async *stream(messages: ChatTurn[], options: { signal?: AbortSignal; maxTokens?: number; tools?: ToolSchema[] } = {}): AsyncGenerator<string | NativeToolCall> {
     const excluded = new Set<string>()
     let previousFailure: GatewayError | null = null
     for (;;) {
@@ -180,12 +206,29 @@ export class ResolvedRouteGateway implements Gateway {
       this.last = { provider: route.providerId, model: route.ref.nativeModelId, transport: 'streaming' }
       const protocol = connectionAdapter(route.providerId).protocol
       const parser = createParser(protocol)
-      const body = requestBody(route, messages, true, options.maxTokens)
+      const body = requestBody(route, messages, true, options.maxTokens, options.tools)
+      const calls = new Map<number, { id: string; name: string; arguments: string }>()
+      let toolBuffer = ''
       let emitted = false
       let raw = ''
       try {
         for await (const chunk of this.manager.streamInference(route.ref.connectionId, route.connectionRevision, body, options.signal)) {
           raw += chunk
+          toolBuffer += chunk
+          let end: number
+          while ((end = toolBuffer.indexOf('\n')) >= 0) {
+            const line = toolBuffer.slice(0, end).trimEnd()
+            toolBuffer = toolBuffer.slice(end + 1)
+            if (!line.startsWith('data:')) continue
+            try {
+              const data = JSON.parse(line.slice(5)) as { choices?: { delta?: { tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] }
+              for (const part of data.choices?.[0]?.delta?.tool_calls ?? []) {
+                const call = calls.get(part.index) ?? { id: '', name: '', arguments: '' }
+                call.id += part.id ?? ''; call.name += part.function?.name ?? ''; call.arguments += part.function?.arguments ?? ''
+                calls.set(part.index, call)
+              }
+            } catch { /* SSE text and incomplete lines are handled by the text parser. */ }
+          }
           for (const delta of parser.push(chunk)) if (delta) { emitted = true; yield delta }
         }
         for (const delta of parser.flush()) if (delta) { emitted = true; yield delta }
@@ -201,6 +244,12 @@ export class ResolvedRouteGateway implements Gateway {
       if (!emitted) {
         const text = fallbackText(raw, protocol)
         if (text) yield text
+      }
+      for (const call of [...calls.entries()].sort(([a], [b]) => a - b).map(([, value]) => value)) {
+        let args: unknown
+        try { args = JSON.parse(call.arguments) } catch { throw new GatewayError('INVALID_TOOL_CALL', 'Model returned invalid tool arguments.') }
+        if (!call.id || !call.name || !args || typeof args !== 'object' || Array.isArray(args)) throw new GatewayError('INVALID_TOOL_CALL', 'Model returned an invalid tool call.')
+        yield { kind: 'tool_call', id: call.id, name: call.name, arguments: args as Record<string, unknown> }
       }
       return
     }

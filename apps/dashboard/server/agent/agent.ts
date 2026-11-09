@@ -24,6 +24,7 @@ const RETENTION = 40
 export interface ToolIntent {
   tool: string
   arguments: Record<string, unknown>
+  id?: string
 }
 
 interface FilterResult {
@@ -360,6 +361,14 @@ export class AlexAgent {
           status: 'complete',
           meta: { tool: pending.tool, callId: pending.callId, denied: true },
         })
+        for (const remaining of assistant.toolCalls ?? []) {
+          if (remaining.status !== 'proposed') continue
+          remaining.status = 'denied'
+          remaining.summary = 'Other calls in the same response were cancelled after approval was denied.'
+          await this.store.append(conversationId, { role: 'tool', content: `Tool ${remaining.tool} was cancelled.`, status: 'complete', meta: { tool: remaining.tool, callId: remaining.id, denied: true } })
+          emit({ type: 'tool-output', conversationId, messageId: assistant.id, call: remaining })
+        }
+        await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
         await this.drive(conversationId, null, controller.signal, emit)
         return
       }
@@ -379,6 +388,37 @@ export class AlexAgent {
         status: 'complete',
         meta: { tool: pending.tool, callId: pending.callId, ok: result.ok },
       })
+      for (const remaining of assistant.toolCalls ?? []) {
+        if (remaining.status !== 'proposed') continue
+        try {
+          this.tools.validate(remaining.tool, remaining.arguments)
+          if (this.tools.needsApproval(remaining.tool, remaining.arguments)) {
+            const signature = stableSignature(remaining.tool, remaining.arguments)
+            const ticket = this.approvals.issue(conversationId, remaining.tool, signature)
+            remaining.status = 'awaiting-approval'
+            remaining.summary = this.tools.get(remaining.tool).summarize(remaining.arguments)
+            remaining.approvalId = ticket.id
+            remaining.approvalExpiresAt = ticket.expiresAt
+            this.pending.set(ticket.id, { id: ticket.id, conversationId, messageId: assistant.id, callId: remaining.id, tool: remaining.tool, arguments: remaining.arguments, signature, expiresAt: ticket.expiresAt })
+            await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
+            emit({ type: 'approval', conversationId, messageId: assistant.id, call: remaining, approvalId: ticket.id })
+            return
+          }
+          remaining.status = 'running'
+          emit({ type: 'tool', conversationId, messageId: assistant.id, call: remaining })
+          const next = await this.executeTool(remaining.tool, remaining.arguments, controller.signal)
+          remaining.status = next.ok ? 'succeeded' : 'failed'
+          remaining.summary = next.summary
+          remaining.output = next.output.slice(0, 20_000)
+          await this.store.append(conversationId, { role: 'tool', content: this.toolMessage(remaining.tool, next), status: 'complete', meta: { tool: remaining.tool, callId: remaining.id, ok: next.ok } })
+        } catch (error) {
+          remaining.status = 'failed'
+          remaining.summary = error instanceof Error ? error.message : 'Invalid tool request.'
+          await this.store.append(conversationId, { role: 'tool', content: `Tool ${remaining.tool} was rejected: ${remaining.summary}`, status: 'complete', meta: { tool: remaining.tool, callId: remaining.id, ok: false } })
+        }
+        await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
+        emit({ type: 'tool-output', conversationId, messageId: assistant.id, call: remaining })
+      }
       await this.drive(conversationId, null, controller.signal, emit)
     } finally {
       this.running.delete(conversationId)
@@ -447,7 +487,7 @@ export class AlexAgent {
       if (message.role === 'tool') content = content.slice(0, MAX_TOOL_MESSAGE_CHARS)
       if (used + content.length > MAX_CONTEXT_CHARS) break
       used += content.length
-      selected.unshift({ role: message.role, content })
+      selected.unshift({ role: message.role, content, ...(message.role === 'tool' && typeof message.meta?.callId === 'string' ? { toolCallId: message.meta.callId } : {}), ...(message.role === 'assistant' && message.toolCalls?.length ? { toolCalls: message.toolCalls.map(call => ({ id: call.id, name: call.tool, arguments: call.arguments })) } : {}) })
     }
     messages.push(...selected)
     return messages
@@ -474,8 +514,12 @@ export class AlexAgent {
       const intents: ToolIntent[] = []
       let failed: unknown = null
       try {
-        for await (const delta of this.gateway.stream(this.buildMessages(conversation), { signal })) {
+        for await (const delta of this.gateway.stream(this.buildMessages(conversation), { signal, tools: this.tools.list() })) {
           if (signal.aborted) break
+          if (typeof delta !== 'string') {
+            intents.push({ id: delta.id, tool: delta.name, arguments: delta.arguments })
+            continue
+          }
           const result = filter.push(delta)
           if (result.tools.length) intents.push(...result.tools)
           if (result.visible) {
@@ -515,7 +559,7 @@ export class AlexAgent {
       }
       const calls: ToolCallRecord[] = []
       for (const intent of intents) {
-        calls.push({ id: randomUUID(), tool: intent.tool, arguments: intent.arguments, status: 'proposed' })
+        calls.push({ id: intent.id ?? randomUUID(), tool: intent.tool, arguments: intent.arguments, status: 'proposed' })
       }
       await this.store.update(conversationId, assistant.id, { content, status: 'complete', toolCalls: calls })
       for (let index = 0; index < calls.length; index += 1) {

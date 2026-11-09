@@ -1,5 +1,6 @@
 import type { AgentState } from './agent.ts'
 import type { AgentMessage, ToolCallRecord } from './store.ts'
+import { readdirSync } from 'node:fs'
 
 export interface MobilePendingApproval {
   conversationId: string
@@ -17,9 +18,14 @@ export interface MobileAgentSnapshot {
   provider: string | null
   model: string | null
   workspace: string
+  workspaceStatus: 'empty' | 'populated' | 'unavailable'
 }
 
 export function mobileAgentSnapshot(state: AgentState): MobileAgentSnapshot {
+  let workspaceStatus: MobileAgentSnapshot['workspaceStatus'] = 'unavailable'
+  try {
+    workspaceStatus = readdirSync(state.workspace).some(name => !['.local', '.git', '.ssh'].includes(name)) ? 'populated' : 'empty'
+  } catch { /* The workspace cannot currently be read. */ }
   const active = state.active
   const messages = (active?.messages ?? []).map(message => ({
     id: message.id,
@@ -62,5 +68,6 @@ export function mobileAgentSnapshot(state: AgentState): MobileAgentSnapshot {
     provider: state.gateway?.provider ?? null,
     model: state.gateway?.model ?? null,
     workspace: state.workspace,
+    workspaceStatus,
   }
 }
