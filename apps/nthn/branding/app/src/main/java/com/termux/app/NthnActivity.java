@@ -195,31 +195,61 @@ public final class NthnActivity extends AppCompatActivity {
         private final WebView web;
         AiWebBridge(WebView web) { this.web = web; }
 
-        @JavascriptInterface public String history() { return alexHistory.toString(); }
+        @JavascriptInterface public String history() { return "[]"; }
 
         @JavascriptInterface public void send(String request) {
             if (request == null || request.trim().isEmpty()) return;
-            appendAlexMessage("user", request);
             final String payload;
-            try { payload = new JSONObject().put("messages", alexHistory).toString(); }
+            try { payload = new JSONObject().put("text", request.trim()).toString(); }
             catch (Exception error) { deliver("error", message(error)); return; }
             executor.execute(() -> {
                 try {
-                    NthnBackend.CommandResult result = backend.ai("chat", null, payload.toCharArray());
+                    if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
+                    NthnBackend.CommandResult result = backend.agent("chat", payload.toCharArray());
                     if (!result.ok()) { deliver("error", aiMessage(result.output)); return; }
-                    String reply = new JSONObject(result.output).optString("message");
-                    if (reply.isEmpty()) throw new IOException("The model returned no text.");
-                    appendAlexMessage("assistant", reply);
-                    deliver("reply", reply);
+                    deliver("snapshot", result.output);
                 } catch (Exception error) { deliver("error", message(error)); }
             });
         }
 
         @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebKey()); }
-        @JavascriptInterface public void newConversation() { clearAlexHistory(); }
+        @JavascriptInterface public void newConversation() {
+            executor.execute(() -> {
+                try {
+                    if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
+                    NthnBackend.CommandResult result = backend.agent("new", null);
+                    if (!result.ok()) { deliver("error", aiMessage(result.output)); return; }
+                    deliver("snapshot", result.output);
+                } catch (Exception error) { deliver("error", message(error)); }
+            });
+        }
+        @JavascriptInterface public void approve(String conversationId, String approvalId, boolean approved) {
+            if (conversationId == null || approvalId == null) return;
+            final String payload;
+            try {
+                payload = new JSONObject().put("conversationId", conversationId).put("approvalId", approvalId).put("approved", approved).toString();
+            } catch (Exception error) { deliver("error", message(error)); return; }
+            executor.execute(() -> {
+                try {
+                    if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
+                    NthnBackend.CommandResult result = backend.agent("approve", payload.toCharArray());
+                    if (!result.ok()) { deliver("error", aiMessage(result.output)); return; }
+                    deliver("snapshot", result.output);
+                } catch (Exception error) { deliver("error", message(error)); }
+            });
+        }
         @JavascriptInterface public void status() {
             executor.execute(() -> {
-                try { NthnBackend.CommandResult result = backend.ai("status", null, null); deliver("status", aiMessage(result.output)); }
+                try {
+                    if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
+                    NthnBackend.CommandResult provider = backend.ai("status", null, null);
+                    deliver(provider.ok() ? "status" : "error", aiMessage(provider.output));
+                    NthnBackend.CommandResult accounts = backend.ai("accounts", null, null);
+                    if (accounts.ok()) deliver("accounts", accounts.output);
+                    NthnBackend.CommandResult agent = backend.agent("state", null);
+                    if (agent.ok()) deliver("snapshot", agent.output);
+                    else deliver("error", aiMessage(agent.output));
+                }
                 catch (Exception error) { deliver("error", message(error)); }
             });
         }
@@ -240,8 +270,8 @@ public final class NthnActivity extends AppCompatActivity {
         FrameLayout frame = new FrameLayout(this);
         frame.setPadding(dp(20), 0, dp(20), 0);
         frame.addView(key);
-        new AlertDialog.Builder(this).setTitle("Connect OpenRouter")
-            .setMessage("The key is stored in the encrypted private vault.")
+        new AlertDialog.Builder(this).setTitle("Add OpenRouter account")
+            .setMessage("Each account key is stored separately in the encrypted private vault.")
             .setView(frame).setNegativeButton("Cancel", null)
             .setPositiveButton("Save and test", (dialog, which) -> {
                 char[] secret = key.getText().toString().trim().toCharArray();
@@ -249,9 +279,13 @@ public final class NthnActivity extends AppCompatActivity {
                 if (secret.length == 0) return;
                 executor.execute(() -> {
                     try {
-                        NthnBackend.CommandResult result = backend.ai("configure-stdin", null, secret);
-                        String state = result.ok() ? "OpenRouter connected" : aiMessage(result.output);
-                        main.post(() -> { if (!destroyed) ((WebView) content.getChildAt(0)).evaluateJavascript("window.nthnEvent('status'," + org.json.JSONObject.quote(state) + ")", null); });
+                        NthnBackend.CommandResult result = backend.ai("add-account-stdin", null, secret);
+                        String state = result.ok() ? "OpenRouter account connected" : aiMessage(result.output);
+                        deliver("status", state);
+                        if (result.ok()) {
+                            NthnBackend.CommandResult accounts = backend.ai("accounts", null, null);
+                            if (accounts.ok()) deliver("accounts", accounts.output);
+                        }
                     } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); }
                 });
             }).show();

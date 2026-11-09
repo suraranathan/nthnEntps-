@@ -152,6 +152,13 @@ provider_assets.mkdir(parents=True, exist_ok=True)
 for source in provider_sources.glob('*.ts'):
     shutil.copyfile(source, provider_assets / source.name)
 
+agent_sources = Path(__file__).resolve().parents[3] / 'apps/dashboard/server' / 'agent'
+agent_assets = root / 'app/src/main/assets/nthn-ai/server' / 'agent'
+agent_assets.mkdir(parents=True, exist_ok=True)
+for source in agent_sources.glob('*.ts'):
+    shutil.copyfile(source, agent_assets / source.name)
+shutil.copyfile(agent_sources.parent / 'providers.ts', agent_assets.parent / 'providers.ts')
+
 chat_ui = Path(__file__).resolve().parents[3] / 'apps/nthn/ui-preview/index.html'
 shutil.copyfile(chat_ui, root / 'app/src/main/assets/nthn_chat.html')
 

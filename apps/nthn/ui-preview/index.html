@@ -249,6 +249,13 @@
       font: 12px/1.55 var(--mono);
     }
 
+    .approval-card { margin-top: 14px; padding: 13px; border: 1px solid #604334; border-radius: 8px; background: var(--accent-soft); }
+    .approval-card p { color: var(--ink); font: 12px/1.5 var(--mono); }
+    .approval-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .approval-actions button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; font: 11px/1 var(--mono); }
+    .approval-actions .approve { border-color: var(--accent); background: var(--accent); color: #1d1410; font-weight: 700; }
+    .thread-action { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; font: 11px/1 var(--mono); }
+
     .composer-wrap {
       padding: 0 24px max(20px, env(safe-area-inset-bottom));
       background: linear-gradient(to bottom, transparent, var(--canvas) 18px);
@@ -379,39 +386,14 @@
       </div>
 
       <div class="provider-list" id="provider-list">
-        <button class="provider" data-provider="Anthropic" data-model="claude-sonnet-4-5">
-          <span class="provider-icon">A</span>
-          <span><span class="provider-name">Anthropic</span><span class="provider-model">claude-sonnet-4-5</span></span>
-          <span class="status-dot connected" aria-label="Connected"></span>
-        </button>
-        <button class="provider" data-provider="OpenAI" data-model="gpt-5">
-          <span class="provider-icon">O</span>
-          <span><span class="provider-name">OpenAI</span><span class="provider-model">gpt-5</span></span>
-          <span class="status-dot" aria-label="Not connected"></span>
-        </button>
-        <button class="provider" data-provider="Google" data-model="gemini-2.5-pro">
-          <span class="provider-icon">G</span>
-          <span><span class="provider-name">Google</span><span class="provider-model">gemini-2.5-pro</span></span>
-          <span class="status-dot" aria-label="Not connected"></span>
-        </button>
-        <button class="provider" data-provider="OpenRouter" data-model="choose a model" aria-current="true">
+        <button class="provider" data-provider="OpenRouter" data-model="automatic" aria-current="true">
           <span class="provider-icon">R</span>
-          <span><span class="provider-name">OpenRouter</span><span class="provider-model">choose a model</span></span>
-          <span class="status-dot" aria-label="Not connected"></span>
-        </button>
-        <button class="provider" data-provider="xkiro" data-model="choose a model">
-          <span class="provider-icon">X</span>
-          <span><span class="provider-name">xkiro</span><span class="provider-model">choose a model</span></span>
-          <span class="status-dot" aria-label="Not connected"></span>
-        </button>
-        <button class="provider" data-provider="Mistral" data-model="mistral-large">
-          <span class="provider-icon">M</span>
-          <span><span class="provider-name">Mistral</span><span class="provider-model">mistral-large</span></span>
+          <span><span class="provider-name">OpenRouter</span><span class="provider-model">Add an account</span></span>
           <span class="status-dot" aria-label="Not connected"></span>
         </button>
       </div>
 
-      <p class="provider-note">API keys remain in app-private storage when this interface is moved into com.nthn.</p>
+      <p class="provider-note">Add multiple OpenRouter accounts. Every key remains in the app-private encrypted vault.</p>
     </aside>
 
     <button class="backdrop" id="backdrop" aria-label="Close provider sidebar"></button>
@@ -421,39 +403,14 @@
         <button class="menu-button" id="menu-button" aria-controls="provider-sidebar" aria-expanded="false" aria-label="Open providers">☰</button>
         <div class="thread-title">
           <div class="thread-name">New conversation</div>
-          <div class="thread-meta" id="provider-meta">Anthropic · connected</div>
+          <div class="thread-meta" id="provider-meta">Checking OpenRouter…</div>
         </div>
-        <div class="model-chip" id="model-chip">claude-sonnet-4-5</div>
+        <button class="thread-action" id="new-conversation" type="button">New</button>
+        <div class="model-chip" id="model-chip">automatic</div>
       </header>
 
       <section class="conversation" id="conversation" aria-label="Conversation" aria-live="polite">
         <div class="messages" id="messages">
-          <article class="message user">
-            <div class="message-mark" aria-hidden="true">You</div>
-            <div>
-              <div class="message-author">you</div>
-              <div class="message-body"><p>Help me understand this project before we change anything.</p></div>
-            </div>
-          </article>
-
-          <article class="message assistant">
-            <div class="message-mark" aria-hidden="true">N</div>
-            <div>
-              <div class="message-author">nthn</div>
-              <div class="message-body">
-                <p>I’ll inspect the repository structure first, then map the parts that matter to your request.</p>
-                <div class="code-line">› Reading project files…<br>› Finding app entry points…<br>✓ Ready to discuss the change</div>
-              </div>
-            </div>
-          </article>
-
-          <article class="message user">
-            <div class="message-mark" aria-hidden="true">You</div>
-            <div>
-              <div class="message-author">you</div>
-              <div class="message-body"><p>Start with the smallest safe change and show me what you touched.</p></div>
-            </div>
-          </article>
         </div>
       </section>
 
@@ -505,7 +462,9 @@
     const dialogTitle = document.querySelector('#dialog-title');
     const modelInput = document.querySelector('#model-name');
     const apiKeyInput = document.querySelector('#api-key');
+    const providerList = document.querySelector('#provider-list');
     let activeProvider = document.querySelector('.provider[aria-current="true"]');
+    let currentSnapshot = null;
 
     function setSidebar(open) {
       app.classList.toggle('sidebar-open', open);
@@ -522,29 +481,105 @@
       setSidebar(false);
     }
 
-    function openProviderDialog(button) {
-      if (button && window.NthnAI && button.dataset.provider === 'OpenRouter') {
+    function openProviderDialog() {
+      if (window.NthnAI) {
         setSidebar(false);
         window.NthnAI.configure();
         return;
       }
-      const provider = button?.dataset.provider || 'API provider';
-      const model = button?.dataset.model === 'choose a model' ? '' : button?.dataset.model || '';
-      dialogTitle.textContent = `Connect ${provider}`;
-      modelInput.value = model;
+      dialogTitle.textContent = 'Add OpenRouter account';
+      modelInput.value = '';
       apiKeyInput.value = '';
       dialog.showModal();
       setTimeout(() => apiKeyInput.focus(), 0);
     }
 
-    document.querySelectorAll('.provider').forEach((button) => {
-      button.addEventListener('click', () => {
-        selectProvider(button);
-        if (!button.querySelector('.status-dot').classList.contains('connected')) openProviderDialog(button);
-      });
-    });
+    function appendMessage(item) {
+      const article = document.createElement('article');
+      article.className = `message ${item.role}`;
+      const mark = document.createElement('div');
+      mark.className = 'message-mark';
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = item.role === 'user' ? 'You' : item.role === 'tool' ? '›' : 'N';
+      const wrap = document.createElement('div');
+      const author = document.createElement('div');
+      author.className = 'message-author';
+      author.textContent = item.role === 'user' ? 'you' : item.role === 'tool' ? 'tool result' : 'Alex';
+      const body = document.createElement('div');
+      body.className = 'message-body';
+      if (item.content) {
+        const paragraph = document.createElement('p');
+        paragraph.textContent = item.content;
+        body.append(paragraph);
+      }
+      for (const call of item.toolCalls || []) {
+        const output = document.createElement('div');
+        output.className = 'code-line';
+        output.textContent = `${call.status === 'succeeded' ? '✓' : call.status === 'failed' ? '×' : '›'} ${call.summary || call.tool}${call.output ? `\n${call.output}` : ''}`;
+        body.append(output);
+      }
+      wrap.append(author, body);
+      article.append(mark, wrap);
+      messages.append(article);
+    }
 
-    document.querySelector('#add-provider').addEventListener('click', () => openProviderDialog());
+    function renderSnapshot(raw) {
+      let envelope;
+      try { envelope = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (_) { return; }
+      const snapshot = envelope?.snapshot || envelope;
+      if (!snapshot || !Array.isArray(snapshot.messages)) return;
+      currentSnapshot = snapshot;
+      messages.textContent = '';
+      snapshot.messages.forEach(appendMessage);
+      document.querySelector('.thread-name').textContent = snapshot.title || 'New conversation';
+      document.querySelector('#model-chip').textContent = snapshot.model || 'automatic';
+      if (snapshot.provider) document.querySelector('#provider-meta').textContent = `${snapshot.provider} · connected`;
+      const pendingApproval = snapshot.pendingApproval;
+      if (pendingApproval) {
+        const article = document.createElement('article');
+        article.className = 'message assistant';
+        const mark = document.createElement('div'); mark.className = 'message-mark'; mark.textContent = '!';
+        const wrap = document.createElement('div');
+        const author = document.createElement('div'); author.className = 'message-author'; author.textContent = 'approval required';
+        const card = document.createElement('div'); card.className = 'approval-card';
+        const text = document.createElement('p'); text.textContent = pendingApproval.summary;
+        const actions = document.createElement('div'); actions.className = 'approval-actions';
+        const approve = document.createElement('button'); approve.className = 'approve'; approve.textContent = 'Approve';
+        const deny = document.createElement('button'); deny.textContent = 'Deny';
+        const decide = (approved) => {
+          approve.disabled = true; deny.disabled = true;
+          if (window.NthnAI) window.NthnAI.approve(pendingApproval.conversationId, pendingApproval.approvalId, approved);
+        };
+        approve.addEventListener('click', () => decide(true));
+        deny.addEventListener('click', () => decide(false));
+        actions.append(approve, deny); card.append(text, actions); wrap.append(author, card); article.append(mark, wrap); messages.append(article);
+      }
+      conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
+    }
+
+    function renderAccounts(raw) {
+      let accounts;
+      try { accounts = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (_) { return; }
+      if (!Array.isArray(accounts)) return;
+      providerList.textContent = '';
+      activeProvider = null;
+      for (const account of accounts) {
+        const button = document.createElement('button'); button.className = 'provider'; button.dataset.provider = 'OpenRouter'; button.dataset.model = account.selected ? 'selected model' : 'available';
+        const icon = document.createElement('span'); icon.className = 'provider-icon'; icon.textContent = 'R';
+        const copy = document.createElement('span');
+        const name = document.createElement('span'); name.className = 'provider-name'; name.textContent = account.label;
+        const detail = document.createElement('span'); detail.className = 'provider-model'; detail.textContent = `${account.credentials}${account.selected ? ' · selected route' : ''}`;
+        const dot = document.createElement('span'); dot.className = `status-dot${account.connection === 'connected' ? ' connected' : ''}`; dot.setAttribute('aria-label', account.connection);
+        copy.append(name, detail); button.append(icon, copy, dot); button.addEventListener('click', () => selectProvider(button)); providerList.append(button);
+        if (account.selected || !activeProvider) selectProvider(button);
+      }
+      if (!accounts.length) {
+        const empty = document.createElement('p'); empty.className = 'provider-note'; empty.textContent = 'No OpenRouter account yet. Tap + to add one.'; providerList.append(empty);
+      }
+    }
+
+    document.querySelector('#add-provider').addEventListener('click', openProviderDialog);
+    document.querySelector('#new-conversation').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.newConversation(); else renderSnapshot({ messages: [], title: 'New conversation' }); });
     menuButton.addEventListener('click', () => setSidebar(!app.classList.contains('sidebar-open')));
     backdrop.addEventListener('click', () => setSidebar(false));
     window.addEventListener('keydown', (event) => {
@@ -568,25 +603,7 @@
       event.preventDefault();
       const text = input.value.trim();
       if (!text) return;
-
-      const article = document.createElement('article');
-      article.className = 'message user';
-      const mark = document.createElement('div');
-      mark.className = 'message-mark';
-      mark.setAttribute('aria-hidden', 'true');
-      mark.textContent = 'You';
-      const content = document.createElement('div');
-      const author = document.createElement('div');
-      author.className = 'message-author';
-      author.textContent = 'you';
-      const body = document.createElement('div');
-      body.className = 'message-body';
-      const paragraph = document.createElement('p');
-      paragraph.textContent = text;
-      body.append(paragraph);
-      content.append(author, body);
-      article.append(mark, content);
-      messages.append(article);
+      appendMessage({ role: 'user', content: text });
       if (window.NthnAI) window.NthnAI.send(text);
 
       input.value = '';
@@ -600,22 +617,13 @@
     });
 
     window.nthnEvent = (kind, value) => {
-      if (kind === 'status' || kind === 'error') {
+      if (kind === 'status') {
         document.querySelector('#provider-meta').textContent = value;
-        const openrouter = document.querySelector('[data-provider="OpenRouter"] .status-dot');
-        const connected = /connected/i.test(value) && !/not connected|credentials missing/i.test(value);
-        openrouter.classList.toggle('connected', connected);
-        openrouter.setAttribute('aria-label', connected ? 'Connected' : 'Not connected');
       }
-      if (kind === 'reply' || kind === 'error') {
-        const article = document.createElement('article');
-        article.className = 'message assistant';
-        const mark = document.createElement('div'); mark.className = 'message-mark'; mark.textContent = 'N';
-        const wrap = document.createElement('div');
-        const author = document.createElement('div'); author.className = 'message-author'; author.textContent = 'nthn';
-        const body = document.createElement('div'); body.className = 'message-body';
-        const paragraph = document.createElement('p'); paragraph.textContent = value; body.append(paragraph);
-        wrap.append(author, body); article.append(mark, wrap); messages.append(article);
+      if (kind === 'accounts') renderAccounts(value);
+      if (kind === 'snapshot') renderSnapshot(value);
+      if (kind === 'error') {
+        appendMessage({ role: 'assistant', content: value });
         conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
       }
     };
@@ -623,25 +631,9 @@
     document.querySelector('#provider-form').addEventListener('submit', (event) => {
       if (window.NthnAI) event.preventDefault();
     });
-    document.querySelector('#provider-list').addEventListener('click', (event) => {
-      const button = event.target.closest('.provider');
-      if (button && window.NthnAI && button.dataset.provider !== 'OpenRouter') {
-        document.querySelector('#provider-meta').textContent = `${button.dataset.provider} · backend setup pending`;
-      }
-    });
     if (window.NthnAI) {
+      messages.textContent = '';
       window.NthnAI.status();
-      try {
-        for (const item of JSON.parse(window.NthnAI.history())) {
-          const article = document.createElement('article'); article.className = `message ${item.role}`;
-          const mark = document.createElement('div'); mark.className = 'message-mark'; mark.textContent = item.role === 'user' ? 'You' : 'N';
-          const wrap = document.createElement('div');
-          const author = document.createElement('div'); author.className = 'message-author'; author.textContent = item.role === 'user' ? 'you' : 'nthn';
-          const body = document.createElement('div'); body.className = 'message-body';
-          const paragraph = document.createElement('p'); paragraph.textContent = item.content; body.append(paragraph);
-          wrap.append(author, body); article.append(mark, wrap); messages.append(article);
-        }
-      } catch (_) { }
     }
   </script>
 </body>

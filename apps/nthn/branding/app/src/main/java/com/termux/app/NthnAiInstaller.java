@@ -19,15 +19,18 @@ final class NthnAiInstaller {
         try {
             File root = new File(context.getFilesDir(), "nthn-ai");
             copyAssets(context, "nthn-ai", root);
-            File launcher = new File(PREFIX, "bin/nthn-ai");
-            byte[] script = ("#!" + PREFIX + "/bin/sh\nexec " + PREFIX + "/bin/node --no-warnings " +
-                new File(root, "server/ai/nthn-cli.ts").getAbsolutePath() + " \"$@\"\n")
-                .getBytes(StandardCharsets.UTF_8);
-            try (FileOutputStream out = new FileOutputStream(launcher)) { out.write(script); out.getFD().sync(); }
-            if (!launcher.setExecutable(true, true)) throw new IOException("launcher permission");
+            installLauncher(new File(PREFIX, "bin/nthn-ai"), new File(root, "server/ai/nthn-cli.ts"));
+            installLauncher(new File(PREFIX, "bin/nthn-agent"), new File(root, "server/agent/nthn-agent-cli.ts"));
         } catch (IOException error) {
             Logger.logError("NthnAiInstaller", "Provider tools could not be installed");
         }
+    }
+
+    private static void installLauncher(File launcher, File entry) throws IOException {
+        byte[] script = ("#!" + PREFIX + "/bin/sh\nexec " + PREFIX + "/bin/node --no-warnings " +
+            entry.getAbsolutePath() + " \"$@\"\n").getBytes(StandardCharsets.UTF_8);
+        try (FileOutputStream out = new FileOutputStream(launcher)) { out.write(script); out.getFD().sync(); }
+        if (!launcher.setExecutable(true, true)) throw new IOException("launcher permission");
     }
 
     private static void copyAssets(Context context, String assetPath, File destination) throws IOException {

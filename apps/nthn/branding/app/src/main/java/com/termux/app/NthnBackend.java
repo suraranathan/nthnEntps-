@@ -144,9 +144,16 @@ final class NthnBackend {
     }
 
     synchronized CommandResult ai(String command, String argument, char[] secret) throws IOException, InterruptedException {
+        return nodeCommand(new File(context.getFilesDir(), "nthn-ai/server/ai/nthn-cli.ts"), command, argument, secret);
+    }
+
+    synchronized CommandResult agent(String command, char[] request) throws IOException, InterruptedException {
+        return nodeCommand(new File(context.getFilesDir(), "nthn-ai/server/agent/nthn-agent-cli.ts"), command, null, request);
+    }
+
+    private CommandResult nodeCommand(File script, String command, String argument, char[] inputData) throws IOException, InterruptedException {
         NthnAiInstaller.install(context);
         File node = new File(PREFIX, "bin/node");
-        File script = new File(context.getFilesDir(), "nthn-ai/server/ai/nthn-cli.ts");
         if (!node.canExecute() || !script.isFile()) throw new IOException("AI service is unavailable until Linux setup completes");
         List<String> invocation = new ArrayList<>();
         invocation.add(node.getAbsolutePath());
@@ -156,6 +163,10 @@ final class NthnBackend {
         if (argument != null) invocation.add(argument);
         ProcessBuilder builder = new ProcessBuilder(invocation);
         builder.redirectErrorStream(false);
+        builder.environment().put("HOME", home.getAbsolutePath());
+        builder.environment().put("PATH", PREFIX + "/bin:" + PREFIX + "/bin/applets:/system/bin");
+        builder.environment().put("TMPDIR", PREFIX + "/tmp");
+        builder.environment().put("NTHN_AGENT_WORKSPACE", home.getAbsolutePath());
         activeProcess = builder.start();
         try {
             StringBuilder stdout = new StringBuilder();
@@ -166,7 +177,7 @@ final class NthnBackend {
             stdoutReader.start();
             stderrReader.start();
             try (OutputStream input = activeProcess.getOutputStream()) {
-                if (secret != null) input.write(new String(secret).getBytes(StandardCharsets.UTF_8));
+                if (inputData != null) input.write(new String(inputData).getBytes(StandardCharsets.UTF_8));
             }
             int exitCode = activeProcess.waitFor();
             stdoutReader.join();
@@ -176,7 +187,7 @@ final class NthnBackend {
             return new CommandResult(exitCode, exitCode == 0 ? stdout.toString() : failureOutput(stdout, stderr));
         } finally {
             activeProcess = null;
-            if (secret != null) Arrays.fill(secret, '\0');
+            if (inputData != null) Arrays.fill(inputData, '\0');
         }
     }
 
