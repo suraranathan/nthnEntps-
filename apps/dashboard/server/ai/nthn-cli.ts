@@ -8,7 +8,8 @@ import { CatalogService } from './catalog-service.ts'
 import { VerificationService } from './verification-service.ts'
 import { ManagementError } from './management-types.ts'
 import { connectionAdapter } from './connection-adapters.ts'
-import { connectionSummary, selectionIsCurrent } from './nthn-cli-state.ts'
+import { connectionSummary, openRouterAccounts, selectionConnection } from './nthn-cli-state.ts'
+import type { ManagedConnection } from './management-types.ts'
 
 const directory = resolve(fileURLToPath(new URL('../../', import.meta.url)), '.local/ai')
 const selectedPath = join(directory, 'selected-route.json')
@@ -16,6 +17,9 @@ const baseUrl = 'https://openrouter.ai/api/v1'
 const help = `nthn AI provider
   nthn-ai status            Connection and selected model
   nthn-ai configure         Enter an OpenRouter API key privately
+  nthn-ai accounts          List configured OpenRouter accounts
+  nthn-ai add-account [NAME] Add another OpenRouter account privately
+  nthn-ai remove-account ID Remove one OpenRouter account
   nthn-ai models            Refresh and list available text models
   nthn-ai auto-select       Verify and choose a suitable text model automatically
   nthn-ai select MODEL_ID   Verify real text inference and select model
@@ -46,19 +50,19 @@ function secretStdin(): string {
   return readFileSync(0, 'utf8').trim()
 }
 
-function selected(): { routeId: string, modelId: string | null } | null {
+function selected(): { routeId: string, modelId: string | null, connectionId?: string } | null {
   if (!existsSync(selectedPath)) return null
   try {
     const value = JSON.parse(readFileSync(selectedPath, 'utf8'))
     return typeof value.routeId === 'string'
-      ? { routeId: value.routeId, modelId: typeof value.modelId === 'string' ? value.modelId : null }
+      ? { routeId: value.routeId, modelId: typeof value.modelId === 'string' ? value.modelId : null, ...(typeof value.connectionId === 'string' ? { connectionId: value.connectionId } : {}) }
       : null
   }
   catch { return null }
 }
-function saveSelected(routeId: string, modelId: string) {
+function saveSelected(routeId: string, modelId: string, connectionId: string) {
   const temporary = `${selectedPath}.${process.pid}.tmp`
-  writeFileSync(temporary, JSON.stringify({ routeId, modelId }), { mode: 0o600, flag: 'wx' })
+  writeFileSync(temporary, JSON.stringify({ routeId, modelId, connectionId }), { mode: 0o600, flag: 'wx' })
   renameSync(temporary, selectedPath)
 }
 
@@ -69,14 +73,20 @@ function rankForAlex(name: string, modelId: string): number {
   return 2
 }
 
-async function autoSelect(connectionId: string): Promise<{ modelId: string; routeId: string }> {
+async function autoSelect(connectionIds: string[]): Promise<{ modelId: string; routeId: string; connectionId: string }> {
   if (!catalog || !verification || !manager) throw new ManagementError('REQUEST_FAILED')
-  const refresh = await catalog.refresh(connectionId)
-  if (refresh.errorCode) throw new ManagementError(refresh.errorCode)
+  const refreshed: string[] = []
+  let lastError = 'MODEL_UNAVAILABLE'
+  for (const connectionId of connectionIds) {
+    const refresh = await catalog.refresh(connectionId)
+    if (refresh.errorCode) lastError = refresh.errorCode
+    else refreshed.push(connectionId)
+  }
+  if (!refreshed.length) throw new ManagementError(lastError)
   const candidates: import('./contracts.ts').CatalogEntry[] = []
   let cursor: string | undefined
   do {
-    const page = await catalog.search({ connectionIds: [connectionId], outputModality: 'text', pageSize: 100, ...(cursor ? { cursor } : {}) })
+    const page = await catalog.search({ connectionIds: refreshed, outputModality: 'text', pageSize: 100, ...(cursor ? { cursor } : {}) })
     candidates.push(...page.entries.filter(entry => entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable'))
     cursor = page.nextCursor ?? undefined
   } while (cursor)
@@ -85,8 +95,8 @@ async function autoSelect(connectionId: string): Promise<{ modelId: string; rout
   for (const candidate of candidates) {
     const result = await verification.verify(candidate.route.id, ['text'])
     if (result.state !== 'verified') continue
-    saveSelected(candidate.route.id, candidate.route.ref.nativeModelId)
-    return { modelId: candidate.route.ref.nativeModelId, routeId: candidate.route.id }
+    saveSelected(candidate.route.id, candidate.route.ref.nativeModelId, candidate.route.ref.connectionId)
+    return { modelId: candidate.route.ref.nativeModelId, routeId: candidate.route.id, connectionId: candidate.route.ref.connectionId }
   }
   throw new ManagementError('MODEL_UNAVAILABLE')
 }
@@ -113,10 +123,10 @@ function chatInput(): ChatMessage[] {
   return result
 }
 
-async function chat(connectionId: string, routeId: string, messages: ChatMessage[]) {
+async function chat(connectionIds: string[], routeId: string, messages: ChatMessage[]) {
   if (!catalog || !manager) throw new ManagementError('REQUEST_FAILED')
   const entry = await catalog.getRoute(routeId)
-  if (!entry || entry.route.ref.connectionId !== connectionId || entry.route.lifecycle === 'removed') throw new ManagementError('MODEL_UNAVAILABLE')
+  if (!entry || !connectionIds.includes(entry.route.ref.connectionId) || entry.route.lifecycle === 'removed') throw new ManagementError('MODEL_UNAVAILABLE')
   const route = entry.route
   const protocol = connectionAdapter(route.providerId).protocol
   const system = [
@@ -146,34 +156,59 @@ let catalog: CatalogService | undefined
 let verification: VerificationService | undefined
 try {
   const [command = 'help', argument, ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'status', 'configure', 'configure-stdin', 'models', 'select', 'auto-select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'status', 'accounts', 'configure', 'configure-stdin', 'add-account', 'add-account-stdin', 'remove-account', 'models', 'select', 'auto-select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); process.exit(0) }
   manager = new ConnectionManager(directory)
-  const connection = manager.list().find(item => item.providerId === 'openrouter')
-  if (command === 'configure' || command === 'configure-stdin') {
-    const key = command === 'configure' ? await secretPrompt() : secretStdin()
+  let accounts = openRouterAccounts(manager.list())
+  const connection = accounts[0]
+  if (command === 'accounts') {
+    const current = selected()
+    console.log(JSON.stringify(accounts.map(account => ({
+      id: account.id, label: account.label, connection: connectionSummary(account), credentials: account.credentials.state,
+      selected: current?.connectionId === account.id,
+    })), null, 2))
+  } else if (command === 'configure' || command === 'configure-stdin' || command === 'add-account' || command === 'add-account-stdin') {
+    const key = command === 'configure' || command === 'add-account' ? await secretPrompt() : secretStdin()
     if (!key) throw new ManagementError('INVALID_INPUT')
-    const current = connection ?? manager.add({ providerId: 'openrouter', label: 'OpenRouter', baseUrl, networkPolicy: 'public', enabled: false })
-    const saved = manager.setCredential(current.id, current.revision, key)
-    if (existsSync(selectedPath)) unlinkSync(selectedPath)
-    const active = saved.enabled ? saved : manager.setEnabled(saved.id, saved.revision, true)
+    const adding = command === 'add-account' || command === 'add-account-stdin'
+    const label = argument?.trim() || `OpenRouter ${accounts.length + 1}`
+    let active: ManagedConnection
+    if (adding || !connection) {
+      active = manager.add({ providerId: 'openrouter', label, baseUrl, networkPolicy: 'public', enabled: true }, key)
+    } else {
+      const saved = manager.setCredential(connection.id, connection.revision, key)
+      if (selected()?.connectionId === connection.id && existsSync(selectedPath)) unlinkSync(selectedPath)
+      active = saved.enabled ? saved : manager.setEnabled(saved.id, saved.revision, true)
+    }
     const result = await manager.test(active.id, active.revision)
-    console.log(JSON.stringify({ credentials: result.connection.credentials.state, connection: result.ok ? 'connected' : result.code }))
+    console.log(JSON.stringify({ id: active.id, label: active.label, credentials: result.connection.credentials.state, connection: result.ok ? 'connected' : result.code }))
     if (!result.ok) process.exitCode = 1
   } else if (command === 'status') {
-    console.log(JSON.stringify({ connection: connectionSummary(connection), credentials: connection?.credentials.state ?? 'missing', selectedModel: selected()?.modelId ?? null }, null, 2))
+    const connected = accounts.filter(account => connectionSummary(account) === 'connected')
+    console.log(JSON.stringify({ connection: connected.length ? 'connected' : connectionSummary(connection), credentials: accounts.some(account => account.credentials.state === 'configured') ? 'configured' : 'missing', selectedModel: selected()?.modelId ?? null }, null, 2))
   } else {
-    if (!connection) throw new ManagementError('CREDENTIAL_REQUIRED')
-    if (command === 'clear-key') {
+    if (command === 'remove-account') {
+      if (!argument) throw new ManagementError('INVALID_INPUT')
+      const target = accounts.find(account => account.id === argument)
+      if (!target) throw new ManagementError('NOT_FOUND')
+      if (selected()?.connectionId === target.id && existsSync(selectedPath)) unlinkSync(selectedPath)
+      manager.remove(target.id, target.revision)
+      console.log(JSON.stringify({ removed: true, id: target.id }))
+    } else {
+      const usable = accounts.filter(account => account.enabled && account.credentials.state === 'configured')
+      if (!usable.length) throw new ManagementError('CREDENTIAL_REQUIRED')
+      if (command === 'clear-key') {
       manager.setCredential(connection.id, connection.revision, null)
-      if (existsSync(selectedPath)) unlinkSync(selectedPath)
+      if (selected()?.connectionId === connection.id && existsSync(selectedPath)) unlinkSync(selectedPath)
       console.log('OpenRouter credential removed.')
     } else if (command === 'test') {
-      const result = await manager.test(connection.id, connection.revision)
-      let inference: string | null = null
+      catalog = new CatalogService(manager)
       const selectedRoute = selected()
+      const entry = selectedRoute ? await catalog.getRoute(selectedRoute.routeId) : null
+      const target = selectionConnection(selectedRoute, entry, usable) ?? usable[0]
+      const result = await manager.test(target.id, target.revision)
+      let inference: string | null = null
       if (result.ok && selectedRoute) {
-        catalog = new CatalogService(manager)
         verification = new VerificationService(manager, catalog)
         const check = await verification.verify(selectedRoute.routeId, ['text'])
         inference = check.state === 'verified' ? 'verified' : check.code
@@ -184,33 +219,42 @@ try {
       if (command === 'chat' || command === 'auto-select') {
         verification = new VerificationService(manager, catalog)
         let selectedRoute = selected()
-        if (selectedRoute && !selectionIsCurrent(selectedRoute, await catalog.getRoute(selectedRoute.routeId), connection)) selectedRoute = null
+        const selectedEntry = selectedRoute ? await catalog.getRoute(selectedRoute.routeId) : null
+        if (selectedRoute && !selectionConnection(selectedRoute, selectedEntry, usable)) selectedRoute = null
         if (command === 'auto-select' || !selectedRoute) {
-          const automatic = await autoSelect(connection.id)
-          selectedRoute = { routeId: automatic.routeId, modelId: automatic.modelId }
+          const automatic = await autoSelect(usable.map(account => account.id))
+          selectedRoute = { routeId: automatic.routeId, modelId: automatic.modelId, connectionId: automatic.connectionId }
         }
         if (command === 'auto-select') {
           console.log(JSON.stringify({ selected: selectedRoute.modelId, inference: 'verified', automatic: true }))
         } else {
-          await chat(connection.id, selectedRoute.routeId, chatInput())
+          await chat(usable.map(account => account.id), selectedRoute.routeId, chatInput())
         }
       } else if (command === 'models') {
-        const refresh = await catalog.refresh(connection.id)
-        if (refresh.errorCode) throw new ManagementError(refresh.errorCode)
-        const page = await catalog.search({ connectionIds: [connection.id], outputModality: 'text', pageSize: 100 })
-        for (const entry of page.entries) console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName}\tcontext ${entry.route.model.contextTokens ?? '?'} tokens`)
+        const refreshed: string[] = []
+        for (const account of usable) { const refresh = await catalog.refresh(account.id); if (!refresh.errorCode) refreshed.push(account.id) }
+        if (!refreshed.length) throw new ManagementError('REQUEST_FAILED')
+        const page = await catalog.search({ connectionIds: refreshed, outputModality: 'text', pageSize: 100 })
+        for (const entry of page.entries) console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName}\t${accounts.find(account => account.id === entry.route.ref.connectionId)?.label ?? 'OpenRouter'} · context ${entry.route.model.contextTokens ?? '?'} tokens`)
         if (page.nextCursor) console.log('More models available; refine selection by exact model ID.')
       } else if (command === 'select') {
         if (!argument) throw new ManagementError('INVALID_INPUT')
-        const page = await catalog.search({ connectionIds: [connection.id], search: argument, pageSize: 100 })
-        const route = page.entries.find(item => item.route.ref.nativeModelId === argument)?.route
-        if (!route) throw new ManagementError('MODEL_UNAVAILABLE')
+        for (const account of usable) await catalog.refresh(account.id)
+        const page = await catalog.search({ connectionIds: usable.map(account => account.id), search: argument, pageSize: 100 })
+        const routes = page.entries.filter(item => item.route.ref.nativeModelId === argument).map(item => item.route)
+        if (!routes.length) throw new ManagementError('MODEL_UNAVAILABLE')
         verification = new VerificationService(manager, catalog)
-        const result = await verification.verify(route.id, ['text'])
-        if (result.state !== 'verified') throw new ManagementError(result.code ?? 'REQUEST_FAILED')
-        saveSelected(route.id, argument)
-        console.log(JSON.stringify({ selected: argument, inference: 'verified', checkedAt: result.checkedAt }))
+        let checkedAt = ''
+        let chosen = routes[0]
+        for (const route of routes) {
+          const result = await verification.verify(route.id, ['text'])
+          if (result.state === 'verified') { chosen = route; checkedAt = result.checkedAt; break }
+        }
+        if (!checkedAt) throw new ManagementError('MODEL_UNAVAILABLE')
+        saveSelected(chosen.id, argument, chosen.ref.connectionId)
+        console.log(JSON.stringify({ selected: argument, accountId: chosen.ref.connectionId, inference: 'verified', checkedAt }))
       }
+    }
     }
   }
 } catch (error) {
