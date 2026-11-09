@@ -746,6 +746,9 @@
       }
       conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
       setBusy(false);
+      input.disabled = Boolean(pendingApproval);
+      sendButton.disabled = Boolean(pendingApproval) || !input.value.trim();
+      input.placeholder = pendingApproval ? 'Approve or deny Jef’s action to continue…' : 'Ask Jef to inspect, build, fix, or just talk…';
     }
 
     function renderAccounts(raw) {

@@ -200,7 +200,7 @@ public final class NthnActivity extends AppCompatActivity {
 
     private void showAi() {
         WebView web = new WebView(this);
-        web.setBackgroundColor(android.graphics.Color.rgb(23, 21, 18));
+        web.setBackgroundColor(ContextCompat.getColor(this, R.color.nthn_surface));
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(false);
         web.setWebViewClient(new WebViewClient());
