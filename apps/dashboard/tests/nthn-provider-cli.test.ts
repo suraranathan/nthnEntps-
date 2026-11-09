@@ -38,9 +38,10 @@ test('nthn retains multiple OpenRouter accounts and resolves a selection to its 
   assert.equal(typeof selectionConnection, 'function')
   const first = {
     id: '11111111-1111-4111-8111-111111111111', providerId: 'openrouter', label: 'Personal', enabled: true, revision: 2,
+    baseUrl: 'https://openrouter.ai/api/v1', networkPolicy: 'public', scope: { account: null, project: null, region: null },
     credentials: { state: 'configured', revision: 1 },
-    health: { authentication: 'accepted', discovery: 'ok', inference: 'ok', checkedAt: new Date().toISOString() },
-  } as ManagedConnection
+    health: { authentication: 'accepted', discovery: 'succeeded', inference: 'succeeded', checkedAt: new Date().toISOString() },
+  } satisfies ManagedConnection
   const second = {
     ...first, id: '22222222-2222-4222-8222-222222222222', label: 'Work', revision: 4,
   } as ManagedConnection

@@ -1,0 +1,67 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+import * as gatewayModule from '../server/agent/gateway.ts'
+import type { ModelRoute } from '../server/ai/contracts.ts'
+import type { AgentState } from '../server/agent/agent.ts'
+
+test('resolved route gateway sends Alex tool context through the saved model route', async () => {
+  const Gateway = (gatewayModule as typeof gatewayModule & { ResolvedRouteGateway?: new (manager: unknown, resolver: () => Promise<ModelRoute>) => gatewayModule.Gateway }).ResolvedRouteGateway
+  assert.equal(typeof Gateway, 'function')
+  const route = {
+    id: 'route', ref: { connectionId: 'account', nativeModelId: 'openrouter/coder', upstreamEndpointId: null },
+    providerId: 'openrouter', protocol: 'openai-chat', connectionRevision: 3,
+  } as ModelRoute
+  let request: Record<string, unknown> | null = null
+  const manager = {
+    async *streamInference(connectionId: string, revision: number, body: Record<string, unknown>) {
+      assert.equal(connectionId, 'account')
+      assert.equal(revision, 3)
+      request = body
+      yield 'data: {"choices":[{"delta":{"content":"Tool-ready Alex"}}]}\n\n'
+      yield 'data: [DONE]\n\n'
+    },
+  }
+  const gateway = new Gateway!(manager, async () => route)
+  const output: string[] = []
+  for await (const chunk of gateway.stream([
+    { role: 'system', content: 'Use workspace tools.' },
+    { role: 'user', content: 'Inspect this project.' },
+  ])) output.push(chunk)
+  assert.equal(output.join(''), 'Tool-ready Alex')
+  const captured = request as unknown as Record<string, unknown>
+  assert.equal(captured.model, 'openrouter/coder')
+  assert.match(JSON.stringify(captured), /Use workspace tools/)
+  assert.deepEqual(gateway.info(), { provider: 'openrouter', model: 'openrouter/coder', transport: 'streaming' })
+})
+
+test('mobile snapshot exposes persistent messages and one exact pending approval', async () => {
+  const modulePath = resolve('server/agent/nthn-agent-mobile.ts')
+  assert.equal(existsSync(modulePath), true)
+  const mobile = await import('../server/agent/nthn-agent-mobile.ts')
+  const state = {
+    conversations: [], activeId: 'conversation', gateway: { provider: 'openrouter', model: 'coder', transport: 'streaming' },
+    workspace: '/data/data/com.nthn/files/home', protectedPaths: ['.local'], tools: [],
+    active: {
+      id: 'conversation', title: 'Fix project', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:01Z',
+      messages: [
+        { id: 'u', role: 'user', content: 'Fix it', createdAt: '2026-01-01T00:00:00Z', status: 'complete' },
+        { id: 'a', role: 'assistant', content: 'I need to edit it.', createdAt: '2026-01-01T00:00:01Z', status: 'complete', toolCalls: [
+          { id: 'call', tool: 'edit_file', arguments: { path: 'src/app.ts', oldText: 'a', newText: 'b' }, status: 'awaiting-approval', summary: 'Edit src/app.ts', approvalId: 'approval-1', approvalExpiresAt: 2_000_000_000_000 },
+        ] },
+      ],
+    },
+  } as AgentState
+  const snapshot = mobile.mobileAgentSnapshot(state)
+  assert.equal(snapshot.conversationId, 'conversation')
+  assert.equal(snapshot.messages.length, 2)
+  assert.deepEqual(snapshot.pendingApproval, {
+    conversationId: 'conversation', approvalId: 'approval-1', tool: 'edit_file', summary: 'Edit src/app.ts', expiresAt: 2_000_000_000_000,
+  })
+  assert.equal(JSON.stringify(snapshot).includes('oldText'), false)
+})
+
+test('the packaged agent CLI entry point exists', () => {
+  assert.equal(existsSync(resolve('server/agent/nthn-agent-cli.ts')), true)
+})

@@ -156,6 +156,43 @@ export class AssignedGateway implements Gateway {
   }
 }
 
+/** Stream through an exact route resolved by an app-specific persisted selection. */
+export class ResolvedRouteGateway implements Gateway {
+  private readonly manager: Pick<ConnectionManager, 'streamInference'>
+  private readonly resolver: () => Promise<ModelRoute>
+  private last: GatewayInfo | null
+
+  constructor(manager: Pick<ConnectionManager, 'streamInference'>, resolver: () => Promise<ModelRoute>, initial: GatewayInfo | null = null) {
+    this.manager = manager
+    this.resolver = resolver
+    this.last = initial
+  }
+
+  info(): GatewayInfo | null { return this.last }
+
+  async *stream(messages: ChatTurn[], options: { signal?: AbortSignal; maxTokens?: number } = {}): AsyncGenerator<string> {
+    let route: ModelRoute
+    try { route = await this.resolver() } catch (error) { throw friendly(error) }
+    this.last = { provider: route.providerId, model: route.ref.nativeModelId, transport: 'streaming' }
+    const protocol = connectionAdapter(route.providerId).protocol
+    const parser = createParser(protocol)
+    const body = requestBody(route, messages, true, options.maxTokens)
+    let emitted = false
+    let raw = ''
+    try {
+      for await (const chunk of this.manager.streamInference(route.ref.connectionId, route.connectionRevision, body, options.signal)) {
+        raw += chunk
+        for (const delta of parser.push(chunk)) if (delta) { emitted = true; yield delta }
+      }
+      for (const delta of parser.flush()) if (delta) { emitted = true; yield delta }
+    } catch (error) { throw friendly(error) }
+    if (!emitted) {
+      const text = fallbackText(raw, protocol)
+      if (text) yield text
+    }
+  }
+}
+
 export class RouterGateway implements Gateway {
   private readonly router: { current(): ModelProvider | null }
   constructor(router: { current(): ModelProvider | null }) {
