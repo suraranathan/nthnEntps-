@@ -167,6 +167,23 @@ jobs:
         with:
           distribution: temurin
           java-version: '11'
+      - name: Download Gradle distribution with retries
+        run: |
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 300 \
+            --output "$RUNNER_TEMP/gradle-7.2-bin.zip" \
+            https://services.gradle.org/distributions/gradle-7.2-bin.zip
+          unzip -tq "$RUNNER_TEMP/gradle-7.2-bin.zip"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          path = Path('termux-src/gradle/wrapper/gradle-wrapper.properties')
+          lines = path.read_text().splitlines()
+          url = (Path(os.environ['RUNNER_TEMP']) / 'gradle-7.2-bin.zip').as_uri()
+          updated = [f'distributionUrl={url}' if line.startswith('distributionUrl=') else line for line in lines]
+          assert updated != lines, 'Gradle wrapper distribution URL was not found'
+          path.write_text('\n'.join(updated) + '\n')
+          PY
       - name: Build separate app
         env:
           TERMUX_PACKAGE_VARIANT: apt-android-7
