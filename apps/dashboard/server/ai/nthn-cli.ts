@@ -14,11 +14,19 @@ import type { ManagedConnection } from './management-types.ts'
 const directory = resolve(fileURLToPath(new URL('../../', import.meta.url)), '.local/ai')
 const selectedPath = join(directory, 'selected-route.json')
 const baseUrl = 'https://openrouter.ai/api/v1'
+const providerEndpoints: Record<string, { baseUrl: string; networkPolicy: 'public' | 'loopback'; label: string }> = {
+  openai: { baseUrl: 'https://api.openai.com/v1', networkPolicy: 'public', label: 'OpenAI' },
+  anthropic: { baseUrl: 'https://api.anthropic.com/v1', networkPolicy: 'public', label: 'Anthropic' },
+  gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', networkPolicy: 'public', label: 'Google Gemini' },
+  xkiro: { baseUrl: 'https://api.xkiro.com/v1', networkPolicy: 'public', label: 'xKiro' },
+  ollama: { baseUrl: 'http://127.0.0.1:11434', networkPolicy: 'loopback', label: 'Ollama' },
+}
 const help = `nthn AI provider
   nthn-ai status            Connection and selected model
   nthn-ai configure         Enter an OpenRouter API key privately
   nthn-ai accounts          List configured OpenRouter accounts
   nthn-ai add-account [NAME] Add another OpenRouter account privately
+  nthn-ai add-provider-stdin PROVIDER  Add OpenAI, Anthropic, Gemini, xKiro or local Ollama
   nthn-ai remove-account ID Remove one OpenRouter account
   nthn-ai models            Refresh and list available text models
   nthn-ai auto-select       Verify and choose a suitable text model automatically
@@ -156,20 +164,28 @@ let catalog: CatalogService | undefined
 let verification: VerificationService | undefined
 try {
   const [command = 'help', argument, ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'status', 'accounts', 'configure', 'configure-stdin', 'add-account', 'add-account-stdin', 'remove-account', 'models', 'select', 'auto-select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'status', 'accounts', 'configure', 'configure-stdin', 'add-account', 'add-account-stdin', 'add-provider-stdin', 'remove-account', 'models', 'select', 'auto-select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); process.exit(0) }
   manager = new ConnectionManager(directory)
-  let accounts = openRouterAccounts(manager.list())
-  const connection = accounts[0]
+  let accounts = manager.list()
+  const connection = openRouterAccounts(accounts)[0]
   if (command === 'accounts') {
     const current = selected()
     console.log(JSON.stringify(accounts.map(account => ({
-      id: account.id, label: account.label, connection: connectionSummary(account), credentials: account.credentials.state,
+      id: account.id, label: account.label, providerId: account.providerId, connection: connectionSummary(account), credentials: account.credentials.state,
       selected: current?.connectionId === account.id,
     })), null, 2))
-  } else if (command === 'configure' || command === 'configure-stdin' || command === 'add-account' || command === 'add-account-stdin') {
+  } else if (command === 'configure' || command === 'configure-stdin' || command === 'add-account' || command === 'add-account-stdin' || command === 'add-provider-stdin') {
+    const provider = command === 'add-provider-stdin' ? providerEndpoints[argument ?? ''] : null
+    if (command === 'add-provider-stdin' && !provider) throw new ManagementError('INVALID_INPUT')
     const key = command === 'configure' || command === 'add-account' ? await secretPrompt() : secretStdin()
-    if (!key) throw new ManagementError('INVALID_INPUT')
+    if (!key && argument !== 'ollama') throw new ManagementError('INVALID_INPUT')
+    if (provider) {
+      const active = manager.add({ providerId: argument!, label: provider.label, baseUrl: provider.baseUrl, networkPolicy: provider.networkPolicy, enabled: true }, key || null)
+      const result = await manager.test(active.id, active.revision)
+      console.log(JSON.stringify({ id: active.id, label: active.label, credentials: result.connection.credentials.state, connection: result.ok ? 'connected' : result.code }))
+      if (!result.ok) process.exitCode = 1
+    } else {
     const adding = command === 'add-account' || command === 'add-account-stdin'
     const label = argument?.trim() || `OpenRouter ${accounts.length + 1}`
     let active: ManagedConnection
@@ -183,6 +199,7 @@ try {
     const result = await manager.test(active.id, active.revision)
     console.log(JSON.stringify({ id: active.id, label: active.label, credentials: result.connection.credentials.state, connection: result.ok ? 'connected' : result.code }))
     if (!result.ok) process.exitCode = 1
+    }
   } else if (command === 'status') {
     const connected = accounts.filter(account => connectionSummary(account) === 'connected')
     console.log(JSON.stringify({ connection: connected.length ? 'connected' : connectionSummary(connection), credentials: accounts.some(account => account.credentials.state === 'configured') ? 'configured' : 'missing', selectedModel: selected()?.modelId ?? null }, null, 2))
@@ -195,7 +212,7 @@ try {
       manager.remove(target.id, target.revision)
       console.log(JSON.stringify({ removed: true, id: target.id }))
     } else {
-      const usable = accounts.filter(account => account.enabled && account.credentials.state === 'configured')
+      const usable = accounts.filter(account => account.enabled && (account.credentials.state === 'configured' || account.credentials.state === 'not-required'))
       if (!usable.length) throw new ManagementError('CREDENTIAL_REQUIRED')
       if (command === 'clear-key') {
       manager.setCredential(connection.id, connection.revision, null)

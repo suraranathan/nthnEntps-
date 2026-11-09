@@ -159,10 +159,10 @@ export class AssignedGateway implements Gateway {
 /** Stream through an exact route resolved by an app-specific persisted selection. */
 export class ResolvedRouteGateway implements Gateway {
   private readonly manager: Pick<ConnectionManager, 'streamInference'>
-  private readonly resolver: () => Promise<ModelRoute>
+  private readonly resolver: (excluded?: Set<string>) => Promise<ModelRoute>
   private last: GatewayInfo | null
 
-  constructor(manager: Pick<ConnectionManager, 'streamInference'>, resolver: () => Promise<ModelRoute>, initial: GatewayInfo | null = null) {
+  constructor(manager: Pick<ConnectionManager, 'streamInference'>, resolver: (excluded?: Set<string>) => Promise<ModelRoute>, initial: GatewayInfo | null = null) {
     this.manager = manager
     this.resolver = resolver
     this.last = initial
@@ -171,24 +171,38 @@ export class ResolvedRouteGateway implements Gateway {
   info(): GatewayInfo | null { return this.last }
 
   async *stream(messages: ChatTurn[], options: { signal?: AbortSignal; maxTokens?: number } = {}): AsyncGenerator<string> {
-    let route: ModelRoute
-    try { route = await this.resolver() } catch (error) { throw friendly(error) }
-    this.last = { provider: route.providerId, model: route.ref.nativeModelId, transport: 'streaming' }
-    const protocol = connectionAdapter(route.providerId).protocol
-    const parser = createParser(protocol)
-    const body = requestBody(route, messages, true, options.maxTokens)
-    let emitted = false
-    let raw = ''
-    try {
-      for await (const chunk of this.manager.streamInference(route.ref.connectionId, route.connectionRevision, body, options.signal)) {
-        raw += chunk
-        for (const delta of parser.push(chunk)) if (delta) { emitted = true; yield delta }
+    const excluded = new Set<string>()
+    let previousFailure: GatewayError | null = null
+    for (;;) {
+      let route: ModelRoute
+      try { route = await this.resolver(excluded) } catch (error) { throw previousFailure ?? friendly(error) }
+      if (excluded.has(route.ref.connectionId)) throw previousFailure ?? new GatewayError('MODEL_UNAVAILABLE', 'No other model account is available.')
+      this.last = { provider: route.providerId, model: route.ref.nativeModelId, transport: 'streaming' }
+      const protocol = connectionAdapter(route.providerId).protocol
+      const parser = createParser(protocol)
+      const body = requestBody(route, messages, true, options.maxTokens)
+      let emitted = false
+      let raw = ''
+      try {
+        for await (const chunk of this.manager.streamInference(route.ref.connectionId, route.connectionRevision, body, options.signal)) {
+          raw += chunk
+          for (const delta of parser.push(chunk)) if (delta) { emitted = true; yield delta }
+        }
+        for (const delta of parser.flush()) if (delta) { emitted = true; yield delta }
+      } catch (error) {
+        const failure = friendly(error)
+        if (!emitted && !options.signal?.aborted && ['REQUEST_FAILED', 'DNS_FAILED', 'RATE_LIMITED', 'PROBE_FAILED', 'MODEL_UNAVAILABLE', 'INSUFFICIENT_CREDITS'].includes(failure.code)) {
+          excluded.add(route.ref.connectionId)
+          previousFailure = failure
+          continue
+        }
+        throw failure
       }
-      for (const delta of parser.flush()) if (delta) { emitted = true; yield delta }
-    } catch (error) { throw friendly(error) }
-    if (!emitted) {
-      const text = fallbackText(raw, protocol)
-      if (text) yield text
+      if (!emitted) {
+        const text = fallbackText(raw, protocol)
+        if (text) yield text
+      }
+      return
     }
   }
 }

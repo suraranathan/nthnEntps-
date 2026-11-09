@@ -393,7 +393,7 @@
         </button>
       </div>
 
-      <p class="provider-note">Add multiple OpenRouter accounts. Every key remains in the app-private encrypted vault.</p>
+      <p class="provider-note">Add provider accounts here. Keys stay in the app's encrypted private vault.</p>
     </aside>
 
     <button class="backdrop" id="backdrop" aria-label="Close provider sidebar"></button>
@@ -403,7 +403,7 @@
         <button class="menu-button" id="menu-button" aria-controls="provider-sidebar" aria-expanded="false" aria-label="Open providers">☰</button>
         <div class="thread-title">
           <div class="thread-name">New conversation</div>
-          <div class="thread-meta" id="provider-meta">Checking OpenRouter…</div>
+          <div class="thread-meta" id="provider-meta">Checking AI providers…</div>
         </div>
         <button class="thread-action" id="new-conversation" type="button">New</button>
         <div class="model-chip" id="model-chip">automatic</div>
@@ -564,8 +564,8 @@
       providerList.textContent = '';
       activeProvider = null;
       for (const account of accounts) {
-        const button = document.createElement('button'); button.className = 'provider'; button.dataset.provider = 'OpenRouter'; button.dataset.model = account.selected ? 'selected model' : 'available';
-        const icon = document.createElement('span'); icon.className = 'provider-icon'; icon.textContent = 'R';
+        const button = document.createElement('button'); button.className = 'provider'; button.dataset.provider = account.providerId || 'OpenRouter'; button.dataset.model = account.selected ? 'selected model' : 'available';
+        const icon = document.createElement('span'); icon.className = 'provider-icon'; icon.textContent = (account.providerId || 'openrouter').slice(0, 1).toUpperCase();
         const copy = document.createElement('span');
         const name = document.createElement('span'); name.className = 'provider-name'; name.textContent = account.label;
         const detail = document.createElement('span'); detail.className = 'provider-model'; detail.textContent = `${account.credentials}${account.selected ? ' · selected route' : ''}`;
@@ -574,7 +574,7 @@
         if (account.selected || !activeProvider) selectProvider(button);
       }
       if (!accounts.length) {
-        const empty = document.createElement('p'); empty.className = 'provider-note'; empty.textContent = 'No OpenRouter account yet. Tap + to add one.'; providerList.append(empty);
+        const empty = document.createElement('p'); empty.className = 'provider-note'; empty.textContent = 'No AI provider account yet. Tap + to add one.'; providerList.append(empty);
       }
     }
 

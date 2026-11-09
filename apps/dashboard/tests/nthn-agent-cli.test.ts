@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import * as gatewayModule from '../server/agent/gateway.ts'
 import type { ModelRoute } from '../server/ai/contracts.ts'
 import type { AgentState } from '../server/agent/agent.ts'
+import { ManagementError } from '../server/ai/management-types.ts'
 
 test('resolved route gateway sends Alex tool context through the saved model route', async () => {
   const Gateway = (gatewayModule as typeof gatewayModule & { ResolvedRouteGateway?: new (manager: unknown, resolver: () => Promise<ModelRoute>) => gatewayModule.Gateway }).ResolvedRouteGateway
@@ -34,6 +35,25 @@ test('resolved route gateway sends Alex tool context through the saved model rou
   assert.equal(captured.model, 'openrouter/coder')
   assert.match(JSON.stringify(captured), /Use workspace tools/)
   assert.deepEqual(gateway.info(), { provider: 'openrouter', model: 'openrouter/coder', transport: 'streaming' })
+})
+
+test('Alex switches provider accounts when a request fails before model output', async () => {
+  const first = { id: 'first', ref: { connectionId: 'openrouter-account', nativeModelId: 'router/model' }, providerId: 'openrouter', connectionRevision: 1 } as ModelRoute
+  const second = { id: 'second', ref: { connectionId: 'openai-account', nativeModelId: 'gpt-model' }, providerId: 'openai', connectionRevision: 1 } as ModelRoute
+  const calls: string[] = []
+  const gateway = new gatewayModule.ResolvedRouteGateway({
+    async *streamInference(id: string) {
+      calls.push(id)
+      if (id === first.ref.connectionId) throw new ManagementError('REQUEST_FAILED')
+      yield 'data: {"choices":[{"delta":{"content":"Recovered"}}]}\n\n'
+      yield 'data: [DONE]\n\n'
+    },
+  }, async excluded => excluded?.has(first.ref.connectionId) ? second : first)
+  const output: string[] = []
+  for await (const chunk of gateway.stream([{ role: 'user', content: 'Hello' }])) output.push(chunk)
+  assert.equal(output.join(''), 'Recovered')
+  assert.deepEqual(calls, ['openrouter-account', 'openai-account'])
+  assert.equal(gateway.info()?.provider, 'openai')
 })
 
 test('mobile snapshot exposes persistent messages and one exact pending approval', async () => {

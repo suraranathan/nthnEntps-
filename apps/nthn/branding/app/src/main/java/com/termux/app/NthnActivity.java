@@ -212,7 +212,7 @@ public final class NthnActivity extends AppCompatActivity {
             });
         }
 
-        @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebKey(this)); }
+        @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebProvider(this)); }
         @JavascriptInterface public void newConversation() {
             executor.execute(() -> {
                 try {
@@ -262,33 +262,45 @@ public final class NthnActivity extends AppCompatActivity {
         }
     }
 
-    private void configureWebKey(final AiWebBridge bridge) {
+    private void configureWebProvider(final AiWebBridge bridge) {
+        final String[] names = {"OpenRouter", "OpenAI", "Anthropic", "Google Gemini", "xKiro", "Ollama (local)"};
+        final String[] ids = {"openrouter", "openai", "anthropic", "gemini", "xkiro", "ollama"};
+        new AlertDialog.Builder(this).setTitle("Add AI provider account")
+            .setItems(names, (dialog, selected) -> configureWebKey(bridge, ids[selected], names[selected]))
+            .show();
+    }
+
+    private void configureWebKey(final AiWebBridge bridge, final String providerId, final String providerName) {
+        if ("ollama".equals(providerId)) {
+            executor.execute(() -> connectWebProvider(bridge, providerId, new char[0]));
+            return;
+        }
         EditText key = new EditText(this);
         key.setSingleLine(true);
-        key.setHint("OpenRouter API key");
+        key.setHint(providerName + " API key");
         key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         FrameLayout frame = new FrameLayout(this);
         frame.setPadding(dp(20), 0, dp(20), 0);
         frame.addView(key);
-        new AlertDialog.Builder(this).setTitle("Add OpenRouter account")
+        new AlertDialog.Builder(this).setTitle("Add " + providerName + " account")
             .setMessage("Each account key is stored separately in the encrypted private vault.")
             .setView(frame).setNegativeButton("Cancel", null)
             .setPositiveButton("Save and test", (dialog, which) -> {
                 char[] secret = key.getText().toString().trim().toCharArray();
                 key.setText("");
                 if (secret.length == 0) return;
-                executor.execute(() -> {
-                    try {
-                        NthnBackend.CommandResult result = backend.ai("add-account-stdin", null, secret);
-                        String state = result.ok() ? "OpenRouter account connected" : aiMessage(result.output);
-                        bridge.deliver("status", state);
-                        if (result.ok()) {
-                            NthnBackend.CommandResult accounts = backend.ai("accounts", null, null);
-                            if (accounts.ok()) bridge.deliver("accounts", accounts.output);
-                        }
-                    } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); }
-                });
+                executor.execute(() -> connectWebProvider(bridge, providerId, secret));
             }).show();
+    }
+
+    private void connectWebProvider(final AiWebBridge bridge, final String providerId, final char[] secret) {
+        try {
+            String command = "openrouter".equals(providerId) ? "add-account-stdin" : "add-provider-stdin";
+            NthnBackend.CommandResult result = backend.ai(command, "openrouter".equals(providerId) ? null : providerId, secret);
+            bridge.deliver("status", result.ok() ? "AI provider connected" : aiMessage(result.output));
+            NthnBackend.CommandResult accounts = backend.ai("accounts", null, null);
+            if (accounts.ok()) bridge.deliver("accounts", accounts.output);
+        } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); bridge.deliver("error", message(error)); }
     }
 
     private void loadAlexHistory() {

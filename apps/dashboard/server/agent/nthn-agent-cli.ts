@@ -5,7 +5,7 @@ import { ConnectionManager } from '../ai/connection-manager.ts'
 import { CatalogService } from '../ai/catalog-service.ts'
 import { VerificationService } from '../ai/verification-service.ts'
 import { ManagementError } from '../ai/management-types.ts'
-import { openRouterAccounts, selectionConnection, type SavedSelection } from '../ai/nthn-cli-state.ts'
+import { selectionConnection, type SavedSelection } from '../ai/nthn-cli-state.ts'
 import type { CatalogEntry, ModelRoute } from '../ai/contracts.ts'
 import { AlexAgent, type AgentEvent } from './agent.ts'
 import { ResolvedRouteGateway } from './gateway.ts'
@@ -67,9 +67,9 @@ let manager: ConnectionManager | undefined
 let catalog: CatalogService | undefined
 let verification: VerificationService | undefined
 
-async function resolveRoute(): Promise<ModelRoute> {
+async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
   if (!manager || !catalog || !verification) throw new ManagementError('REQUEST_FAILED')
-  const accounts = openRouterAccounts(manager.list()).filter(account => account.enabled && account.credentials.state === 'configured')
+  const accounts = manager.list().filter(account => account.enabled && (account.credentials.state === 'configured' || account.credentials.state === 'not-required') && !excluded.has(account.id))
   if (!accounts.length) throw new ManagementError('CREDENTIAL_REQUIRED')
   const saved = selected()
   const savedEntry = saved ? await catalog.getRoute(saved.routeId) : null
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
   catalog = new CatalogService(manager)
   verification = new VerificationService(manager, catalog)
   const saved = selected()
-  const gateway = new ResolvedRouteGateway(manager, resolveRoute, saved?.modelId ? { provider: 'openrouter', model: saved.modelId, transport: 'streaming' } : null)
+  const gateway = new ResolvedRouteGateway(manager, resolveRoute, saved?.modelId ? { provider: 'configured', model: saved.modelId, transport: 'streaming' } : null)
   const store = new AgentChatStore(agentDirectory)
   const agent = new AlexAgent({
     store, gateway, workspace,
