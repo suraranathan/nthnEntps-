@@ -39,8 +39,8 @@ REQUIRED_BOOTSTRAP_FILES = (
 REQUIRED_RUNTIME_ASSETS = (
     "assets/nthn-ai/runtime/bin/proot",
     "assets/nthn-ai/runtime/libexec/proot/loader",
-    "assets/nthn-ai/runtime/lib/libtalloc.so.2",
-    "assets/nthn-ai/runtime/lib/libandroid-shmem.so",
+    "assets/nthn-ai/runtime/libraries/libtalloc.so.2",
+    "assets/nthn-ai/runtime/libraries/libandroid-shmem.so",
 )
 
 

@@ -32,7 +32,7 @@ final class NthnAiInstaller {
 
     private static void installProotRuntime(File root) throws IOException {
         for (String path : PROOT_RUNTIME) {
-            File source = new File(root, "runtime/" + path);
+            File source = new File(root, "runtime/" + (path.startsWith("lib/") ? "libraries/" + path.substring(4) : path));
             if (!source.isFile()) throw new IOException("proot upgrade asset missing: " + path);
             File target = new File(PREFIX, path);
             if (target.isFile() && (!path.equals("bin/proot") || target.canExecute())) continue;
