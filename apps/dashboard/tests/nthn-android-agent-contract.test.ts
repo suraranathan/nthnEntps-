@@ -28,6 +28,8 @@ test('native bridge invokes Alex with the private Linux workspace and exact appr
   assert.match(activity, /backend\.agent\("approve"/)
   assert.match(activity, /backend\.ai\("add-account-stdin"/)
   assert.match(activity, /deliver\("accounts"/)
+  assert.match(activity, /configureWebKey\(this\)/)
+  assert.match(activity, /bridge\.deliver\("accounts"/)
 })
 
 test('Android Alex UI renders persisted snapshots, tool output and approval choices', async () => {

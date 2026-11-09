@@ -114,10 +114,11 @@ async function main(): Promise<void> {
   const agent = new AlexAgent({
     store, gateway, workspace,
     writablePrefixes: ['.'],
-    deniedSegments: ['.local', '.termux', '.ssh', '.gnupg'],
+    deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],
     protectedPaths: ['provider vault', 'credentials', 'Android app files outside Linux home'],
     taskRoot: '.',
     requireCommandApproval: true,
+    sandboxCommands: true,
   })
   await agent.load()
   const events: AgentEvent[] = []

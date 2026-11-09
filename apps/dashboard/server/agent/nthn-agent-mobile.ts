@@ -42,7 +42,7 @@ export function mobileAgentSnapshot(state: AgentState): MobileAgentSnapshot {
     const message = active!.messages[messageIndex]
     for (let callIndex = (message.toolCalls?.length ?? 0) - 1; callIndex >= 0; callIndex -= 1) {
       const call = message.toolCalls![callIndex]
-      if (call.status === 'awaiting-approval' && call.approvalId && call.approvalExpiresAt) {
+      if (call.status === 'awaiting-approval' && call.approvalId && call.approvalExpiresAt && call.approvalExpiresAt > Date.now()) {
         pendingApproval = {
           conversationId: active!.id,
           approvalId: call.approvalId,

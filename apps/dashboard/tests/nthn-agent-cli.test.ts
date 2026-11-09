@@ -60,6 +60,8 @@ test('mobile snapshot exposes persistent messages and one exact pending approval
     conversationId: 'conversation', approvalId: 'approval-1', tool: 'edit_file', summary: 'Edit src/app.ts', expiresAt: 2_000_000_000_000,
   })
   assert.equal(JSON.stringify(snapshot).includes('oldText'), false)
+  state.active!.messages[1].toolCalls![0].approvalExpiresAt = 1
+  assert.equal(mobile.mobileAgentSnapshot(state).pendingApproval, null)
 })
 
 test('the packaged agent CLI entry point exists', () => {

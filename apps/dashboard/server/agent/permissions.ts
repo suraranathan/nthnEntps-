@@ -63,6 +63,21 @@ export class PathPolicy {
     return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel))
   }
 
+  private assertResolved(absolutePath: string): void {
+    const resolvedRelative = relative(this.root, absolutePath)
+    if (!this.insideRoot(absolutePath)) throw new PermissionError('outside-workspace', `Path escapes the workspace: ${resolvedRelative}`)
+    this.assertRelative(resolvedRelative)
+  }
+
+  assertCommandArguments(args: string[]): void {
+    for (const raw of args) {
+      const value = raw.startsWith('-') && raw.includes('=') ? raw.slice(raw.indexOf('=') + 1) : raw
+      if (!value || (raw.startsWith('-') && !raw.includes('='))) continue
+      if (isAbsolute(value)) throw new PermissionError('absolute-path', `Absolute command paths are not allowed: ${value}`)
+      this.assertRelative(value)
+    }
+  }
+
   async resolveExisting(input: string): Promise<string> {
     this.assertRelative(input)
     const candidate = resolve(this.root, input)
@@ -74,6 +89,7 @@ export class PathPolicy {
       throw new PermissionError('not-found', `Path does not exist: ${input}`)
     }
     if (!this.insideRoot(real)) throw new PermissionError('symlink-escape', `Symlink escapes the workspace: ${input}`)
+    this.assertResolved(real)
     return real
   }
 
@@ -88,12 +104,14 @@ export class PathPolicy {
       throw new PermissionError('not-found', `Parent directory does not exist: ${dirname(input)}`)
     }
     if (!this.insideRoot(parentReal)) throw new PermissionError('symlink-escape', `Parent resolves outside the workspace: ${input}`)
+    this.assertResolved(parentReal)
     const target = resolve(parentReal, relative(dirname(candidate), candidate))
     try {
       const info = await lstat(target)
       if (info.isSymbolicLink()) {
         const linkReal = await realpath(target)
         if (!this.insideRoot(linkReal)) throw new PermissionError('symlink-escape', `Symlink escapes the workspace: ${input}`)
+        this.assertResolved(linkReal)
       }
     } catch (error) {
       if (error instanceof PermissionError) throw error

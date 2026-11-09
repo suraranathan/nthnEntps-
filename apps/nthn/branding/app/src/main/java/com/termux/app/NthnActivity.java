@@ -212,7 +212,7 @@ public final class NthnActivity extends AppCompatActivity {
             });
         }
 
-        @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebKey()); }
+        @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebKey(this)); }
         @JavascriptInterface public void newConversation() {
             executor.execute(() -> {
                 try {
@@ -262,7 +262,7 @@ public final class NthnActivity extends AppCompatActivity {
         }
     }
 
-    private void configureWebKey() {
+    private void configureWebKey(final AiWebBridge bridge) {
         EditText key = new EditText(this);
         key.setSingleLine(true);
         key.setHint("OpenRouter API key");
@@ -281,10 +281,10 @@ public final class NthnActivity extends AppCompatActivity {
                     try {
                         NthnBackend.CommandResult result = backend.ai("add-account-stdin", null, secret);
                         String state = result.ok() ? "OpenRouter account connected" : aiMessage(result.output);
-                        deliver("status", state);
+                        bridge.deliver("status", state);
                         if (result.ok()) {
                             NthnBackend.CommandResult accounts = backend.ai("accounts", null, null);
-                            if (accounts.ok()) deliver("accounts", accounts.output);
+                            if (accounts.ok()) bridge.deliver("accounts", accounts.output);
                         }
                     } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); }
                 });

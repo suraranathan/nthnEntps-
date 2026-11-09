@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -186,6 +186,22 @@ test('mobile tool policy allows workspace projects but approval-gates every exec
   assert.equal(tools.list().find(tool => tool.name === 'run_build')?.requiresApproval, true)
 })
 
+test('mobile tools cannot follow sensitive symlinks, search secrets or traverse command arguments', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  await writeFile(join(workspace, '.env'), 'DEMO_SECRET=never-expose\n')
+  await symlink('.env', join(workspace, 'ordinary.txt'))
+  await writeFile(join(directory, 'outside.txt'), 'outside workspace\n')
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  const tools = new ToolRegistry({ taskRoot: '.', requireCommandApproval: true, sandboxCommands: true })
+  const context = { workspace, paths, signal: new AbortController().signal }
+
+  await assert.rejects(() => tools.execute('read_file', { path: 'ordinary.txt' }, context), (error: unknown) => error instanceof PermissionError && error.code === 'sensitive-file')
+  const search = await tools.execute('search', { pattern: 'DEMO_SECRET', path: '.' }, context)
+  assert.equal(search.ok, true)
+  assert.doesNotMatch(search.output, /DEMO_SECRET|never-expose/)
+  await assert.rejects(() => tools.execute('run_command', { command: 'cat ../outside.txt', cwd: '.' }, context), (error: unknown) => error instanceof PermissionError && error.code === 'path-traversal')
+})
+
 test('tool stream filter hides protocol markers split across chunks and returns tool intents', () => {
   const filter = new ToolStreamFilter()
   let visible = ''
@@ -250,6 +266,41 @@ test('agent streams text, executes a read tool, and reports structured decisions
   assert.ok(decisionEvent)
   assert.ok(events.some(event => event.type === 'tool-output'))
   assert.ok(events.some(event => event.type === 'done'))
+})
+
+test('tool exceptions become failed results and Alex can continue', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const store = new AgentChatStore(join(directory, 'failed-tool-chats'))
+  await store.load()
+  const gateway = new FakeGateway([
+    ['<<<NTHN_TOOL>>>{"tool":"read_file","arguments":{"path":"missing.txt"}}<<<END_NTHN_TOOL>>>'],
+    ['The requested file does not exist.'],
+  ])
+  const agent = new AlexAgent({ store, gateway, workspace })
+  const conversation = await agent.newConversation()
+  await agent.run(conversation.id, 'Read the missing file', () => undefined)
+  const messages = store.get(conversation.id)?.messages ?? []
+  assert.equal(messages.find(message => message.toolCalls?.length)?.toolCalls?.[0].status, 'failed')
+  assert.match(messages.find(message => message.role === 'tool')?.content ?? '', /not exist|not found/i)
+  assert.equal(messages.at(-1)?.content, 'The requested file does not exist.')
+})
+
+test('loading marks expired persisted approvals cancelled', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const storeDirectory = join(directory, 'expired-chats')
+  const initial = new AgentChatStore(storeDirectory)
+  await initial.load()
+  const conversation = await initial.create()
+  await initial.append(conversation.id, {
+    role: 'assistant', content: 'Approval expired.', status: 'complete', toolCalls: [{
+      id: 'call', tool: 'write_file', arguments: { path: 'expired.txt', content: 'no' }, status: 'awaiting-approval',
+      approvalId: 'approval-expired', approvalExpiresAt: 1,
+    }],
+  })
+  const restored = new AgentChatStore(storeDirectory)
+  const agent = new AlexAgent({ store: restored, gateway: new FakeGateway([]), workspace })
+  await agent.load()
+  assert.equal(restored.get(conversation.id)?.messages[0].toolCalls?.[0].status, 'cancelled')
 })
 
 test('write tools pause for approval and only execute after approval', async t => {

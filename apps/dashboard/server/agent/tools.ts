@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { join, relative, resolve as resolvePath } from 'node:path'
 import {
   assessCommand,
   PathPolicy,
@@ -53,6 +54,7 @@ export interface ToolDefinition {
 export interface ToolRegistryOptions {
   taskRoot?: string
   requireCommandApproval?: boolean
+  sandboxCommands?: boolean
 }
 
 const MAX_TOOL_OUTPUT = 200_000
@@ -127,16 +129,39 @@ export async function runProcess(
   context: ToolContext,
   cwd: string,
   timeoutMs = context.timeoutMs ?? 120_000,
+  sandbox = false,
 ): Promise<ToolResult> {
   const assessment = assessCommand(command)
   if (!assessment.allowed) {
     return { ok: false, summary: assessment.reason, output: assessment.reason }
   }
   const parsed = parseCommand(command)
+  if (sandbox) context.paths.assertCommandArguments(parsed.args)
   return await new Promise<ToolResult>(resolve => {
-    const child = spawn(parsed.program, parsed.args, {
-      cwd,
-      env: sanitizedEnvironment(process.env),
+    let program = parsed.program
+    let args = parsed.args
+    let processCwd = cwd
+    let sandboxCwd = '/'
+    if (sandbox) {
+      const prefix = resolvePath(process.execPath, '../..')
+      const proot = join(prefix, 'bin/proot')
+      if (!existsSync(proot)) {
+        resolve({ ok: false, summary: 'The confined command runner is unavailable.', output: 'Install the app Linux environment before running commands.' })
+        return
+      }
+      const guestCwd = '/' + relative(context.workspace, cwd).split('\\').join('/')
+      sandboxCwd = guestCwd
+      const bindings = [prefix, '/system', '/apex', '/vendor', '/proc'].filter(path => existsSync(path))
+      program = proot
+      args = ['--kill-on-exit', '-r', context.workspace]
+      for (const binding of bindings) args.push('-b', `${binding}:${binding}`)
+      args.push('-w', guestCwd, parsed.program.replace(/^.*\//, ''), ...parsed.args)
+      processCwd = context.workspace
+    }
+    const environment = sanitizedEnvironment(process.env, sandbox ? { HOME: '/', TMPDIR: '/', PWD: sandboxCwd } : {})
+    const child = spawn(program, args, {
+      cwd: processCwd,
+      env: environment,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
     })
@@ -309,6 +334,7 @@ export class ToolRegistry {
 function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const taskRoot = options.taskRoot ?? 'apps/dashboard'
   const commandApproval = options.requireCommandApproval ?? false
+  const sandboxCommands = options.sandboxCommands ?? false
   return [
     {
       name: 'list_dir',
@@ -372,14 +398,16 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
         for (const file of files) {
           if (matches.length >= MAX_SEARCH_RESULTS) break
           if (context.signal.aborted) break
-          const info = await stat(file)
+          let safeFile: string
+          try { safeFile = await context.paths.resolveExisting(relative(context.workspace, file)) } catch { continue }
+          const info = await stat(safeFile)
           if (info.size > MAX_FILE_BYTES) continue
           let content: string
-          try { content = await readFile(file, 'utf8') } catch { continue }
+          try { content = await readFile(safeFile, 'utf8') } catch { continue }
           if (content.includes('\u0000')) continue
           const lines = content.split('\n')
           for (let index = 0; index < lines.length && matches.length < MAX_SEARCH_RESULTS; index += 1) {
-            if (regex.test(lines[index])) matches.push(`${relative(context.workspace, file)}:${index + 1}: ${lines[index].slice(0, 300)}`)
+            if (regex.test(lines[index])) matches.push(`${relative(context.workspace, safeFile)}:${index + 1}: ${lines[index].slice(0, 300)}`)
           }
         }
         const output = clampOutput(matches.join('\n'))
@@ -436,7 +464,7 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
       execute: async (args, context) => {
         const cwdInput = stringArg(args, 'cwd', '.')
         const cwd = await context.paths.resolveExisting(cwdInput)
-        return await runProcess(stringArg(args, 'command'), context, cwd)
+        return await runProcess(stringArg(args, 'command'), context, cwd, context.timeoutMs ?? 120_000, sandboxCommands)
       },
     },
     {
@@ -450,7 +478,7 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
         const command = stringArg(args, 'command', 'node --test --test-concurrency=1 tests/*.test.ts')
         if (!/\b(test|spec|node\s+--test)\b/.test(command)) return { ok: false, summary: 'run_tests only accepts test commands.', output: command }
         const cwd = await context.paths.resolveExisting(taskRoot)
-        return await runProcess(command, context, cwd)
+        return await runProcess(command, context, cwd, context.timeoutMs ?? 120_000, sandboxCommands)
       },
     },
     {
@@ -464,7 +492,7 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
         const command = stringArg(args, 'command', 'npm run build')
         if (!/\b(build|typecheck|tsc)\b/.test(command)) return { ok: false, summary: 'run_build only accepts build or typecheck commands.', output: command }
         const cwd = await context.paths.resolveExisting(taskRoot)
-        return await runProcess(command, context, cwd)
+        return await runProcess(command, context, cwd, context.timeoutMs ?? 120_000, sandboxCommands)
       },
     },
     {

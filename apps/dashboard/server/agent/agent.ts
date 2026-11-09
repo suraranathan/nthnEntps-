@@ -145,6 +145,7 @@ interface AgentOptions {
   protectedPaths?: string[]
   taskRoot?: string
   requireCommandApproval?: boolean
+  sandboxCommands?: boolean
 }
 
 export interface AgentState {
@@ -196,7 +197,7 @@ export class AlexAgent {
       writablePrefixes: options.writablePrefixes ?? ['apps/dashboard'],
       deniedSegments: options.deniedSegments ?? ['.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer'],
     })
-    const toolOptions: ToolRegistryOptions = { taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval }
+    const toolOptions: ToolRegistryOptions = { taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands }
     this.tools = new ToolRegistry(toolOptions)
     this.maxSteps = options.maxSteps ?? MAX_STEPS
     this.now = options.now ?? (() => Date.now())
@@ -208,8 +209,15 @@ export class AlexAgent {
     for (const summary of this.store.list()) {
       const conversation = this.store.get(summary.id)
       for (const message of conversation?.messages ?? []) {
+        let changed = false
         for (const call of message.toolCalls ?? []) {
-          if (call.status !== 'awaiting-approval' || !call.approvalId || !call.approvalExpiresAt || call.approvalExpiresAt <= this.now()) continue
+          if (call.status !== 'awaiting-approval' || !call.approvalId || !call.approvalExpiresAt) continue
+          if (call.approvalExpiresAt <= this.now()) {
+            call.status = 'cancelled'
+            call.summary = 'Approval expired.'
+            changed = true
+            continue
+          }
           try {
             this.tools.validate(call.tool, call.arguments)
             const signature = stableSignature(call.tool, call.arguments)
@@ -233,6 +241,7 @@ export class AlexAgent {
             })
           } catch { /* Invalid or expired persisted approvals remain non-executable. */ }
         }
+        if (changed) await this.store.update(conversation!.id, message.id, { toolCalls: message.toolCalls })
       }
     }
   }
@@ -568,12 +577,17 @@ export class AlexAgent {
   }
 
   private async executeTool(name: string, args: Record<string, unknown>, signal: AbortSignal) {
-    return await this.tools.execute(name, args, {
-      workspace: this.workspace,
-      paths: this.paths,
-      signal,
-      timeoutMs: 120_000,
-    })
+    try {
+      return await this.tools.execute(name, args, {
+        workspace: this.workspace,
+        paths: this.paths,
+        signal,
+        timeoutMs: 120_000,
+      })
+    } catch (error) {
+      const message = error instanceof PermissionError ? error.message : 'The tool failed before producing output.'
+      return { ok: false, summary: message, output: message }
+    }
   }
 
   private toolMessage(tool: string, result: { ok: boolean; summary: string; output: string; truncated?: boolean }): string {
