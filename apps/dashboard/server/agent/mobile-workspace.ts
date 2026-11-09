@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 export interface MobileWorkspace {
@@ -28,7 +28,7 @@ function resolveChoice(home: string, stateDirectory: string, input: string): Mob
 }
 
 export function loadMobileWorkspace(home: string, storeDirectory: string): MobileWorkspace {
-  let path = '.'
+  let path = existsSync(join(home, 'nthnEntps', 'apps/nthn/VERSION')) ? 'nthnEntps' : '.'
   try {
     const saved: unknown = JSON.parse(readFileSync(join(storeDirectory, 'workspace.json'), 'utf8'))
     if (saved && typeof saved === 'object' && !Array.isArray(saved) && typeof (saved as { path?: unknown }).path === 'string') {

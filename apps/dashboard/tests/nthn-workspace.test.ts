@@ -39,3 +39,18 @@ test('mobile project selection rejects paths outside home, files, and private ag
     assert.equal(loadMobileWorkspace(home, state).workspace, home)
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
+
+test('Jef opens the installed app source by default and respects an explicit home choice', () => {
+  const root = mkdtempSync(join(tmpdir(), 'nthn-source-choice-'))
+  try {
+    const home = join(root, 'home')
+    const state = join(root, 'agent')
+    mkdirSync(join(home, 'nthnEntps'), { recursive: true })
+    assert.equal(loadMobileWorkspace(home, state).relative, '.')
+    mkdirSync(join(home, 'nthnEntps', 'apps/nthn'), { recursive: true })
+    writeFileSync(join(home, 'nthnEntps', 'apps/nthn/VERSION'), '1.2\n')
+    assert.equal(loadMobileWorkspace(home, state).relative, 'nthnEntps')
+    chooseMobileWorkspace(home, state, '.')
+    assert.equal(loadMobileWorkspace(home, state).relative, '.')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})

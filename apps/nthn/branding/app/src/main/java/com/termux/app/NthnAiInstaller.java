@@ -23,6 +23,7 @@ final class NthnAiInstaller {
             File root = new File(context.getFilesDir(), "nthn-ai");
             copyAssets(context, "nthn-ai", root);
             installProotRuntime(root);
+            NthnSourceInstaller.install(context);
             installLauncher(new File(PREFIX, "bin/nthn-ai"), new File(root, "server/ai/nthn-cli.ts"));
             installLauncher(new File(PREFIX, "bin/nthn-agent"), new File(root, "server/agent/nthn-agent-cli.ts"));
         } catch (IOException error) {

@@ -43,6 +43,13 @@ REQUIRED_RUNTIME_ASSETS = (
     "assets/nthn-ai/runtime/libraries/libandroid-shmem.so",
 )
 
+REQUIRED_SOURCE_FILES = (
+    "AGENTS.md",
+    "apps/nthn/VERSION",
+    "apps/nthn/branding/app/src/main/java/com/termux/app/NthnSourceInstaller.java",
+    "apps/dashboard/server/agent/agent.ts",
+)
+
 
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -91,6 +98,7 @@ def main() -> None:
     parser.add_argument("apk", type=pathlib.Path)
     parser.add_argument("--aapt2")
     parser.add_argument("--bootstrap", type=pathlib.Path)
+    parser.add_argument("--source-commit")
     args = parser.parse_args()
 
     apk = args.apk
@@ -122,6 +130,24 @@ def main() -> None:
         for required in REQUIRED_RUNTIME_ASSETS:
             if required not in names or zf.getinfo(required).file_size == 0:
                 fail(f"missing proot upgrade asset {required!r}")
+        source_name = "assets/nthn-source.zip"
+        if source_name not in names or zf.getinfo(source_name).file_size == 0:
+            fail("missing editable NTHN source archive")
+        with zipfile.ZipFile(io.BytesIO(zf.read(source_name))) as source:
+            bad = source.testzip()
+            if bad is not None:
+                fail(f"corrupt NTHN source member {bad!r}")
+            for required in REQUIRED_SOURCE_FILES:
+                if required not in source.namelist() or source.getinfo(required).file_size == 0:
+                    fail(f"NTHN source archive is missing {required!r}")
+        source_commit_name = "assets/nthn-source-commit.txt"
+        if source_commit_name not in names:
+            fail("missing NTHN source revision")
+        source_commit = zf.read(source_commit_name).decode("ascii", "replace").strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+            fail("invalid NTHN source revision")
+        if args.source_commit and source_commit != args.source_commit:
+            fail("NTHN source revision does not match the build")
         abi_dirs = sorted({name.split("/")[1] for name in names if name.startswith("lib/")})
         if abi_dirs != ["arm64-v8a"]:
             fail(f"unexpected native ABI directories: {abi_dirs}")
