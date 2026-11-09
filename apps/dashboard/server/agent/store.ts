@@ -15,6 +15,7 @@ export interface ToolCallRecord {
   output?: string
   error?: string
   approvalId?: string
+  approvalExpiresAt?: number
 }
 
 export interface AgentMessage {

@@ -172,6 +172,20 @@ test('development tools read, search, write and edit inside the allowed workspac
   assert.throws(() => approval.consume(ticket.id, 'conversation', 'write_file', signature), (error: unknown) => error instanceof PermissionError && error.code === 'approval-missing')
 })
 
+test('mobile tool policy allows workspace projects but approval-gates every executable action', async t => {
+  const { workspace } = await workspaceFixture(t)
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  const tools = new ToolRegistry({ taskRoot: '.', requireCommandApproval: true })
+  const context = { workspace, paths, signal: new AbortController().signal }
+
+  const write = await tools.execute('write_file', { path: 'mobile-project.txt', content: 'mobile workspace\n' }, context)
+  assert.equal(write.ok, true)
+  assert.equal(await readFile(join(workspace, 'mobile-project.txt'), 'utf8'), 'mobile workspace\n')
+  assert.equal(tools.list().find(tool => tool.name === 'run_command')?.requiresApproval, true)
+  assert.equal(tools.list().find(tool => tool.name === 'run_tests')?.requiresApproval, true)
+  assert.equal(tools.list().find(tool => tool.name === 'run_build')?.requiresApproval, true)
+})
+
 test('tool stream filter hides protocol markers split across chunks and returns tool intents', () => {
   const filter = new ToolStreamFilter()
   let visible = ''
@@ -268,6 +282,43 @@ test('write tools pause for approval and only execute after approval', async t =
   assert.equal(after?.messages.at(-1)?.content, 'The file was written.')
   assert.equal(after?.messages.find(message => message.toolCalls?.length)?.toolCalls?.[0].status, 'succeeded')
   assert.ok(continued.some(event => event.type === 'done'))
+})
+
+test('pending mobile approval survives a fresh agent process', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const storeDirectory = join(directory, 'restart-chats')
+  const firstStore = new AgentChatStore(storeDirectory)
+  await firstStore.load()
+  const first = new AlexAgent({
+    store: firstStore,
+    gateway: new FakeGateway([[
+      'I need approval.\n<<<NTHN_TOOL>>>',
+      '{"tool":"write_file","arguments":{"path":"restart-approved.txt","content":"persisted approval"}}',
+      '<<<END_NTHN_TOOL>>>',
+    ]]),
+    workspace,
+    writablePrefixes: ['.'],
+    requireCommandApproval: true,
+  })
+  const conversation = await first.newConversation()
+  const proposed: AgentEvent[] = []
+  await first.run(conversation.id, 'Create a file after approval', event => proposed.push(event))
+  const approval = proposed.find(event => event.type === 'approval')
+  assert.ok(approval && approval.type === 'approval')
+
+  const restartedStore = new AgentChatStore(storeDirectory)
+  const restarted = new AlexAgent({
+    store: restartedStore,
+    gateway: new FakeGateway([['The approved file was written.']]),
+    workspace,
+    writablePrefixes: ['.'],
+    requireCommandApproval: true,
+  })
+  await restarted.load()
+  await restarted.approve(conversation.id, approval.approvalId, true, () => undefined)
+
+  assert.equal(await readFile(join(workspace, 'restart-approved.txt'), 'utf8'), 'persisted approval')
+  assert.equal(restartedStore.get(conversation.id)?.messages.at(-1)?.content, 'The approved file was written.')
 })
 
 test('denied approval does not execute the tool and lets the model continue', async t => {

@@ -230,6 +230,12 @@ export class ApprovalRegistry {
     return ticket
   }
 
+  restore(ticket: ApprovalTicket): void {
+    this.sweep()
+    if (ticket.expiresAt <= Date.now()) throw new PermissionError('approval-missing', 'Approval ticket is missing or expired.')
+    this.tickets.set(ticket.id, ticket)
+  }
+
   consume(id: string, conversationId: string, tool: string, signature: string): ApprovalTicket {
     this.sweep()
     const ticket = this.tickets.get(id)

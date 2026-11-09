@@ -50,6 +50,11 @@ export interface ToolDefinition {
   execute: (args: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>
 }
 
+export interface ToolRegistryOptions {
+  taskRoot?: string
+  requireCommandApproval?: boolean
+}
+
 const MAX_TOOL_OUTPUT = 200_000
 const MAX_FILE_BYTES = 1_000_000
 const MAX_SEARCH_RESULTS = 200
@@ -254,8 +259,8 @@ function toolDecision(args: Record<string, unknown>): ToolResult {
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition>()
 
-  constructor() {
-    for (const tool of buildTools()) this.tools.set(tool.name, tool)
+  constructor(options: ToolRegistryOptions = {}) {
+    for (const tool of buildTools(options)) this.tools.set(tool.name, tool)
   }
 
   list(): { name: string; description: string; requiresApproval: boolean | 'conditional'; arguments: Record<string, ToolArgumentType> }[] {
@@ -301,7 +306,9 @@ export class ToolRegistry {
   }
 }
 
-function buildTools(): ToolDefinition[] {
+function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
+  const taskRoot = options.taskRoot ?? 'apps/dashboard'
+  const commandApproval = options.requireCommandApproval ?? false
   return [
     {
       name: 'list_dir',
@@ -419,7 +426,7 @@ function buildTools(): ToolDefinition[] {
     {
       name: 'run_command',
       description: 'Run an allowlisted development command in the workspace. Shell operators are rejected. Destructive commands require approval.',
-      requiresApproval: args => {
+      requiresApproval: commandApproval ? true : args => {
         const assessment: CommandAssessment = assessCommand(stringArg(args, 'command'))
         return assessment.requiresApproval
       },
@@ -435,28 +442,28 @@ function buildTools(): ToolDefinition[] {
     {
       name: 'run_tests',
       description: 'Run the dashboard test suite (node --test). Optional command override must remain a test command.',
-      requiresApproval: false,
+      requiresApproval: commandApproval,
       required: [],
       arguments: { command: 'string' },
       summarize: args => `Run tests: ${stringArg(args, 'command', 'node --test --test-concurrency=1 tests/*.test.ts')}`,
       execute: async (args, context) => {
         const command = stringArg(args, 'command', 'node --test --test-concurrency=1 tests/*.test.ts')
         if (!/\b(test|spec|node\s+--test)\b/.test(command)) return { ok: false, summary: 'run_tests only accepts test commands.', output: command }
-        const cwd = await context.paths.resolveExisting('apps/dashboard')
+        const cwd = await context.paths.resolveExisting(taskRoot)
         return await runProcess(command, context, cwd)
       },
     },
     {
       name: 'run_build',
       description: 'Run the dashboard production build (npm run build). Optional command override must remain a build/typecheck command.',
-      requiresApproval: false,
+      requiresApproval: commandApproval,
       required: [],
       arguments: { command: 'string' },
       summarize: args => `Build: ${stringArg(args, 'command', 'npm run build')}`,
       execute: async (args, context) => {
         const command = stringArg(args, 'command', 'npm run build')
         if (!/\b(build|typecheck|tsc)\b/.test(command)) return { ok: false, summary: 'run_build only accepts build or typecheck commands.', output: command }
-        const cwd = await context.paths.resolveExisting('apps/dashboard')
+        const cwd = await context.paths.resolveExisting(taskRoot)
         return await runProcess(command, context, cwd)
       },
     },

@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { AgentChatStore, type Conversation, type ToolCallRecord } from './store.ts'
 import { ApprovalRegistry, PathPolicy, PermissionError } from './permissions.ts'
-import { ToolRegistry, stableSignature } from './tools.ts'
+import { ToolRegistry, stableSignature, type ToolRegistryOptions } from './tools.ts'
 import { GatewayError, type ChatTurn, type Gateway } from './gateway.ts'
 import {
   assessRisk,
@@ -131,7 +131,7 @@ interface PendingApproval {
   tool: string
   arguments: Record<string, unknown>
   signature: string
-  createdAt: number
+  expiresAt: number
 }
 
 interface AgentOptions {
@@ -140,6 +140,11 @@ interface AgentOptions {
   workspace?: string
   maxSteps?: number
   now?: () => number
+  writablePrefixes?: string[]
+  deniedSegments?: string[]
+  protectedPaths?: string[]
+  taskRoot?: string
+  requireCommandApproval?: boolean
 }
 
 export interface AgentState {
@@ -174,12 +179,13 @@ export class AlexAgent {
   private readonly gateway: Gateway
   private readonly workspace: string
   private readonly paths: PathPolicy
-  private readonly tools = new ToolRegistry()
+  private readonly tools: ToolRegistry
   private readonly approvals = new ApprovalRegistry()
   private readonly pending = new Map<string, PendingApproval>()
   private readonly running = new Map<string, AbortController>()
   private readonly maxSteps: number
   private readonly now: () => number
+  private readonly protectedPaths: string[]
 
   constructor(options: AgentOptions) {
     this.store = options.store
@@ -187,15 +193,48 @@ export class AlexAgent {
     this.workspace = resolve(options.workspace ?? defaultWorkspace())
     this.paths = new PathPolicy({
       root: this.workspace,
-      writablePrefixes: ['apps/dashboard'],
-      deniedSegments: ['.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer'],
+      writablePrefixes: options.writablePrefixes ?? ['apps/dashboard'],
+      deniedSegments: options.deniedSegments ?? ['.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer'],
     })
+    const toolOptions: ToolRegistryOptions = { taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval }
+    this.tools = new ToolRegistry(toolOptions)
     this.maxSteps = options.maxSteps ?? MAX_STEPS
     this.now = options.now ?? (() => Date.now())
+    this.protectedPaths = options.protectedPaths ?? ['apps/nthn', 'bootstrap', 'Linux/proot', 'terminal', 'Android native environment', 'package configuration']
   }
 
   async load(): Promise<void> {
     await this.store.load()
+    for (const summary of this.store.list()) {
+      const conversation = this.store.get(summary.id)
+      for (const message of conversation?.messages ?? []) {
+        for (const call of message.toolCalls ?? []) {
+          if (call.status !== 'awaiting-approval' || !call.approvalId || !call.approvalExpiresAt || call.approvalExpiresAt <= this.now()) continue
+          try {
+            this.tools.validate(call.tool, call.arguments)
+            const signature = stableSignature(call.tool, call.arguments)
+            this.approvals.restore({
+              id: call.approvalId,
+              conversationId: conversation!.id,
+              tool: call.tool,
+              signature,
+              createdAt: call.approvalExpiresAt - 10 * 60_000,
+              expiresAt: call.approvalExpiresAt,
+            })
+            this.pending.set(call.approvalId, {
+              id: call.approvalId,
+              conversationId: conversation!.id,
+              messageId: message.id,
+              callId: call.id,
+              tool: call.tool,
+              arguments: call.arguments,
+              signature,
+              expiresAt: call.approvalExpiresAt,
+            })
+          } catch { /* Invalid or expired persisted approvals remain non-executable. */ }
+        }
+      }
+    }
   }
 
   state(): AgentState {
@@ -207,7 +246,7 @@ export class AlexAgent {
       gateway: this.gateway.info(),
       tools: this.tools.list(),
       workspace: this.workspace,
-      protectedPaths: ['apps/nthn', 'bootstrap', 'Linux/proot', 'terminal', 'Android native environment', 'package configuration'],
+      protectedPaths: this.protectedPaths,
     }
   }
 
@@ -285,7 +324,7 @@ export class AlexAgent {
   async approve(conversationId: string, approvalId: string, approved: boolean, emit: Emit): Promise<void> {
     if (this.running.has(conversationId)) throw new AgentBusyError()
     const pending = this.pending.get(approvalId)
-    if (!pending || pending.conversationId !== conversationId || pending.createdAt + 10 * 60_000 < this.now()) {
+    if (!pending || pending.conversationId !== conversationId || pending.expiresAt <= this.now()) {
       this.pending.delete(approvalId)
       throw new PermissionError('approval-missing', 'Approval request is missing or expired.')
     }
@@ -492,11 +531,12 @@ export class AlexAgent {
           const ticket = this.approvals.issue(conversationId, call.tool, signature)
           call.status = 'awaiting-approval'
           call.approvalId = ticket.id
+          call.approvalExpiresAt = ticket.expiresAt
           call.summary = definition.summarize(call.arguments)
           await this.store.update(conversationId, assistant.id, { toolCalls: calls })
           this.pending.set(ticket.id, {
             id: ticket.id, conversationId, messageId: assistant.id, callId: call.id,
-            tool: call.tool, arguments: intent.arguments, signature, createdAt: this.now(),
+            tool: call.tool, arguments: intent.arguments, signature, expiresAt: ticket.expiresAt,
           })
           emit({ type: 'approval', conversationId, messageId: assistant.id, call, approvalId: ticket.id })
           return
