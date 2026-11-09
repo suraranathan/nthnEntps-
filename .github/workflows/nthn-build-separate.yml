@@ -69,7 +69,7 @@ jobs:
           python3 scripts/patch_subpackages.py packages/scripts/build/termux_create_debian_subpackages.sh
           cp scripts/bashansi-c23.patch packages/packages/bash/bashansi-c23.patch
           sed -i 's/PACKAGES_LIST+=("command-not-found")/: # Optional database is stale for this custom prefix/' packages/scripts/build-bootstraps.sh
-          sed -i 's/^declare -a PACKAGES_POST_ADDITIONAL_LIST=()$/declare -a PACKAGES_POST_ADDITIONAL_LIST=("git" "python" "nodejs" "proot")/' packages/scripts/build-bootstraps.sh
+          sed -i 's/^declare -a PACKAGES_POST_ADDITIONAL_LIST=()$/declare -a PACKAGES_POST_ADDITIONAL_LIST=("git" "python" "nodejs")/' packages/scripts/build-bootstraps.sh
           sed -i '/^TERMUX_PKG_BUILD_DEPENDS="python, swig"$/d; s/--with-pyunbound/--without-pyunbound/; /^TERMUX_PKG_PYTHON_COMMON_DEPS=/d; /^TERMUX_PKG_PYTHON_BUILD_DEPS=/d; s/libevent, libnghttp2, openssl, resolv-conf/libevent, libexpat, libnghttp2, openssl, resolv-conf/' packages/packages/libunbound/build.sh
       - name: Install package-builder Android SDK and NDK
         if: inputs.bootstrap_run_id == '' && inputs.bootstrap_transfer_ref == ''
@@ -131,8 +131,46 @@ jobs:
             apps/nthn/packages/bootstrap-aarch64.zip
             apps/nthn/packages/bootstrap-aarch64.sha256
           retention-days: 7
+  proot-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: apps/nthn
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free space for runtime compilation
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache /usr/local/share/powershell /usr/share/swift
+          sudo apt-get clean
+      - name: Get pinned Termux package builder for com.nthn
+        run: |
+          git clone --depth 1 --branch infra-improvs https://github.com/agnostic-apollo/termux-packages.git packages
+          test "$(git -C packages rev-parse HEAD)" = 'fb44d31f3445d7efd2cee6dada47aa19401c1329'
+          sed -i 's/TERMUX_APP__PACKAGE_NAME="com.termux"/TERMUX_APP__PACKAGE_NAME="com.nthn"/' packages/scripts/properties.sh
+          grep -q 'TERMUX_APP__PACKAGE_NAME="com.nthn"' packages/scripts/properties.sh
+      - name: Install package-builder Android SDK and NDK
+        working-directory: apps/nthn/packages
+        run: ./scripts/run-docker.sh ./scripts/setup-android-sdk.sh
+      - name: Build only the custom-prefix proot runtime
+        working-directory: apps/nthn/packages
+        run: ./scripts/run-docker.sh ./build-package.sh -a aarch64 --no-build-unneeded-subpackages libandroid-shmem proot
+      - name: Package proot files for existing and fresh installations
+        run: |
+          mkdir -p proot-stage
+          find packages/output -type f -name '*.deb' -print0 | while IFS= read -r -d '' package; do
+            dpkg-deb -x "$package" proot-stage
+          done
+          python3 scripts/package_proot_runtime.py proot-stage proot-runtime
+          test -s proot-runtime/bin/proot
+          test -s proot-runtime/lib/libtalloc.so.2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nthn-proot-runtime
+          path: apps/nthn/proot-runtime/
+          retention-days: 7
   app:
-    needs: bootstrap
+    needs: [bootstrap, proot-runtime]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     defaults:
@@ -161,8 +199,10 @@ jobs:
         with:
           name: nthn-bootstrap
           path: apps/nthn/termux-src/app/src/main/cpp
-      - name: Package proot upgrade for existing installations
-        run: python3 scripts/package_proot_runtime.py termux-src/app/src/main/cpp/bootstrap-aarch64.zip termux-src/app/src/main/assets/nthn-ai/runtime
+      - uses: actions/download-artifact@v4
+        with:
+          name: nthn-proot-runtime
+          path: apps/nthn/termux-src/app/src/main/assets/nthn-ai/runtime
       - name: Install Android SDK components
         run: sdkmanager 'platforms;android-30' 'build-tools;30.0.3' 'ndk;22.1.7171670'
       - uses: actions/setup-java@v4

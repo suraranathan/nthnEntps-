@@ -16,6 +16,17 @@ OPTIONAL = ("libexec/proot/loader32",)
 
 
 def package_runtime(archive: Path, destination: Path) -> None:
+    if archive.is_dir():
+        prefix = (archive / "data/data/com.nthn/files/usr").resolve()
+        for path in REQUIRED + tuple(path for path in OPTIONAL if (prefix / path).exists()):
+            source = (prefix / path).resolve(strict=True)
+            if not source.is_relative_to(prefix) or not source.is_file():
+                raise ValueError(f"proot runtime file escapes staged prefix: {path}")
+            target = destination / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+            target.chmod(0o755 if path.startswith(("bin/", "libexec/")) else 0o644)
+        return
     with zipfile.ZipFile(archive) as zf:
         members = set(zf.namelist())
         links = {}

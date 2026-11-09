@@ -32,7 +32,6 @@ REQUIRED_BOOTSTRAP_FILES = (
     "bin/apt",
     "bin/apt-get",
     "bin/dpkg",
-    "bin/proot",
     "var/lib/dpkg/status",
     "SYMLINKS.txt",
 )
