@@ -7,12 +7,12 @@ branding = Path(__file__).resolve().parent.parent / 'branding'
 version_file = Path(__file__).resolve().parent.parent / 'VERSION'
 app_version = version_file.read_text().strip()
 version_parts = app_version.split('.')
-if len(version_parts) not in (2, 3) or any(not part.isdigit() for part in version_parts):
-    raise RuntimeError('apps/nthn/VERSION must use MAJOR.MINOR or MAJOR.MINOR.PATCH format')
-major, minor, patch = (int(part) for part in (*version_parts, '0')[:3])
+if len(version_parts) not in (1, 2, 3) or any(not part.isdigit() for part in version_parts):
+    raise RuntimeError('apps/nthn/VERSION must use MAJOR, MAJOR.MINOR or MAJOR.MINOR.PATCH format')
+major, minor, patch = (int(part) for part in (*version_parts, *(['0'] * (3 - len(version_parts)))))
 if minor > 999 or patch > 999:
     raise RuntimeError('minor and patch versions must be between 0 and 999')
-android_version_name = app_version if len(version_parts) == 3 else f'{app_version}.0'
+android_version_name = '.'.join(str(part) for part in (major, minor, patch))
 version_code = 10_000 + major * 1_000_000 + minor * 1_000 + patch
 
 

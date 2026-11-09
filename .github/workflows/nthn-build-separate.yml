@@ -144,12 +144,12 @@ jobs:
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
           case "$version" in
-            ''|*[!0-9.]*|.*|*.|*..*) echo "VERSION must use MAJOR.MINOR or MAJOR.MINOR.PATCH" >&2; exit 1 ;;
+            ''|*[!0-9.]*|.*|*.|*..*) echo "VERSION must use MAJOR, MAJOR.MINOR or MAJOR.MINOR.PATCH" >&2; exit 1 ;;
           esac
           fields="$(awk -F. '{print NF}' VERSION)"
-          test "$fields" -eq 2 || test "$fields" -eq 3
+          test "$fields" -eq 1 || test "$fields" -eq 2 || test "$fields" -eq 3
           echo "NTHN_APP_VERSION=$version" >> "$GITHUB_ENV"
-          if [ "$fields" -eq 2 ]; then version_name="${version}.0"; else version_name="$version"; fi
+          if [ "$fields" -eq 1 ]; then version_name="${version}.0.0"; elif [ "$fields" -eq 2 ]; then version_name="${version}.0"; else version_name="$version"; fi
           echo "NTHN_ANDROID_VERSION_NAME=$version_name" >> "$GITHUB_ENV"
       - uses: android-actions/setup-android@v4
       - name: Get exact Termux app source
