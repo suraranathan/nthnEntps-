@@ -148,6 +148,17 @@ test('DNS resolution rejects private, metadata, transition IPv6 and mixed public
   assert.equal(publicAddress('2606:4700:4700::1111'), true)
 })
 
+test('temporary DNS failure is retried before a provider request', async () => {
+  let attempts = 0
+  const endpoint = await pinEndpoint(openrouter.baseUrl, 'public', 'openrouter', async () => {
+    attempts++
+    if (attempts === 1) throw new Error('temporary lookup failure')
+    return [{ address: '8.8.8.8', family: 4 }]
+  })
+  assert.equal(attempts, 2)
+  assert.equal(endpoint.address, '8.8.8.8')
+})
+
 test('provider-specific tests are explicit, credential-safe, persisted and never claim model inference', async t => {
   const path = await directory(t)
   let calls = 0, pathSeen = ''

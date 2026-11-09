@@ -54,13 +54,19 @@ export function validateEndpoint(value: unknown, network: NetworkPolicy, provide
 }
 export async function pinEndpoint(base: string, network: NetworkPolicy, providerId: string, resolver: Resolver = resolveAddresses, rules = defaultEndpointRules) {
   const normalized = validateEndpoint(base, network, providerId, rules), url = new URL(normalized), host = hostOf(url)
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let addresses: Address[]
-  try {
-    addresses = isIP(host) ? [{ address: host, family: isIP(host) }] : await Promise.race([
-      resolver(host), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new ManagementError('DNS_FAILED')), 5000); timer.unref() }),
-    ])
-  } catch { throw new ManagementError('DNS_FAILED') } finally { if (timer) clearTimeout(timer) }
+  let addresses: Address[] | null = isIP(host) ? [{ address: host, family: isIP(host) }] : null
+  for (let attempt = 0; addresses === null && attempt < 3; attempt++) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      addresses = await Promise.race([
+        resolver(host), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new ManagementError('DNS_FAILED')), 5000); timer.unref() }),
+      ])
+    } catch {
+      if (attempt === 2) throw new ManagementError('DNS_FAILED')
+      await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)))
+    } finally { if (timer) clearTimeout(timer) }
+  }
+  if (addresses === null) throw new ManagementError('DNS_FAILED')
   if (!addresses.length || addresses.some(item => !isIP(item.address) || (network === 'public' ? !publicAddress(item.address) : !['127.0.0.1', '::1'].includes(item.address)))) throw new ManagementError('BLOCKED_ENDPOINT')
   return { base: normalized, url, host, address: addresses[0].address }
 }
