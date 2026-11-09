@@ -21,7 +21,7 @@
         android:id="@+id/nav_ai"
         style="@style/NthnBottomNavItem"
         android:drawableTop="@drawable/ic_nthn_ai"
-        android:text="Alex" />
+        android:text="Jef" />
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/nav_files"
         style="@style/NthnBottomNavItem"

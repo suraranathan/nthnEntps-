@@ -94,7 +94,7 @@ public final class NthnActivity extends AppCompatActivity {
         content.removeAllViews();
         int selected;
         if (screen.equals(NthnNavigation.AI)) {
-            if (title != null) title.setText("Alex"); selected = R.id.nav_ai; showAi();
+            if (title != null) title.setText("Jef"); selected = R.id.nav_ai; showAi();
         } else if (screen.equals(NthnNavigation.FILES)) {
             if (title != null) title.setText("Files"); selected = R.id.nav_files; showFiles();
         } else if (screen.equals(NthnNavigation.SETTINGS)) {
@@ -163,13 +163,13 @@ public final class NthnActivity extends AppCompatActivity {
     private void showHome() {
         final LinearLayout body = page();
         body.addView(heading("NTHN"));
-        body.addView(text("Your Linux workspace · local tools, files and Alex.", 14, false, R.color.nthn_muted));
+        body.addView(text("Your Linux workspace · local tools, files and Jef.", 14, false, R.color.nthn_muted));
         body.addView(label("Environment"));
         final TextView status = text("Checking…", 16, false, R.color.nthn_text);
         body.addView(status);
         body.addView(label("Open"));
         body.addView(row("Terminal", v -> NthnNavigation.open(this, "terminal")));
-        body.addView(row("Alex coding agent", v -> show(NthnNavigation.AI)));
+        body.addView(row("Jef coding agent", v -> show(NthnNavigation.AI)));
         body.addView(row("Files", v -> show(NthnNavigation.FILES)));
         if (backend == null) { status.setText("Unavailable"); return; }
         runTask(() -> backend.environmentStatus(), value -> {
@@ -340,7 +340,7 @@ public final class NthnActivity extends AppCompatActivity {
                 String role = item.optString("role");
                 String content = item.optString("content");
                 if ((!"user".equals(role) && !"assistant".equals(role)) || content.isEmpty()) continue;
-                TextView message = text(("user".equals(role) ? "You\n" : "Alex\n") + content, 15, "user".equals(role), R.color.nthn_text);
+                TextView message = text(("user".equals(role) ? "You\n" : "Jef\n") + content, 15, "user".equals(role), R.color.nthn_text);
                 message.setPadding(dp(12), dp(10), dp(12), dp(10));
                 message.setBackgroundResource(resolveSelectableBackground());
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -353,7 +353,7 @@ public final class NthnActivity extends AppCompatActivity {
     private void sendAlex(final String request, final TextView status) {
         if (backend == null) { status.setText("AI service unavailable until Linux setup completes."); return; }
         appendAlexMessage("user", request);
-        status.setText("Alex is thinking…");
+        status.setText("Jef is thinking…");
         final String payload;
         try { payload = new JSONObject().put("messages", alexHistory).toString(); }
         catch (Exception error) { status.setText(message(error)); return; }
@@ -560,7 +560,7 @@ public final class NthnActivity extends AppCompatActivity {
         themes.addView(button("Dark", v -> changeTheme(true)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         body.addView(themes);
         body.addView(label("Configuration"));
-        body.addView(row("Alex and OpenRouter", v -> show(NthnNavigation.AI)));
+        body.addView(row("Jef and AI providers", v -> show(NthnNavigation.AI)));
         body.addView(row("Terminal settings", v -> startActivity(new Intent(this, SettingsActivity.class))));
         body.addView(label("Environment"));
         body.addView(text("Linux prefix\n" + NthnBackend.PREFIX + "\n\nHome\n" + (backend == null ? "Unavailable" : backend.home().getAbsolutePath()), 14, false, R.color.nthn_muted));

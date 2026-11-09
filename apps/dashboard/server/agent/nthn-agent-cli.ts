@@ -18,7 +18,7 @@ const providerDirectory = resolve(appRoot, '.local/ai')
 const agentDirectory = resolve(appRoot, '.local/agent')
 const selectedPath = join(providerDirectory, 'selected-route.json')
 const workspace = resolve(process.env.NTHN_AGENT_WORKSPACE || process.env.HOME || join(appRoot, 'workspace'))
-const help = `nthn Alex coding agent
+const help = `nthn Jef coding agent
   nthn-agent state
   nthn-agent chat < request.json
   nthn-agent new
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
   const gateway = new ResolvedRouteGateway(manager, resolveRoute, saved?.modelId ? { provider: 'configured', model: saved.modelId, transport: 'streaming' } : null)
   const store = new AgentChatStore(agentDirectory)
   const agent = new AlexAgent({
-    store, gateway, workspace,
+    store, gateway, workspace, name: 'Jef',
     writablePrefixes: ['.'],
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],
     protectedPaths: ['provider vault', 'credentials', 'Android app files outside Linux home'],
@@ -141,7 +141,7 @@ async function main(): Promise<void> {
 try { await main() }
 catch (error) {
   const code = error instanceof ManagementError || error instanceof PermissionError ? error.code : 'REQUEST_FAILED'
-  const message = error instanceof Error ? error.message : 'Alex agent request failed.'
+  const message = error instanceof Error ? error.message : 'Jef agent request failed.'
   console.error(JSON.stringify({ code, message }))
   process.exitCode = 1
 } finally {

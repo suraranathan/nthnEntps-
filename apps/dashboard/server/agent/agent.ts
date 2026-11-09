@@ -135,6 +135,7 @@ interface PendingApproval {
 }
 
 interface AgentOptions {
+  name?: string
   store: AgentChatStore
   gateway: Gateway
   workspace?: string
@@ -176,6 +177,7 @@ function toolPrompt(tools: ReturnType<ToolRegistry['list']>): string {
 }
 
 export class AlexAgent {
+  private readonly displayName: string
   private readonly store: AgentChatStore
   private readonly gateway: Gateway
   private readonly workspace: string
@@ -189,6 +191,7 @@ export class AlexAgent {
   private readonly protectedPaths: string[]
 
   constructor(options: AgentOptions) {
+    this.displayName = options.name ?? 'Alex'
     this.store = options.store
     this.gateway = options.gateway
     this.workspace = resolve(options.workspace ?? defaultWorkspace())
@@ -313,7 +316,7 @@ export class AlexAgent {
   }
 
   async run(conversationId: string, text: string, emit: Emit): Promise<void> {
-    if (this.running.has(conversationId)) throw new AgentBusyError()
+    if (this.running.has(conversationId)) throw new AgentBusyError(this.displayName)
     const conversation = this.store.get(conversationId)
     if (!conversation) throw new PermissionError('no-conversation', 'Conversation not found.')
     const trimmed = text.trim()
@@ -331,7 +334,7 @@ export class AlexAgent {
   }
 
   async approve(conversationId: string, approvalId: string, approved: boolean, emit: Emit): Promise<void> {
-    if (this.running.has(conversationId)) throw new AgentBusyError()
+    if (this.running.has(conversationId)) throw new AgentBusyError(this.displayName)
     const pending = this.pending.get(approvalId)
     if (!pending || pending.conversationId !== conversationId || pending.expiresAt <= this.now()) {
       this.pending.delete(approvalId)
@@ -399,7 +402,7 @@ export class AlexAgent {
 
   private buildSystemPrompt(): string {
     return [
-      'You are Alex, the AI coding and development agent inside NTHN.',
+      `You are ${this.displayName}, the AI coding and development agent inside NTHN.`,
       'You help the user understand, change, verify and ship code in this repository.',
       '',
       'Operating rules:',
@@ -571,7 +574,7 @@ export class AlexAgent {
     const conversation = this.store.get(conversationId)
     if (conversation) {
       const last = conversation.messages.at(-1)
-      emit({ type: 'error', conversationId, message: `Reached the ${this.maxSteps}-step limit. Ask Alex to continue.`, code: 'STEP_LIMIT' })
+      emit({ type: 'error', conversationId, message: `Reached the ${this.maxSteps}-step limit. Ask ${this.displayName} to continue.`, code: 'STEP_LIMIT' })
       if (last?.role === 'assistant') await this.store.update(conversationId, last.id, { status: 'complete' })
     }
   }
@@ -599,8 +602,8 @@ export class AlexAgent {
 
 export class AgentBusyError extends Error {
   readonly code = 'AGENT_BUSY'
-  constructor() {
-    super('Alex is already working in this conversation.')
+  constructor(agentName = 'Alex') {
+    super(`${agentName} is already working in this conversation.`)
     this.name = 'AgentBusyError'
   }
 }
