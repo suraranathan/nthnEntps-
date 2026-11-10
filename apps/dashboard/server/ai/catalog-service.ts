@@ -7,6 +7,7 @@ import { initialDiscoveryQuery, parseDiscovery } from './discovery.ts'
 import { ManagementError } from './management-types.ts'
 import { modelRouteKey } from './route-identity.ts'
 import { connectionAdapter } from './connection-adapters.ts'
+import { catalogPricing } from './model-pricing.ts'
 
 /** No inference/verification or agent routing: catalog observations only. */
 export class CatalogService implements ModelCatalog {
@@ -46,7 +47,7 @@ export class CatalogService implements ModelCatalog {
           return {
             route: { id: modelRouteKey(ref), ref, providerId: connection.providerId, protocol: connectionAdapter(connection.providerId).protocol, connectionRevision: connection.revision,
               model: details, access: { state: page.visibility === 'account-filtered' ? 'account-listed' : 'listed', evidence: model.evidence }, lifecycle: model.extensions.deprecated === true || model.extensions.lifecycle === 'deprecated' ? 'deprecated' : 'active' },
-            pricing: { components: [], completeness: 'unknown', evidence: null, freeAccess: { kind: 'unknown', eligibility: 'unknown', conditions: [], evidence: null } },
+            pricing: catalogPricing(model, connection.providerId),
             limits: [], firstSeenAt: model.evidence.observedAt, lastSeenAt: model.evidence.observedAt,
           } satisfies CatalogEntry
         })

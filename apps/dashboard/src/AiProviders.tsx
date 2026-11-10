@@ -16,6 +16,7 @@ const defaults: Record<string, { baseUrl: string; networkPolicy: 'public' | 'loo
   anthropic: { baseUrl: 'https://api.anthropic.com/v1', networkPolicy: 'public' },
   gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', networkPolicy: 'public' },
   xkiro: { baseUrl: 'https://api.xkiro.com/v1', networkPolicy: 'public' },
+  groq: { baseUrl: 'https://api.groq.com/openai/v1', networkPolicy: 'public' },
   'openai-compatible': { baseUrl: '', networkPolicy: 'public' },
   ollama: { baseUrl: 'http://127.0.0.1:11434', networkPolicy: 'loopback' },
 }
@@ -252,7 +253,7 @@ function ModelCard({ entry, requirements, snapshot, pending, perform, eligibilit
   const label = verificationLabel(entry)
   return <article className="model-card">
     <div className="panel-heading"><h3>{route.model.displayName}</h3><span className={`provider-badge ${label === 'Verified' ? 'good' : ''}`}>{label}</span></div>
-    <code>{route.ref.nativeModelId}</code><p>{snapshot.providers.find(p => p.id === route.providerId)?.name ?? route.providerId} · {c?.label ?? 'Removed connection'}</p>
+    <code>{route.ref.nativeModelId}</code><p>{snapshot.providers.find(p => p.id === route.providerId)?.name ?? route.providerId} · {c?.label ?? 'Removed connection'} · {entry.pricing.freeAccess.kind === 'verified-zero-price' ? 'listed $0' : entry.pricing.freeAccess.kind === 'paid' ? 'paid' : 'price unknown'}</p>
     <p>Access: {route.access.state} · {route.lifecycle} · Output: {route.model.capabilities.output?.join(', ') || 'unknown'}</p>
     <details><summary>Capabilities &amp; verification details</summary><p>Input: {route.model.capabilities.input?.join(', ') || 'unknown'} · Context: {route.model.contextTokens?.toLocaleString() ?? 'unknown'}</p>
       <dl>{snapshot.capabilities.map(cap => <div key={cap}><dt>{capabilityLabels[cap]}</dt><dd>Listed: {cap === 'text' ? route.model.capabilities.output === null ? 'unknown' : route.model.capabilities.output.includes('text') ? 'supported' : 'unsupported' : route.model.capabilities[cap]} · Last probe: {v?.capabilities[cap].state ?? 'untested'}{v?.capabilities[cap].code ? ` (${v.capabilities[cap].code})` : ''}</dd></div>)}</dl>

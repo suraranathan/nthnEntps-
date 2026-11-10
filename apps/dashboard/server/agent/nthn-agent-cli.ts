@@ -5,6 +5,7 @@ import { ConnectionManager } from '../ai/connection-manager.ts'
 import { CatalogService } from '../ai/catalog-service.ts'
 import { VerificationService } from '../ai/verification-service.ts'
 import { ManagementError } from '../ai/management-types.ts'
+import { jefCanUse, jefProbeCapabilities, jefTransportSupportsTools } from '../ai/jef-model-policy.ts'
 import { selectionConnection, type SavedSelection } from '../ai/nthn-cli-state.ts'
 import type { CatalogEntry, ModelRoute } from '../ai/contracts.ts'
 import { AlexAgent, type AgentEvent } from './agent.ts'
@@ -74,11 +75,17 @@ let verification: VerificationService | undefined
 
 async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
   if (!manager || !catalog || !verification) throw new ManagementError('REQUEST_FAILED')
-  const accounts = manager.list().filter(account => account.enabled && (account.credentials.state === 'configured' || account.credentials.state === 'not-required') && !excluded.has(account.id))
+  const accounts = manager.list().filter(account => account.enabled && (account.credentials.state === 'configured' || account.credentials.state === 'not-required'))
   if (!accounts.length) throw new ManagementError('CREDENTIAL_REQUIRED')
   const saved = selected()
   const savedEntry = saved ? await catalog.getRoute(saved.routeId) : null
-  if (savedEntry && selectionConnection(saved, savedEntry, accounts)) return savedEntry.route
+  if (savedEntry && !excluded.has(savedEntry.route.id) && selectionConnection(saved, savedEntry, accounts) && jefTransportSupportsTools(savedEntry.route.providerId)) {
+    const prior = verification.store.latest(savedEntry.route.id)
+    const current = prior?.connectionRevision === savedEntry.route.connectionRevision && Date.now() - Date.parse(prior.checkedAt) < 86_400_000
+    if (current && jefCanUse(prior)) return savedEntry.route
+    const checked = await verification.verify(savedEntry.route.id, jefProbeCapabilities)
+    if (jefCanUse(checked)) return savedEntry.route
+  }
 
   const refreshed: string[] = []
   let lastError = 'MODEL_UNAVAILABLE'
@@ -92,13 +99,15 @@ async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
   let cursor: string | undefined
   do {
     const page = await catalog.search({ connectionIds: refreshed, outputModality: 'text', pageSize: 100, ...(cursor ? { cursor } : {}) })
-    candidates.push(...page.entries.filter(entry => entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable'))
+    candidates.push(...page.entries.filter(entry => !excluded.has(entry.route.id) && entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable' && jefTransportSupportsTools(entry.route.providerId) && entry.route.model.capabilities.tools !== 'unsupported'))
     cursor = page.nextCursor ?? undefined
   } while (cursor)
   candidates.sort((left, right) => rank(left) - rank(right) || left.route.ref.nativeModelId.localeCompare(right.route.ref.nativeModelId))
   for (const candidate of candidates) {
-    const result = await verification.verify(candidate.route.id, ['text'])
-    if (result.state !== 'verified') continue
+    const prior = verification.store.latest(candidate.route.id)
+    const current = prior?.connectionRevision === candidate.route.connectionRevision && Date.now() - Date.parse(prior.checkedAt) < 86_400_000
+    const result = current && jefCanUse(prior) ? prior : await verification.verify(candidate.route.id, jefProbeCapabilities)
+    if (!jefCanUse(result)) continue
     saveSelected(candidate.route)
     return candidate.route
   }

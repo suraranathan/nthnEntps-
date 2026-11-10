@@ -62,3 +62,14 @@ test('Android Jef bridge forwards live agent progress to the conversation screen
   assert.match(activity, /backend\.agentStream\("approve-stream"/)
   assert.match(ui, /kind === 'progress'/)
 })
+
+test('Android provider UI confirms detected keys, discovers models and removes accounts', async () => {
+  const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
+  const ui = await source('ui-preview/index.html')
+  assert.match(activity, /detect-provider-stdin/)
+  assert.match(activity, /Confirm the suggested provider/)
+  assert.match(activity, /@JavascriptInterface public void removeAccount/)
+  assert.match(activity, /backend\.ai\("models"/)
+  assert.match(ui, /NthnAI\.removeAccount/)
+  assert.match(ui, /kind === 'models'/)
+})

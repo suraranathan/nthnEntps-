@@ -61,6 +61,12 @@ const adapters: readonly ConnectionAdapter[] = [
     interpret(response) { const body = success(response); if (!Array.isArray(body.data) || !body.data.every(x => x && typeof x.id === 'string')) throw new ManagementError('INVALID_RESPONSE'); return { authentication: 'unknown', discovery: 'succeeded' } },
   },
   {
+    definition: { id: 'groq', name: 'Groq', adapterId: 'groq', discovery: 'supported', accountMetadata: 'unknown' },
+    requiresCredential: true, credentiallessState: 'missing', probeKind: 'discovery', protocol: 'openai-chat', authStyle: 'bearer', probePath: '/models', discoveryPath: '/models', inferencePath: () => '/chat/completions',
+    validateBase(url, network) { if (network !== 'public' || url.origin !== 'https://api.groq.com' || url.pathname.replace(/\/$/, '') !== '/openai/v1') throw new ManagementError('INVALID_ENDPOINT') },
+    interpret(response) { const body = success(response); if (!Array.isArray(body.data) || !body.data.every(x => x && typeof x.id === 'string')) throw new ManagementError('INVALID_RESPONSE'); return { authentication: 'accepted', discovery: 'succeeded' } },
+  },
+  {
     definition: { id: 'openai-compatible', name: 'Custom OpenAI-compatible endpoint', adapterId: 'openai-compatible', discovery: 'unknown', accountMetadata: 'unknown' },
     requiresCredential: false, credentiallessState: 'missing', probeKind: 'discovery', protocol: 'openai-chat', authStyle: 'bearer', probePath: '/models', discoveryPath: '/models', inferencePath: () => '/chat/completions',
     validateBase() {},

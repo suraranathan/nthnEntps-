@@ -9,6 +9,8 @@ import { VerificationService } from './verification-service.ts'
 import { ManagementError } from './management-types.ts'
 import { connectionAdapter } from './connection-adapters.ts'
 import { connectionSummary, openRouterAccounts, selectionConnection } from './nthn-cli-state.ts'
+import { jefCanUse, jefProbeCapabilities, jefTransportSupportsTools } from './jef-model-policy.ts'
+import { providerKeyHint } from './provider-key-hints.ts'
 import type { ManagedConnection } from './management-types.ts'
 
 const directory = resolve(fileURLToPath(new URL('../../', import.meta.url)), '.local/ai')
@@ -19,6 +21,7 @@ const providerEndpoints: Record<string, { baseUrl: string; networkPolicy: 'publi
   anthropic: { baseUrl: 'https://api.anthropic.com/v1', networkPolicy: 'public', label: 'Anthropic' },
   gemini: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', networkPolicy: 'public', label: 'Google Gemini' },
   xkiro: { baseUrl: 'https://api.xkiro.com/v1', networkPolicy: 'public', label: 'xKiro' },
+  groq: { baseUrl: 'https://api.groq.com/openai/v1', networkPolicy: 'public', label: 'Groq' },
   ollama: { baseUrl: 'http://127.0.0.1:11434', networkPolicy: 'loopback', label: 'Ollama' },
 }
 const help = `nthn AI provider
@@ -26,11 +29,13 @@ const help = `nthn AI provider
   nthn-ai configure         Enter an OpenRouter API key privately
   nthn-ai accounts          List configured OpenRouter accounts
   nthn-ai add-account [NAME] Add another OpenRouter account privately
-  nthn-ai add-provider-stdin PROVIDER  Add OpenAI, Anthropic, Gemini, xKiro or local Ollama
-  nthn-ai remove-account ID Remove one OpenRouter account
+  nthn-ai add-provider-stdin PROVIDER  Add OpenAI, Anthropic, Gemini, xKiro, Groq or local Ollama
+  nthn-ai detect-provider-stdin Suggest a provider from a distinctive key format
+  nthn-ai remove-account ID Remove any provider account and its stored key
   nthn-ai models            Refresh and list available text models
-  nthn-ai auto-select       Verify and choose a suitable text model automatically
-  nthn-ai select MODEL_ID   Verify real text inference and select model
+  nthn-ai cached-models     List the last discovered models without network access
+  nthn-ai auto-select       Verify and choose a Jef-compatible model automatically
+  nthn-ai select MODEL_ID   Verify Jef tools, streaming and inference, then select
   nthn-ai test              Test connection and selected model inference
   nthn-ai chat              Send a JSON conversation on stdin to the selected model
   nthn-ai clear-key         Remove the stored API key
@@ -95,14 +100,16 @@ async function autoSelect(connectionIds: string[]): Promise<{ modelId: string; r
   let cursor: string | undefined
   do {
     const page = await catalog.search({ connectionIds: refreshed, outputModality: 'text', pageSize: 100, ...(cursor ? { cursor } : {}) })
-    candidates.push(...page.entries.filter(entry => entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable'))
+    candidates.push(...page.entries.filter(entry => entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable' && jefTransportSupportsTools(entry.route.providerId) && entry.route.model.capabilities.tools !== 'unsupported'))
     cursor = page.nextCursor ?? undefined
   } while (cursor)
   candidates.sort((left, right) => rankForAlex(left.route.model.displayName, left.route.ref.nativeModelId) - rankForAlex(right.route.model.displayName, right.route.ref.nativeModelId)
     || left.route.ref.nativeModelId.localeCompare(right.route.ref.nativeModelId))
   for (const candidate of candidates) {
-    const result = await verification.verify(candidate.route.id, ['text'])
-    if (result.state !== 'verified') continue
+    const prior = verification.store.latest(candidate.route.id)
+    const current = prior?.connectionRevision === candidate.route.connectionRevision && Date.now() - Date.parse(prior.checkedAt) < 86_400_000
+    const result = current && jefCanUse(prior) ? prior : await verification.verify(candidate.route.id, jefProbeCapabilities)
+    if (!jefCanUse(result)) continue
     saveSelected(candidate.route.id, candidate.route.ref.nativeModelId, candidate.route.ref.connectionId)
     return { modelId: candidate.route.ref.nativeModelId, routeId: candidate.route.id, connectionId: candidate.route.ref.connectionId }
   }
@@ -164,8 +171,14 @@ let catalog: CatalogService | undefined
 let verification: VerificationService | undefined
 try {
   const [command = 'help', argument, ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'status', 'accounts', 'configure', 'configure-stdin', 'add-account', 'add-account-stdin', 'add-provider-stdin', 'remove-account', 'models', 'select', 'auto-select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'status', 'accounts', 'configure', 'configure-stdin', 'add-account', 'add-account-stdin', 'add-provider-stdin', 'detect-provider-stdin', 'remove-account', 'models', 'cached-models', 'select', 'auto-select', 'test', 'chat', 'clear-key'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); process.exit(0) }
+  if (command === 'detect-provider-stdin') {
+    const key = secretStdin()
+    if (!key || key.length > 8192) throw new ManagementError('INVALID_INPUT')
+    console.log(JSON.stringify({ providerId: providerKeyHint(key) }))
+    process.exit(0)
+  }
   manager = new ConnectionManager(directory)
   let accounts = manager.list()
   const connection = openRouterAccounts(accounts)[0]
@@ -227,8 +240,8 @@ try {
       let inference: string | null = null
       if (result.ok && selectedRoute) {
         verification = new VerificationService(manager, catalog)
-        const check = await verification.verify(selectedRoute.routeId, ['text'])
-        inference = check.state === 'verified' ? 'verified' : check.code
+        const check = await verification.verify(selectedRoute.routeId, jefProbeCapabilities)
+        inference = jefCanUse(check) ? 'verified' : check.code ?? 'CAPABILITY_UNTESTED_OR_UNSUPPORTED'
       }
       console.log(JSON.stringify({ connection: result.ok ? 'connected' : result.code, inference }))
     } else {
@@ -247,12 +260,16 @@ try {
         } else {
           await chat(usable.map(account => account.id), selectedRoute.routeId, chatInput())
         }
-      } else if (command === 'models') {
+      } else if (command === 'models' || command === 'cached-models') {
         const refreshed: string[] = []
-        for (const account of usable) { const refresh = await catalog.refresh(account.id); if (!refresh.errorCode) refreshed.push(account.id) }
+        if (command === 'models') for (const account of usable) { const refresh = await catalog.refresh(account.id); if (!refresh.errorCode) refreshed.push(account.id) }
+        else refreshed.push(...usable.map(account => account.id))
         if (!refreshed.length) throw new ManagementError('REQUEST_FAILED')
         const page = await catalog.search({ connectionIds: refreshed, outputModality: 'text', pageSize: 100 })
-        for (const entry of page.entries) console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName}\t${accounts.find(account => account.id === entry.route.ref.connectionId)?.label ?? 'OpenRouter'} · context ${entry.route.model.contextTokens ?? '?'} tokens`)
+        for (const entry of page.entries) {
+          const price = entry.pricing.freeAccess.kind === 'verified-zero-price' ? 'listed $0' : entry.pricing.freeAccess.kind === 'paid' ? 'paid' : 'price unknown'
+          console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName} · ${price}\t${accounts.find(account => account.id === entry.route.ref.connectionId)?.label ?? entry.route.providerId} · context ${entry.route.model.contextTokens ?? '?'} tokens`)
+        }
         if (page.nextCursor) console.log('More models available; refine selection by exact model ID.')
       } else if (command === 'select') {
         if (!argument) throw new ManagementError('INVALID_INPUT')
@@ -264,8 +281,9 @@ try {
         let checkedAt = ''
         let chosen = routes[0]
         for (const route of routes) {
-          const result = await verification.verify(route.id, ['text'])
-          if (result.state === 'verified') { chosen = route; checkedAt = result.checkedAt; break }
+          if (!jefTransportSupportsTools(route.providerId)) continue
+          const result = await verification.verify(route.id, jefProbeCapabilities)
+          if (jefCanUse(result)) { chosen = route; checkedAt = result.checkedAt; break }
         }
         if (!checkedAt) throw new ManagementError('MODEL_UNAVAILABLE')
         saveSelected(chosen.id, argument, chosen.ref.connectionId)

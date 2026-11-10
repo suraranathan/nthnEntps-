@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { AgentAssignments } from '../ai/agent-assignments.ts'
 import { connectionAdapter } from '../ai/connection-adapters.ts'
 import type { ConnectionManager } from '../ai/connection-manager.ts'
@@ -76,25 +77,63 @@ function turnsForProvider(messages: ChatTurn[]): { system: string; turns: { role
   return { system, turns }
 }
 
+function groupToolResults(items: Record<string, unknown>[], field: 'content' | 'parts'): Record<string, unknown>[] {
+  const grouped: Record<string, unknown>[] = []
+  for (const item of items) {
+    const previous = grouped.at(-1)
+    if (item.role === 'user' && previous?.role === 'user' && Array.isArray(item[field]) && Array.isArray(previous[field])) {
+      previous[field] = [...previous[field], ...item[field] as unknown[]]
+    } else grouped.push(item)
+  }
+  return grouped
+}
+
 export function requestBody(route: ModelRoute, messages: ChatTurn[], stream: boolean, maxTokens = 4000, tools: ToolSchema[] = []): Record<string, unknown> {
   const protocol = connectionAdapter(route.providerId).protocol
   const model = route.ref.nativeModelId
   const { system, turns } = turnsForProvider(messages)
+  const parameters = (tool: ToolSchema) => ({ type: 'object', properties: Object.fromEntries(Object.entries(tool.arguments).map(([key, type]) => [key, type === 'string[]' ? { type: 'array', items: { type: 'string' } } : { type }])), additionalProperties: false })
   if (protocol === 'ollama-chat') {
-    return { model, messages: messages.map(message => ({ role: message.role === 'tool' ? 'user' : message.role, content: message.content })), stream, options: { num_predict: maxTokens } }
+    const native = tools.length > 0
+    const names = new Map(messages.flatMap(turn => turn.toolCalls?.map(call => [call.id, call.name] as const) ?? []))
+    return { model, messages: messages.map(message => {
+      if (native && message.role === 'tool') return { role: 'tool', tool_name: names.get(message.toolCallId ?? '') ?? message.name ?? 'tool', content: message.content }
+      if (native && message.role === 'assistant' && message.toolCalls?.length) return { role: 'assistant', content: message.content, tool_calls: message.toolCalls.map(call => ({ function: { name: call.name, arguments: call.arguments } })) }
+      return { role: message.role === 'tool' ? 'user' : message.role, content: message.content }
+    }), stream, options: { num_predict: maxTokens }, ...(native ? { tools: tools.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: parameters(tool) } })) } : {}) }
   }
   if (protocol === 'anthropic-messages') {
-    return { model, messages: turns, ...(system ? { system } : {}), max_tokens: maxTokens, ...(stream ? { stream: true } : {}) }
+    const native = tools.length > 0
+    const mapped = native ? groupToolResults(messages.filter(turn => turn.role !== 'system').map(turn => {
+      if (turn.role === 'tool' && turn.toolCallId) return { role: 'user', content: [{ type: 'tool_result', tool_use_id: turn.toolCallId, content: turn.content }] }
+      if (turn.role === 'assistant' && turn.toolCalls?.length) return { role: 'assistant', content: [
+        ...(turn.content ? [{ type: 'text', text: turn.content }] : []),
+        ...turn.toolCalls.map(call => ({ type: 'tool_use', id: call.id, name: call.name, input: call.arguments })),
+      ] }
+      return { role: turn.role === 'tool' ? 'user' : turn.role, content: turn.content }
+    }) as Record<string, unknown>[], 'content') : turns
+    return { model, messages: mapped, ...(system ? { system } : {}), max_tokens: maxTokens, ...(stream ? { stream: true } : {}), ...(native ? { tools: tools.map(tool => ({ name: tool.name, description: tool.description, input_schema: parameters(tool) })) } : {}) }
   }
   if (protocol === 'gemini-generate-content') {
+    const native = tools.length > 0
+    const names = new Map(messages.flatMap(turn => turn.toolCalls?.map(call => [call.id, call.name] as const) ?? []))
+    const contents = native ? groupToolResults(messages.filter(turn => turn.role !== 'system').map(turn => {
+      if (turn.role === 'tool' && turn.toolCallId) return { role: 'user', parts: [{ functionResponse: { ...(turn.toolCallId.startsWith('gemini-local-') ? {} : { id: turn.toolCallId }), name: names.get(turn.toolCallId) ?? turn.name ?? 'tool', response: { result: turn.content } } }] }
+      if (turn.role === 'assistant' && turn.toolCalls?.length) return { role: 'model', parts: [
+        ...(turn.content ? [{ text: turn.content }] : []),
+        ...turn.toolCalls.map(call => ({ functionCall: { ...(call.id.startsWith('gemini-local-') ? {} : { id: call.id }), name: call.name, args: call.arguments } })),
+      ] }
+      return { role: turn.role === 'assistant' ? 'model' : 'user', parts: [{ text: turn.content }] }
+    }) as Record<string, unknown>[], 'parts') : turns.map(turn => ({ role: turn.role === 'assistant' ? 'model' : 'user', parts: [{ text: turn.content }] }))
     return {
       model,
-      contents: turns.map(turn => ({ role: turn.role === 'assistant' ? 'model' : 'user', parts: [{ text: turn.content }] })),
+      contents,
       ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
       generationConfig: { maxOutputTokens: maxTokens },
+      ...(native ? { tools: [{ functionDeclarations: tools.map(tool => ({ name: tool.name, description: tool.description, parameters: parameters(tool) })) }], toolConfig: { functionCallingConfig: { mode: 'AUTO' } } } : {}),
     }
   }
-  const native = route.providerId === 'openrouter' && tools.length > 0
+  const native = protocol === 'openai-chat' && tools.length > 0
   const definitions = tools.map(tool => ({
     type: 'function',
     function: {
@@ -121,7 +160,7 @@ export function requestBody(route: ModelRoute, messages: ChatTurn[], stream: boo
       ...turns.map(turn => ({ role: turn.role, content: turn.content })),
     ],
     stream,
-    max_tokens: maxTokens,
+    ...(route.providerId === 'openai' ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
     ...(native ? { tools: definitions, tool_choice: 'auto' } : {}),
     ...(route.providerId === 'openrouter' ? { provider: { require_parameters: true } } : {}),
   }
@@ -202,7 +241,7 @@ export class ResolvedRouteGateway implements Gateway {
     for (;;) {
       let route: ModelRoute
       try { route = await this.resolver(excluded) } catch (error) { throw previousFailure ?? friendly(error) }
-      if (excluded.has(route.ref.connectionId)) throw previousFailure ?? new GatewayError('MODEL_UNAVAILABLE', 'No other model account is available.')
+      if (excluded.has(route.id)) throw previousFailure ?? new GatewayError('MODEL_UNAVAILABLE', 'No other verified model is available.')
       this.last = { provider: route.providerId, model: route.ref.nativeModelId, transport: 'streaming' }
       const protocol = connectionAdapter(route.providerId).protocol
       const parser = createParser(protocol)
@@ -213,6 +252,35 @@ export class ResolvedRouteGateway implements Gateway {
       let raw = ''
       const bufferSeedText = route.providerId === 'openrouter' && /^bytedance-seed\/seed-2\.0-code(?:$|[-:])/i.test(route.ref.nativeModelId)
       let seedText = ''
+      const collectToolLine = (line: string): void => {
+        const payload = protocol === 'ollama-chat' ? line : line.startsWith('data:') ? line.slice(5) : ''
+        if (!payload) return
+        try {
+          const data = JSON.parse(payload) as { type?: string; index?: number; content_block?: { type?: string; id?: string; name?: string; input?: Record<string, unknown> }; delta?: { type?: string; partial_json?: string }; message?: { tool_calls?: { function?: { name?: string; arguments?: Record<string, unknown> } }[] }; candidates?: { content?: { parts?: { functionCall?: { id?: string; name?: string; args?: Record<string, unknown> } }[] } }[]; choices?: { delta?: { tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] }
+          for (const part of data.choices?.[0]?.delta?.tool_calls ?? []) {
+            const call = calls.get(part.index) ?? { id: '', name: '', arguments: '' }
+            call.id += part.id ?? ''; call.name += part.function?.name ?? ''; call.arguments += part.function?.arguments ?? ''
+            calls.set(part.index, call)
+          }
+          if (protocol === 'anthropic-messages' && typeof data.index === 'number') {
+            if (data.type === 'content_block_start' && data.content_block?.type === 'tool_use') {
+              const block = data.content_block
+              calls.set(data.index, { id: block.id ?? '', name: block.name ?? '', arguments: block.input && Object.keys(block.input).length ? JSON.stringify(block.input) : '' })
+            } else if (data.type === 'content_block_delta' && data.delta?.type === 'input_json_delta') {
+              const call = calls.get(data.index)
+              if (call) call.arguments += data.delta.partial_json ?? ''
+            }
+          }
+          if (protocol === 'gemini-generate-content') for (const part of data.candidates?.[0]?.content?.parts ?? []) {
+            const call = part.functionCall
+            if (call?.name && (call.args === undefined || (typeof call.args === 'object' && !Array.isArray(call.args)))) calls.set(calls.size, { id: call.id ?? `gemini-local-${randomUUID()}`, name: call.name, arguments: JSON.stringify(call.args ?? {}) })
+          }
+          if (protocol === 'ollama-chat') for (const part of data.message?.tool_calls ?? []) {
+            const call = part.function
+            if (call?.name && (call.arguments === undefined || (typeof call.arguments === 'object' && !Array.isArray(call.arguments)))) calls.set(calls.size, { id: `ollama-local-${randomUUID()}`, name: call.name, arguments: JSON.stringify(call.arguments ?? {}) })
+          }
+        } catch { /* Incomplete or non-JSON frames remain ordinary streamed text. */ }
+      }
       try {
         for await (const chunk of this.manager.streamInference(route.ref.connectionId, route.connectionRevision, body, options.signal)) {
           raw += chunk
@@ -221,15 +289,7 @@ export class ResolvedRouteGateway implements Gateway {
           while ((end = toolBuffer.indexOf('\n')) >= 0) {
             const line = toolBuffer.slice(0, end).trimEnd()
             toolBuffer = toolBuffer.slice(end + 1)
-            if (!line.startsWith('data:')) continue
-            try {
-              const data = JSON.parse(line.slice(5)) as { choices?: { delta?: { tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[] } }[] }
-              for (const part of data.choices?.[0]?.delta?.tool_calls ?? []) {
-                const call = calls.get(part.index) ?? { id: '', name: '', arguments: '' }
-                call.id += part.id ?? ''; call.name += part.function?.name ?? ''; call.arguments += part.function?.arguments ?? ''
-                calls.set(part.index, call)
-              }
-            } catch { /* SSE text and incomplete lines are handled by the text parser. */ }
+            collectToolLine(line)
           }
           for (const delta of parser.push(chunk)) if (delta) {
             emitted = true
@@ -237,6 +297,7 @@ export class ResolvedRouteGateway implements Gateway {
             else yield delta
           }
         }
+        if (toolBuffer.trim()) collectToolLine(toolBuffer.trimEnd())
         for (const delta of parser.flush()) if (delta) {
           emitted = true
           if (bufferSeedText) seedText += delta
@@ -244,8 +305,8 @@ export class ResolvedRouteGateway implements Gateway {
         }
       } catch (error) {
         const failure = friendly(error)
-        if (!emitted && !options.signal?.aborted && ['REQUEST_FAILED', 'DNS_FAILED', 'RATE_LIMITED', 'PROBE_FAILED', 'MODEL_UNAVAILABLE', 'INSUFFICIENT_CREDITS'].includes(failure.code)) {
-          excluded.add(route.ref.connectionId)
+        if (!emitted && !options.signal?.aborted && ['REQUEST_FAILED', 'DNS_FAILED', 'RATE_LIMITED', 'PROBE_FAILED', 'MODEL_UNAVAILABLE', 'INSUFFICIENT_CREDITS', 'INCOMPATIBLE'].includes(failure.code)) {
+          excluded.add(route.id)
           previousFailure = failure
           continue
         }
@@ -267,7 +328,7 @@ export class ResolvedRouteGateway implements Gateway {
       }
       for (const call of [...calls.entries()].sort(([a], [b]) => a - b).map(([, value]) => value)) {
         let args: unknown
-        try { args = JSON.parse(call.arguments) } catch { throw new GatewayError('INVALID_TOOL_CALL', 'Model returned invalid tool arguments.') }
+        try { args = JSON.parse(call.arguments || '{}') } catch { throw new GatewayError('INVALID_TOOL_CALL', 'Model returned invalid tool arguments.') }
         if (!call.id || !call.name || !args || typeof args !== 'object' || Array.isArray(args)) throw new GatewayError('INVALID_TOOL_CALL', 'Model returned an invalid tool call.')
         yield { kind: 'tool_call', id: call.id, name: call.name, arguments: args as Record<string, unknown> }
       }

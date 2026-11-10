@@ -29,7 +29,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }, transpor
 }
 
 test('built-in registry, separate accounts and provider-specific connection checks', async t => {
-  assert.deepEqual(new Set(availableProviders().map(p => p.id)), new Set(['openai', 'anthropic', 'gemini', 'openrouter', 'xkiro', 'ollama', 'openai-compatible']))
+  assert.deepEqual(new Set(availableProviders().map(p => p.id)), new Set(['openai', 'anthropic', 'gemini', 'openrouter', 'xkiro', 'groq', 'ollama', 'openai-compatible']))
   const seen: string[] = []
   const f = await fixture(t, async (_endpoint, path, key, options) => {
     assert.equal(key, secret); seen.push(options?.authStyle ?? '')
@@ -37,7 +37,7 @@ test('built-in registry, separate accounts and provider-specific connection chec
   })
   for (const [providerId, baseUrl, style] of [
     ['openai', 'https://api.openai.com/v1', 'bearer'], ['anthropic', 'https://api.anthropic.com/v1', 'anthropic'],
-    ['gemini', 'https://generativelanguage.googleapis.com/v1beta', 'gemini'], ['xkiro', 'https://api.xkiro.com/v1', 'bearer'],
+    ['gemini', 'https://generativelanguage.googleapis.com/v1beta', 'gemini'], ['xkiro', 'https://api.xkiro.com/v1', 'bearer'], ['groq', 'https://api.groq.com/openai/v1', 'bearer'],
   ] as const) {
     const a = f.manager.add({ providerId, label: 'A', baseUrl }, secret)
     const b = f.manager.add({ providerId, label: 'B', baseUrl }, secret)

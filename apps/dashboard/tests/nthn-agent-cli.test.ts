@@ -9,6 +9,117 @@ import type { ModelRoute } from '../server/ai/contracts.ts'
 import type { AgentState } from '../server/agent/agent.ts'
 import { ManagementError } from '../server/ai/management-types.ts'
 
+test('OpenAI chat providers receive native Jef tool definitions and matching tool results', () => {
+  const route = { ref: { connectionId: 'a', nativeModelId: 'model' }, providerId: 'openai' } as ModelRoute
+  const tools: gatewayModule.ToolSchema[] = [{ name: 'list_dir', description: 'List files', arguments: { path: 'string' } }]
+  const first = gatewayModule.requestBody(route, [{ role: 'user', content: 'List files' }], true, 200, tools)
+  assert.equal((first.tools as any[])[0].function.name, 'list_dir')
+  const next = gatewayModule.requestBody(route, [
+    { role: 'assistant', content: '', toolCalls: [{ id: 'call-1', name: 'list_dir', arguments: { path: '.' } }] },
+    { role: 'tool', toolCallId: 'call-1', content: 'src' },
+  ], true, 200, tools)
+  assert.equal((next.messages as any[])[1].tool_call_id, 'call-1')
+})
+
+test('Anthropic and Gemini requests preserve native tool calls and results', () => {
+  const tools: gatewayModule.ToolSchema[] = [{ name: 'list_dir', description: 'List files', arguments: { path: 'string' } }]
+  for (const providerId of ['anthropic', 'gemini']) {
+    const route = { ref: { connectionId: 'a', nativeModelId: 'model' }, providerId } as ModelRoute
+    const body = gatewayModule.requestBody(route, [
+      { role: 'assistant', content: '', toolCalls: [{ id: 'call-1', name: 'list_dir', arguments: { path: '.' } }] },
+      { role: 'tool', toolCallId: 'call-1', content: 'src' },
+    ], true, 200, tools)
+    assert.ok(Array.isArray(body.tools))
+    assert.match(JSON.stringify(body.messages ?? body.contents), providerId === 'anthropic' ? /tool_use_id/ : /functionResponse/)
+  }
+})
+
+test('parallel Anthropic and Gemini results stay grouped with their call IDs', () => {
+  const turns: gatewayModule.ChatTurn[] = [
+    { role: 'assistant', content: '', toolCalls: [{ id: 'one', name: 'list_dir', arguments: { path: '.' } }, { id: 'two', name: 'search', arguments: { pattern: 'x' } }] },
+    { role: 'tool', toolCallId: 'one', content: 'files' },
+    { role: 'tool', toolCallId: 'two', content: 'matches' },
+  ]
+  const tools: gatewayModule.ToolSchema[] = [{ name: 'list_dir', description: 'List', arguments: { path: 'string' } }, { name: 'search', description: 'Search', arguments: { pattern: 'string' } }]
+  const anthropic = gatewayModule.requestBody({ providerId: 'anthropic', ref: { nativeModelId: 'm' } } as ModelRoute, turns, true, 200, tools)
+  assert.equal((anthropic.messages as any[]).length, 2)
+  assert.deepEqual((anthropic.messages as any[])[1].content.map((part: any) => part.tool_use_id), ['one', 'two'])
+  const gemini = gatewayModule.requestBody({ providerId: 'gemini', ref: { nativeModelId: 'm' } } as ModelRoute, turns, true, 200, tools)
+  assert.equal((gemini.contents as any[]).length, 2)
+  assert.deepEqual((gemini.contents as any[])[1].parts.map((part: any) => part.functionResponse.id), ['one', 'two'])
+})
+
+test('Anthropic and Gemini streamed native calls are returned as structured calls', async () => {
+  const tools: gatewayModule.ToolSchema[] = [{ name: 'list_dir', description: 'List files', arguments: { path: 'string' } }]
+  const frames: Record<string, string[]> = {
+    anthropic: [
+      'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"call-1","name":"list_dir"}}\n\n',
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"path\\":"}}\n\n',
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"\\".\\"}"}}\n\n',
+    ],
+    gemini: ['data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"list_dir","args":{"path":"."}}}]}}]}\n\n'],
+  }
+  for (const providerId of ['anthropic', 'gemini']) {
+    const route = { id: providerId, ref: { connectionId: 'a', nativeModelId: 'model' }, providerId, connectionRevision: 1 } as ModelRoute
+    const gateway = new gatewayModule.ResolvedRouteGateway({ async *streamInference() { for (const frame of frames[providerId]) yield frame } }, async () => route)
+    const output: unknown[] = []
+    for await (const item of gateway.stream([{ role: 'user', content: 'List' }], { tools })) output.push(item)
+    assert.equal(output.length, 1)
+    assert.equal((output[0] as gatewayModule.NativeToolCall).name, 'list_dir')
+    assert.deepEqual((output[0] as gatewayModule.NativeToolCall).arguments, { path: '.' })
+  }
+})
+
+test('Gemini preserves a provider call ID when returning the tool result', async () => {
+  const route = { id: 'gemini', ref: { connectionId: 'a', nativeModelId: 'm' }, providerId: 'gemini', connectionRevision: 1 } as ModelRoute
+  const gateway = new gatewayModule.ResolvedRouteGateway({ async *streamInference() {
+    yield 'data: {"candidates":[{"content":{"parts":[{"functionCall":{"id":"provider-call","name":"list_dir","args":{"path":"."}}}]}}]}\n\n'
+  } }, async () => route)
+  const tools: gatewayModule.ToolSchema[] = [{ name: 'list_dir', description: 'List', arguments: { path: 'string' } }]
+  const calls: gatewayModule.NativeToolCall[] = []
+  for await (const item of gateway.stream([{ role: 'user', content: 'List' }], { tools })) if (typeof item !== 'string') calls.push(item)
+  assert.equal(calls[0].id, 'provider-call')
+  const next = gatewayModule.requestBody(route, [
+    { role: 'assistant', content: '', toolCalls: [{ id: calls[0].id, name: calls[0].name, arguments: calls[0].arguments }] },
+    { role: 'tool', toolCallId: calls[0].id, content: 'files' },
+  ], true, 200, tools)
+  assert.equal((next.contents as any[])[1].parts[0].functionResponse.id, 'provider-call')
+})
+
+test('Ollama streams native calls and receives the matching tool name on continuation', async () => {
+  const route = { id: 'local', ref: { connectionId: 'a', nativeModelId: 'local-coder' }, providerId: 'ollama', connectionRevision: 1 } as ModelRoute
+  const tools: gatewayModule.ToolSchema[] = [{ name: 'list_dir', description: 'List', arguments: { path: 'string' } }]
+  const gateway = new gatewayModule.ResolvedRouteGateway({ async *streamInference() {
+    yield '{"message":{"tool_calls":[{"function":{"name":"list_dir","arguments":{"path":"."}}}]},"done":false}\n'
+  } }, async () => route)
+  const calls: gatewayModule.NativeToolCall[] = []
+  for await (const item of gateway.stream([{ role: 'user', content: 'List' }], { tools })) if (typeof item !== 'string') calls.push(item)
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0].arguments, { path: '.' })
+  const next = gatewayModule.requestBody(route, [
+    { role: 'assistant', content: '', toolCalls: [{ id: calls[0].id, name: calls[0].name, arguments: calls[0].arguments }] },
+    { role: 'tool', toolCallId: calls[0].id, content: 'files' },
+  ], true, 200, tools)
+  assert.equal((next.tools as any[])[0].function.name, 'list_dir')
+  assert.equal((next.messages as any[])[1].tool_name, 'list_dir')
+})
+
+test('native streams keep no-argument calls and a final frame without a newline', async () => {
+  const tools: gatewayModule.ToolSchema[] = [{ name: 'list_dir', description: 'List', arguments: {} }]
+  for (const [providerId, frame] of [
+    ['openrouter', 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"list_dir","arguments":"{}"}}]}}]}'],
+    ['gemini', 'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"list_dir"}}]}}]}'],
+    ['ollama', '{"message":{"tool_calls":[{"function":{"name":"list_dir"}}]},"done":true}'],
+  ] as const) {
+    const route = { id: providerId, ref: { connectionId: 'a', nativeModelId: 'm' }, providerId, connectionRevision: 1 } as ModelRoute
+    const gateway = new gatewayModule.ResolvedRouteGateway({ async *streamInference() { yield frame } }, async () => route)
+    const calls: gatewayModule.NativeToolCall[] = []
+    for await (const item of gateway.stream([{ role: 'user', content: 'List' }], { tools })) if (typeof item !== 'string') calls.push(item)
+    assert.equal(calls.length, 1, providerId)
+    assert.deepEqual(calls[0].arguments, {})
+  }
+})
+
 test('resolved route gateway sends Alex tool context through the saved model route', async () => {
   const Gateway = (gatewayModule as typeof gatewayModule & { ResolvedRouteGateway?: new (manager: unknown, resolver: () => Promise<ModelRoute>) => gatewayModule.Gateway }).ResolvedRouteGateway
   assert.equal(typeof Gateway, 'function')
@@ -50,12 +161,27 @@ test('Alex switches provider accounts when a request fails before model output',
       yield 'data: {"choices":[{"delta":{"content":"Recovered"}}]}\n\n'
       yield 'data: [DONE]\n\n'
     },
-  }, async excluded => excluded?.has(first.ref.connectionId) ? second : first)
+  }, async excluded => excluded?.has(first.id) ? second : first)
   const output: string[] = []
   for await (const chunk of gateway.stream([{ role: 'user', content: 'Hello' }])) if (typeof chunk === 'string') output.push(chunk)
   assert.equal(output.join(''), 'Recovered')
   assert.deepEqual(calls, ['openrouter-account', 'openai-account'])
   assert.equal(gateway.info()?.provider, 'openai')
+})
+
+test('Jef can retry another model on the same account after a request-shape rejection', async () => {
+  const first = { id: 'first', ref: { connectionId: 'account', nativeModelId: 'bad' }, providerId: 'openrouter', connectionRevision: 1 } as ModelRoute
+  const second = { id: 'second', ref: { connectionId: 'account', nativeModelId: 'good' }, providerId: 'openrouter', connectionRevision: 1 } as ModelRoute
+  const calls: string[] = []
+  const gateway = new gatewayModule.ResolvedRouteGateway({ async *streamInference(_id: string, _rev: number, body: Record<string, unknown>) {
+    calls.push(String(body.model))
+    if (body.model === 'bad') throw new ManagementError('INCOMPATIBLE')
+    yield 'data: {"choices":[{"delta":{"content":"Ready"}}]}\n\n'
+  } }, async excluded => excluded?.has(first.id) ? second : first)
+  const output: unknown[] = []
+  for await (const item of gateway.stream([{ role: 'user', content: 'Hi' }])) output.push(item)
+  assert.deepEqual(output, ['Ready'])
+  assert.deepEqual(calls, ['bad', 'good'])
 })
 
 test('OpenRouter assembles fragmented parallel tool calls and returns matching results', async () => {

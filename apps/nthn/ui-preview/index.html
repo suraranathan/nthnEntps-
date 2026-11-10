@@ -154,6 +154,12 @@
     .provider:hover { background: var(--surface); }
     .provider[aria-current="true"] { border-color: #3d7b86; background: var(--accent-soft); }
 
+    .provider-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+    .provider-remove { border: 0; background: transparent; color: var(--muted); padding: 8px; cursor: pointer; }
+    .provider-remove:hover { color: var(--danger); }
+    .catalog-preview { max-height: 25vh; overflow-y: auto; padding: 0 18px 8px; color: var(--muted); font: 11px/1.45 var(--mono); }
+    .catalog-preview div { padding: 4px 0; border-bottom: 1px solid var(--line-soft); overflow-wrap: anywhere; }
+
     .provider-icon {
       display: grid;
       width: 31px;
@@ -464,7 +470,10 @@
         </button>
       </div>
 
-      <p class="provider-note">Add accounts for automatic model selection. Keys stay in the app's encrypted private vault.</p>
+      <div class="sidebar-heading"><span>Discovered models</span><button class="add-provider" id="refresh-models" type="button" aria-label="Refresh models" title="Refresh models">↻</button></div>
+      <div class="catalog-preview" id="catalog-preview">Add an account to discover models.</div>
+
+      <p class="provider-note">Add OpenRouter, OpenAI, Anthropic, Gemini, xKiro or Groq accounts, or connect local Ollama. Keys stay in the encrypted private vault. Verified models may use paid credits.</p>
     </aside>
 
     <button class="backdrop" id="backdrop" aria-label="Close provider sidebar"></button>
@@ -764,7 +773,13 @@
         const name = document.createElement('span'); name.className = 'provider-name'; name.textContent = account.label;
         const detail = document.createElement('span'); detail.className = 'provider-model'; detail.textContent = `${account.credentials}${account.selected ? ' · selected route' : ''}`;
         const dot = document.createElement('span'); dot.className = `status-dot${account.connection === 'connected' ? ' connected' : ''}`; dot.setAttribute('aria-label', account.connection);
-        copy.append(name, detail); button.append(icon, copy, dot); button.addEventListener('click', () => selectProvider(button)); providerList.append(button);
+        copy.append(name, detail); button.append(icon, copy, dot); button.addEventListener('click', () => selectProvider(button));
+        const row = document.createElement('div'); row.className = 'provider-row'; row.append(button);
+        if (window.NthnAI && account.id) {
+          const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'provider-remove'; remove.textContent = '×'; remove.title = `Remove ${account.label}`; remove.setAttribute('aria-label', `Remove ${account.label}`);
+          remove.addEventListener('click', () => window.NthnAI.removeAccount(account.id)); row.append(remove);
+        }
+        providerList.append(row);
         if (account.selected || !activeProvider) selectProvider(button);
       }
       if (!accounts.length) {
@@ -772,7 +787,20 @@
       }
     }
 
+    function renderModels(raw) {
+      const view = document.querySelector('#catalog-preview');
+      view.textContent = '';
+      const lines = String(raw || '').split('\n').filter(line => line.includes('\t'));
+      if (!lines.length) { view.textContent = 'No models listed for connected accounts.'; return; }
+      for (const line of lines.slice(0, 30)) {
+        const [id, name, account] = line.split('\t');
+        const item = document.createElement('div'); item.textContent = `${name || id} · ${account || ''}`; view.append(item);
+      }
+      if (lines.length > 30) { const more = document.createElement('div'); more.textContent = `${lines.length - 30} more listed. Use nthn-ai models in Terminal.`; view.append(more); }
+    }
+
     document.querySelector('#add-provider').addEventListener('click', openProviderDialog);
+    document.querySelector('#refresh-models').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.models(); });
     document.querySelector('#workspace-switch').addEventListener('click', () => { if (!busy) workspaceDialog.showModal(); });
     document.querySelector('#close-workspace').addEventListener('click', () => workspaceDialog.close());
     document.querySelector('#cancel-workspace').addEventListener('click', () => workspaceDialog.close());
@@ -820,6 +848,7 @@
         document.querySelector('#provider-meta').textContent = value;
       }
       if (kind === 'accounts') renderAccounts(value);
+      if (kind === 'models') renderModels(value);
       if (kind === 'progress') renderProgress(value);
       if (kind === 'snapshot') renderSnapshot(value);
       if (kind === 'error') {

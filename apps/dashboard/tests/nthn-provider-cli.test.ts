@@ -25,6 +25,11 @@ test('packaged nthn provider command runs in isolated app storage', () => {
   assert.equal(statSync(join(root, '.local/ai/master.key')).mode & 0o077, 0)
   assert.equal(readFileSync(join(root, '.local/ai/master.key')).length, 32)
 
+  const hint = spawnSync(process.execPath, [cli, 'detect-provider-stdin'], { input: 'sk-or-v1-secret-fixture', encoding: 'utf8' })
+  assert.equal(hint.status, 0)
+  assert.deepEqual(JSON.parse(hint.stdout), { providerId: 'openrouter' })
+  assert.doesNotMatch(hint.stdout + hint.stderr, /secret-fixture/)
+
   const piped = spawnSync(process.execPath, [cli, 'configure-stdin'], { input: '', encoding: 'utf8' })
   assert.equal(piped.status, 1)
   assert.match(piped.stderr, /INVALID_INPUT/)

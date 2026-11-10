@@ -232,6 +232,35 @@ public final class NthnActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebProvider(this)); }
+        @JavascriptInterface public void models() {
+            executor.execute(() -> {
+                try {
+                    if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
+                    NthnBackend.CommandResult result = backend.ai("models", null, null);
+                    if (result.ok()) deliver("models", result.output);
+                    else deliver("error", aiMessage(result.output));
+                } catch (Exception error) { deliver("error", message(error)); }
+            });
+        }
+        @JavascriptInterface public void removeAccount(String id) {
+            if (id == null || !id.matches("[0-9a-f-]{36}")) { deliver("error", "Invalid account ID."); return; }
+            runOnUiThread(() -> new AlertDialog.Builder(NthnActivity.this)
+                .setTitle("Remove AI account?")
+                .setMessage("This removes the account and its stored API key from NTHN.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Remove", (dialog, which) -> executor.execute(() -> {
+                    try {
+                        if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
+                        NthnBackend.CommandResult result = backend.ai("remove-account", id, null);
+                        if (!result.ok()) { deliver("error", aiMessage(result.output)); return; }
+                        deliver("status", "AI account removed");
+                        NthnBackend.CommandResult accounts = backend.ai("accounts", null, null);
+                        if (accounts.ok()) deliver("accounts", accounts.output);
+                        NthnBackend.CommandResult models = backend.ai("cached-models", null, null);
+                        deliver("models", models.ok() ? models.output : "");
+                    } catch (Exception error) { deliver("error", message(error)); }
+                })).show());
+        }
         @JavascriptInterface public void workspace(String path) {
             if (path == null || path.length() > 500) { deliver("error", "Choose a project folder inside Linux home."); return; }
             final String payload;
@@ -282,6 +311,10 @@ public final class NthnActivity extends AppCompatActivity {
                     NthnBackend.CommandResult agent = backend.agent("state", null);
                     if (agent.ok()) deliver("snapshot", agent.output);
                     else deliver("error", aiMessage(agent.output));
+                    if (accounts.ok() && !"[]".equals(accounts.output.trim())) {
+                        NthnBackend.CommandResult models = backend.ai("cached-models", null, null);
+                        if (models.ok()) deliver("models", models.output);
+                    }
                 }
                 catch (Exception error) { deliver("error", message(error)); }
             });
@@ -296,34 +329,43 @@ public final class NthnActivity extends AppCompatActivity {
     }
 
     private void configureWebProvider(final AiWebBridge bridge) {
-        final String[] names = {"OpenRouter", "OpenAI", "Anthropic", "Google Gemini", "xKiro", "Ollama (local)"};
-        final String[] ids = {"openrouter", "openai", "anthropic", "gemini", "xkiro", "ollama"};
-        new AlertDialog.Builder(this).setTitle("Add AI provider account")
-            .setItems(names, (dialog, selected) -> configureWebKey(bridge, ids[selected], names[selected]))
-            .show();
-    }
-
-    private void configureWebKey(final AiWebBridge bridge, final String providerId, final String providerName) {
-        if ("ollama".equals(providerId)) {
-            executor.execute(() -> connectWebProvider(bridge, providerId, new char[0]));
-            return;
-        }
-        EditText key = new EditText(this);
+        final EditText key = new EditText(this);
         key.setSingleLine(true);
-        key.setHint(providerName + " API key");
+        key.setHint("Paste an API key");
         key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         FrameLayout frame = new FrameLayout(this);
         frame.setPadding(dp(20), 0, dp(20), 0);
         frame.addView(key);
-        new AlertDialog.Builder(this).setTitle("Add " + providerName + " account")
-            .setMessage("Each account key is stored separately in the encrypted private vault.")
+        new AlertDialog.Builder(this).setTitle("Add AI account")
+            .setMessage("NTHN suggests a provider from the key format. You confirm where the key is sent.")
             .setView(frame).setNegativeButton("Cancel", null)
-            .setPositiveButton("Save and test", (dialog, which) -> {
-                char[] secret = key.getText().toString().trim().toCharArray();
+            .setNeutralButton("Local Ollama", (dialog, which) -> executor.execute(() -> connectWebProvider(bridge, "ollama", new char[0])))
+            .setPositiveButton("Next", (dialog, which) -> {
+                final char[] secret = key.getText().toString().trim().toCharArray();
                 key.setText("");
-                if (secret.length == 0) return;
-                executor.execute(() -> connectWebProvider(bridge, providerId, secret));
+                if (secret.length == 0) { toast("Enter an API key"); return; }
+                executor.execute(() -> {
+                    try {
+                        if (backend == null) throw new IOException("AI service unavailable until Linux setup completes.");
+                        NthnBackend.CommandResult hint = backend.ai("detect-provider-stdin", null, secret.clone());
+                        if (!hint.ok()) throw new IOException(aiMessage(hint.output));
+                        String suggested = new JSONObject(hint.output).optString("providerId", "");
+                        main.post(() -> chooseWebProvider(bridge, secret, suggested));
+                    } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); bridge.deliver("error", message(error)); }
+                });
             }).show();
+    }
+
+    private void chooseWebProvider(final AiWebBridge bridge, final char[] secret, final String suggested) {
+        final String[] names = {"OpenRouter", "OpenAI", "Anthropic", "Google Gemini", "xKiro", "Groq"};
+        final String[] ids = {"openrouter", "openai", "anthropic", "gemini", "xkiro", "groq"};
+        final String[] choices = names.clone();
+        for (int i = 0; i < ids.length; i++) if (ids[i].equals(suggested)) choices[i] += " (suggested)";
+        new AlertDialog.Builder(this).setTitle(suggested.isEmpty() ? "Choose the key's provider" : "Confirm the suggested provider")
+            .setMessage("Your key will be tested only with the provider you choose.")
+            .setItems(choices, (dialog, selected) -> executor.execute(() -> connectWebProvider(bridge, ids[selected], secret)))
+            .setOnCancelListener(dialog -> java.util.Arrays.fill(secret, '\0'))
+            .show();
     }
 
     private void connectWebProvider(final AiWebBridge bridge, final String providerId, final char[] secret) {
@@ -333,6 +375,10 @@ public final class NthnActivity extends AppCompatActivity {
             bridge.deliver("status", result.ok() ? "AI provider connected" : aiMessage(result.output));
             NthnBackend.CommandResult accounts = backend.ai("accounts", null, null);
             if (accounts.ok()) bridge.deliver("accounts", accounts.output);
+            if (result.ok()) {
+                NthnBackend.CommandResult models = backend.ai("models", null, null);
+                if (models.ok()) bridge.deliver("models", models.output);
+            }
         } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); bridge.deliver("error", message(error)); }
     }
 
