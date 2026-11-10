@@ -109,7 +109,7 @@ public final class NthnActivity extends AppCompatActivity {
     private LinearLayout page() {
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(22), dp(22), dp(22), dp(36));
+        body.setPadding(dp(20), dp(16), dp(20), dp(28));
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(body, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -118,15 +118,15 @@ public final class NthnActivity extends AppCompatActivity {
     }
 
     private TextView heading(String value) {
-        TextView view = text(value, 24, true, R.color.nthn_text);
-        view.setPadding(0, 0, 0, dp(8));
+        TextView view = text(value, 28, true, R.color.nthn_text);
+        view.setPadding(0, 0, 0, dp(4));
         return view;
     }
 
     private TextView label(String value) {
-        TextView view = text(value.toUpperCase(Locale.ROOT), 11, true, R.color.nthn_muted);
-        view.setLetterSpacing(.12f);
-        view.setPadding(0, dp(24), 0, dp(8));
+        TextView view = text(value.toUpperCase(Locale.ROOT), 12, true, R.color.nthn_muted);
+        view.setLetterSpacing(.09f);
+        view.setPadding(dp(4), dp(22), 0, dp(9));
         return view;
     }
 
@@ -135,7 +135,7 @@ public final class NthnActivity extends AppCompatActivity {
         view.setText(value);
         view.setTextSize(sp);
         view.setTextColor(ContextCompat.getColor(this, color));
-        view.setTypeface(Typeface.create("sans", bold ? Typeface.BOLD : Typeface.NORMAL));
+        view.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
         view.setLineSpacing(0, 1.15f);
         return view;
     }
@@ -143,11 +143,14 @@ public final class NthnActivity extends AppCompatActivity {
     private TextView row(String value, View.OnClickListener listener) {
         TextView view = text(value, 16, false, R.color.nthn_text);
         view.setGravity(Gravity.CENTER_VERTICAL);
-        view.setMinHeight(dp(58));
-        view.setPadding(dp(12), 0, dp(12), 0);
+        view.setMinHeight(dp(62));
+        view.setPadding(dp(16), 0, dp(16), 0);
         view.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_nthn_chevron, 0);
         view.setCompoundDrawablePadding(dp(12));
-        view.setBackgroundResource(resolveSelectableBackground());
+        view.setBackground(panelBackground());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, dp(8));
+        view.setLayoutParams(params);
         view.setOnClickListener(listener);
         return view;
     }
@@ -165,37 +168,90 @@ public final class NthnActivity extends AppCompatActivity {
         button.setText(value);
         button.setAllCaps(false);
         button.setTextSize(14);
+        button.setTextColor(ContextCompat.getColor(this, R.color.nthn_text));
+        GradientDrawable shape = panelBackground();
+        shape.setCornerRadius(dp(12));
+        button.setBackground(shape);
+        button.setMinHeight(dp(44));
         button.setOnClickListener(listener);
         return button;
     }
 
     private void showHome() {
         final LinearLayout body = page();
-        body.addView(label("NTHN WORKSPACE"));
-        body.addView(heading("Make something today."));
-        body.addView(text("Code with Jef, work in the terminal, and keep your projects here.", 15, false, R.color.nthn_muted));
-        LinearLayout environmentCard = new LinearLayout(this);
-        environmentCard.setOrientation(LinearLayout.VERTICAL);
-        environmentCard.setPadding(dp(18), dp(16), dp(18), dp(16));
-        environmentCard.setBackground(panelBackground());
-        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardParams.setMargins(0, dp(28), 0, dp(6));
-        body.addView(environmentCard, cardParams);
-        environmentCard.addView(text("LINUX ENVIRONMENT", 11, true, R.color.nthn_accent));
-        final TextView status = text("Checking…", 16, false, R.color.nthn_text);
-        status.setPadding(0, dp(10), 0, 0);
-        environmentCard.addView(status);
-        body.addView(label("WORKSPACE"));
-        body.addView(row("Jef coding agent", v -> show(NthnNavigation.AI)));
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.addView(text("◆  NTHN", 15, true, R.color.nthn_accent), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        final TextView badge = text("Checking…", 13, true, R.color.nthn_muted);
+        badge.setPadding(dp(12), dp(7), dp(12), dp(7));
+        badge.setBackground(panelBackground());
+        top.addView(badge);
+        body.addView(top);
+        body.addView(label("Workspace"));
+        body.addView(heading("Home"));
+        body.addView(text("Your Linux environment", 14, false, R.color.nthn_muted));
+
+        LinearLayout agent = new LinearLayout(this);
+        agent.setGravity(Gravity.CENTER_VERTICAL);
+        agent.setPadding(dp(16), dp(16), dp(16), dp(16));
+        agent.setBackground(panelBackground());
+        LinearLayout.LayoutParams agentParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        agentParams.setMargins(0, dp(22), 0, 0);
+        body.addView(agent, agentParams);
+        TextView avatar = text("J", 24, true, R.color.nthn_accent);
+        avatar.setGravity(Gravity.CENTER);
+        GradientDrawable avatarShape = panelBackground();
+        avatarShape.setCornerRadius(dp(26));
+        avatar.setBackground(avatarShape);
+        agent.addView(avatar, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        LinearLayout agentCopy = new LinearLayout(this);
+        agentCopy.setOrientation(LinearLayout.VERTICAL);
+        agentCopy.setPadding(dp(16), 0, 0, 0);
+        agentCopy.addView(text("Jef coding agent", 17, true, R.color.nthn_text));
+        agentCopy.addView(text("Open your project chat", 14, false, R.color.nthn_muted));
+        agent.addView(agentCopy);
+        agent.setOnClickListener(v -> show(NthnNavigation.AI));
+        agent.setFocusable(true);
+        agent.setContentDescription("Open Jef coding agent");
+
+        body.addView(label("Environment"));
+        LinearLayout metrics = new LinearLayout(this);
+        metrics.setOrientation(LinearLayout.HORIZONTAL);
+        final TextView status = metric(metrics, "Status", "Checking…", "Linux shell");
+        final TextView storage = metric(metrics, "Storage", "Checking…", "free on device");
+        body.addView(metrics);
+        final TextView nodeState = text("Checking Node…", 13, false, R.color.nthn_muted);
+        nodeState.setPadding(dp(4), dp(10), 0, 0);
+        body.addView(nodeState);
+        body.addView(label("Open"));
         body.addView(row("Terminal", v -> NthnNavigation.open(this, "terminal")));
+        body.addView(row("Jef AI", v -> show(NthnNavigation.AI)));
         body.addView(row("Files", v -> show(NthnNavigation.FILES)));
-        if (backend == null) { status.setText("Unavailable"); return; }
+        if (backend == null) { badge.setText("Unavailable"); status.setText("Unavailable"); storage.setText("Unavailable"); nodeState.setText("Node unavailable"); return; }
         runTask(() -> backend.environmentStatus(), value -> {
             NthnBackend.EnvironmentStatus environment = (NthnBackend.EnvironmentStatus) value;
-            String state = environment.ready ? "Ready" : "Setup required";
-            String node = environment.nodeReady ? "Node available" : "Node unavailable";
-            status.setText(state + "  ·  " + node + "\n" + formatBytes(environment.freeBytes) + " free");
+            badge.setText(environment.ready ? "●  Ready" : "●  Setup required");
+            badge.setTextColor(ContextCompat.getColor(this, environment.ready ? R.color.nthn_accent : R.color.nthn_muted));
+            status.setText(environment.ready ? "Ready" : "Setup needed");
+            storage.setText(formatBytes(environment.freeBytes));
+            nodeState.setText(environment.nodeReady ? "Node available" : "Node unavailable");
         }, status);
+    }
+
+    private TextView metric(LinearLayout parent, String name, String initial, String note) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(14), dp(12), dp(14));
+        card.setBackground(panelBackground());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        if (parent.getChildCount() > 0) params.setMargins(dp(10), 0, 0, 0);
+        parent.addView(card, params);
+        card.addView(text(name, 13, false, R.color.nthn_muted));
+        TextView value = text(initial, 18, true, R.color.nthn_text);
+        value.setPadding(0, dp(6), 0, dp(3));
+        card.addView(value);
+        card.addView(text(note, 12, false, R.color.nthn_muted));
+        return value;
     }
 
     private void showAi() {
@@ -560,12 +616,19 @@ public final class NthnActivity extends AppCompatActivity {
         try { currentDirectory = backend.confine(currentDirectory == null ? backend.home() : currentDirectory); }
         catch (IOException error) { currentDirectory = backend.home(); }
         String relative = currentDirectory.equals(backend.home()) ? "~" : "~/" + backend.home().toURI().relativize(currentDirectory.toURI()).getPath();
-        body.addView(heading(relative));
+        body.addView(heading("Files"));
+        TextView path = text(relative, 14, false, R.color.nthn_muted);
+        path.setTypeface(Typeface.MONOSPACE);
+        body.addView(path);
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.addView(button("New file", v -> createEntry(false)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        actions.addView(button("New folder", v -> createEntry(true)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        body.addView(actions);
+        LinearLayout.LayoutParams folderParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        folderParams.setMargins(dp(10), 0, 0, 0);
+        actions.addView(button("New folder", v -> createEntry(true)), folderParams);
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        actionsParams.setMargins(0, dp(18), 0, dp(14));
+        body.addView(actions, actionsParams);
         if (!currentDirectory.equals(backend.home())) body.addView(row("..", v -> { currentDirectory = currentDirectory.getParentFile(); showFiles(); }));
         try {
             List<File> files = backend.listFiles(currentDirectory);
@@ -573,7 +636,17 @@ public final class NthnActivity extends AppCompatActivity {
             for (final File file : files) {
                 TextView item = row((file.isDirectory() ? "▣  " : "") + file.getName(), v -> openFile(file));
                 item.setOnLongClickListener(v -> { manageFile(file); return true; });
-                body.addView(item);
+                LinearLayout fileRow = new LinearLayout(this);
+                fileRow.setGravity(Gravity.CENTER_VERTICAL);
+                fileRow.addView(item, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+                Button manage = button("⋯", v -> manageFile(file));
+                manage.setContentDescription("Manage " + file.getName());
+                LinearLayout.LayoutParams manageParams = new LinearLayout.LayoutParams(dp(48), dp(48));
+                manageParams.setMargins(dp(8), 0, 0, 0);
+                fileRow.addView(manage, manageParams);
+                LinearLayout.LayoutParams fileRowParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                fileRowParams.setMargins(0, 0, 0, dp(8));
+                body.addView(fileRow, fileRowParams);
             }
         } catch (IOException error) { body.addView(text(error.getMessage(), 15, false, R.color.nthn_muted)); }
     }
@@ -632,17 +705,34 @@ public final class NthnActivity extends AppCompatActivity {
 
     private void showSettings() {
         LinearLayout body = page();
-        body.addView(heading("Appearance"));
+        body.addView(heading("Settings"));
+        body.addView(label("Appearance"));
         body.addView(text("Choose the interface theme.", 15, false, R.color.nthn_muted));
         LinearLayout themes = new LinearLayout(this); themes.setOrientation(LinearLayout.HORIZONTAL);
-        themes.addView(button("Light", v -> changeTheme(false)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        themes.addView(button("Dark", v -> changeTheme(true)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        body.addView(themes);
+        themes.addView(themeButton("Light", false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        LinearLayout.LayoutParams darkParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        darkParams.setMargins(dp(10), 0, 0, 0);
+        themes.addView(themeButton("Dark", true), darkParams);
+        LinearLayout.LayoutParams themesParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        themesParams.setMargins(0, dp(14), 0, 0);
+        body.addView(themes, themesParams);
         body.addView(label("Configuration"));
         body.addView(row("Jef and AI providers", v -> show(NthnNavigation.AI)));
         body.addView(row("Terminal settings", v -> startActivity(new Intent(this, SettingsActivity.class))));
         body.addView(label("Environment"));
         body.addView(text("Linux prefix\n" + NthnBackend.PREFIX + "\n\nHome\n" + (backend == null ? "Unavailable" : backend.home().getAbsolutePath()), 14, false, R.color.nthn_muted));
+    }
+
+    private Button themeButton(String name, boolean dark) {
+        Button choice = button(name, v -> changeTheme(dark));
+        if (NthnTheme.isDark(this) == dark) {
+            GradientDrawable selected = new GradientDrawable();
+            selected.setColor(ContextCompat.getColor(this, R.color.nthn_accent));
+            selected.setCornerRadius(dp(12));
+            choice.setBackground(selected);
+            choice.setTextColor(ContextCompat.getColor(this, R.color.nthn_on_accent));
+        }
+        return choice;
     }
 
     private void changeTheme(boolean dark) {

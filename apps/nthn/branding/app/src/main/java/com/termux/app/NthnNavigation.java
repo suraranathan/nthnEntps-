@@ -32,7 +32,7 @@ final class NthnNavigation {
         TextView view = activity.findViewById(id);
         if (view == null) return;
         int color = ContextCompat.getColor(activity,
-            id == selectedId ? R.color.nthn_text : R.color.nthn_muted);
+            id == selectedId ? R.color.nthn_accent : R.color.nthn_muted);
         view.setTextColor(color);
         TextViewCompat.setCompoundDrawableTintList(view, android.content.res.ColorStateList.valueOf(color));
         Drawable[] icons = view.getCompoundDrawablesRelative();

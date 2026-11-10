@@ -144,8 +144,6 @@ for source in branding.rglob('*'):
         shutil.copyfile(source, target)
 
 replace('app/src/main/AndroidManifest.xml', '<application', '<application\n        android:usesCleartextTraffic="false"', 1)
-replace('app/src/main/res/layout/activity_nthn.xml', '        android:layout_height="0dp"\n        android:layout_weight="1" />', '        android:layout_height="match_parent" />')
-
 provider_sources = Path(__file__).resolve().parents[3] / 'apps/dashboard/server/ai'
 provider_assets = root / 'app/src/main/assets/nthn-ai/server/ai'
 provider_assets.mkdir(parents=True, exist_ok=True)
