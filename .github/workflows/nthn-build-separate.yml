@@ -268,7 +268,8 @@ jobs:
             --aapt2 "$ANDROID_HOME/build-tools/30.0.3/aapt2" \
             --source-commit "$(git -C ../.. rev-parse HEAD)" \
             --bootstrap termux-src/app/src/main/cpp/bootstrap-aarch64.zip
-          "$ANDROID_HOME/build-tools/30.0.3/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/30.0.3/apksigner" verify --verbose --print-certs "$apk" | tee nthn-signing.txt
+          grep -q 'certificate SHA-256 digest: b6da01480eefd5fbf2cd3771b8d1021ec791304bdd6c4bf41d3faabad48ee5e1' nthn-signing.txt
           sha256sum "$apk" > "nthn-V${NTHN_APP_VERSION}.sha256"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -278,6 +279,7 @@ jobs:
             apps/nthn/nthn-V${{ env.NTHN_APP_VERSION }}.apk
             apps/nthn/nthn-V${{ env.NTHN_APP_VERSION }}.sha256
             apps/nthn/nthn-badging.txt
+            apps/nthn/nthn-signing.txt
           retention-days: 7
       - name: Publish direct APK release
         env:
