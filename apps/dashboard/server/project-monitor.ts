@@ -29,7 +29,7 @@ export function observeProject(store: MemoryStore, content: string) {
   }
   sections.set(title, body)
   const important = /blocker|security|failed|deadline|complete|milestone|risk|release/i.test(names) || changed.some(key => /blocker|security|failed|deadline|complete|milestone|risk|release/i.test(sections.get(key) ?? ''))
-  // Coalesce edits made before Alex can speak; the latest document is the source.
+  // Coalesce edits made before Jef can speak; the latest document is the source.
   store.state.events = store.state.events.filter(event => !event.type.startsWith('project_change') || store.state.deliveredEvents.includes(event.id))
   store.event(important ? 'project_change_important' : 'project_change', `PROJECT_STATUS.md changed in: ${names}. This is a document change, not independent proof of task progress.`)
   return true

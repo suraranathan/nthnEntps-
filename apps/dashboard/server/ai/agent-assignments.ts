@@ -11,7 +11,7 @@ export interface CompatibleAssignment {
   candidateRouteIds: string[] // ordered, explicit primary plus fallback candidates
   requiredCapabilities: Capability[]
 }
-export const alexRequirements: readonly Capability[] = Object.freeze(['text', 'systemInstructions'])
+export const jefRequirements: readonly Capability[] = Object.freeze(['text', 'systemInstructions'])
 /** Stores only model references/requirements. Identity, instructions and memory remain with each agent. */
 export class AgentAssignments {
   #store: VerificationStore
@@ -43,9 +43,9 @@ export class AgentAssignments {
   async set(input: unknown, expectedRevision: number): Promise<CompatibleAssignment> {
     const data = objectInput(input); exactFields(data, ['agentId', 'candidateRouteIds', 'requiredCapabilities'])
     if (typeof data.agentId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(data.agentId) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || !Array.isArray(data.candidateRouteIds) || !data.candidateRouteIds.length || data.candidateRouteIds.some(id => typeof id !== 'string') || new Set(data.candidateRouteIds).size !== data.candidateRouteIds.length) throw new ManagementError('INVALID_INPUT')
-    const requirements = data.requiredCapabilities ?? (data.agentId === '01' ? alexRequirements : ['text'])
+    const requirements = data.requiredCapabilities ?? (data.agentId === '01' ? jefRequirements : ['text'])
     if (!Array.isArray(requirements) || requirements.some(c => !capabilityNames.includes(c))) throw new ManagementError('INVALID_INPUT')
-    const assignment: CompatibleAssignment = { agentId: data.agentId, revision: expectedRevision + 1, candidateRouteIds: data.candidateRouteIds, requiredCapabilities: [...new Set<Capability>(['text', ...(data.agentId === '01' ? alexRequirements : []), ...requirements])] }
+    const assignment: CompatibleAssignment = { agentId: data.agentId, revision: expectedRevision + 1, candidateRouteIds: data.candidateRouteIds, requiredCapabilities: [...new Set<Capability>(['text', ...(data.agentId === '01' ? jefRequirements : []), ...requirements])] }
     for (const id of assignment.candidateRouteIds) if (!(await this.assess(id, assignment.requiredCapabilities)).compatible) throw new ManagementError('NO_COMPATIBLE_MODEL')
     const db = this.#store.db
     db.exec('BEGIN IMMEDIATE')

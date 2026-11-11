@@ -6,11 +6,11 @@ import { join } from 'node:path'
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http'
 import { once } from 'node:events'
 import { MemoryStore } from '../server/memory.ts'
-import { AlexRuntime } from '../server/runtime.ts'
+import { JefRuntime } from '../server/runtime.ts'
 import { ModelRouter, type ModelMessage, type ModelProvider } from '../server/providers.ts'
 import { createApi } from '../server/http.ts'
 import { AgentChatStore } from '../server/agent/store.ts'
-import { AlexAgent } from '../server/agent/agent.ts'
+import { JefAgent } from '../server/agent/agent.ts'
 import type { ChatTurn, Gateway, GatewayInfo } from '../server/agent/gateway.ts'
 
 class EchoProvider implements ModelProvider {
@@ -23,7 +23,7 @@ class ScriptGateway implements Gateway {
   info(): GatewayInfo { return { provider: 'fake', model: 'fixture-model', transport: 'streaming' } }
   async *stream(_messages: ChatTurn[]): AsyncGenerator<string> {
     yield 'Hello '
-    yield 'from Alex.'
+    yield 'from Jef.'
   }
 }
 
@@ -41,7 +41,7 @@ function call(port: number, method: string, path: string, options: { cookie?: st
         host: '127.0.0.1:3000',
         origin: 'http://127.0.0.1:3000',
         ...(options.cookie ? { cookie: options.cookie } : {}),
-        ...(options.csrf ? { 'x-alex-csrf': options.csrf } : {}),
+        ...(options.csrf ? { 'x-jef-csrf': options.csrf } : {}),
         ...(payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}),
       },
     }, response => {
@@ -56,13 +56,13 @@ function call(port: number, method: string, path: string, options: { cookie?: st
 
 test('agent HTTP API issues a CSRF session, streams SSE deltas and persists the conversation', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'nthn-agent-http-'))
-  const memory = new MemoryStore(join(directory, 'alex'))
+  const memory = new MemoryStore(join(directory, 'jef'))
   await memory.load()
-  const runtime = new AlexRuntime(memory, new ModelRouter([new EchoProvider()]), join(directory, 'PROJECT_STATUS.md'))
+  const runtime = new JefRuntime(memory, new ModelRouter([new EchoProvider()]), join(directory, 'PROJECT_STATUS.md'))
   await runtime.initialize()
   const chatStore = new AgentChatStore(join(directory, 'agent'))
   await chatStore.load()
-  const agent = new AlexAgent({ store: chatStore, gateway: new ScriptGateway(), workspace: directory })
+  const agent = new JefAgent({ store: chatStore, gateway: new ScriptGateway(), workspace: directory })
   const server = createApi(runtime, [], undefined, agent)
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
@@ -95,14 +95,14 @@ test('agent HTTP API issues a CSRF session, streams SSE deltas and persists the 
   const events = stream.body.split('\n\n').filter(Boolean).map(block => block.split('\n').find(line => line.startsWith('data:'))).filter(Boolean).map(line => JSON.parse((line as string).slice(5).trim()) as { type: string; text?: string })
   assert.ok(events.some(event => event.type === 'start'))
   assert.ok(events.some(event => event.type === 'delta' && event.text === 'Hello '))
-  assert.ok(events.some(event => event.type === 'delta' && event.text === 'from Alex.'))
+  assert.ok(events.some(event => event.type === 'delta' && event.text === 'from Jef.'))
   assert.ok(events.some(event => event.type === 'done'))
   assert.ok(!stream.body.includes('NTHN_TOOL'))
 
   const settings = agent.state()
   const active = settings.active
   assert.equal(active?.messages.filter(message => message.role === 'assistant').length, 1)
-  assert.equal(active?.messages.find(message => message.role === 'assistant')?.content, 'Hello from Alex.')
+  assert.equal(active?.messages.find(message => message.role === 'assistant')?.content, 'Hello from Jef.')
 
   const decision = await call(port, 'POST', '/api/agent/decide', { cookie, csrf: state.csrf, body: { kind: 'workflow', question: 'Add a regression test' } })
   assert.equal(decision.status, 200)

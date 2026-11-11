@@ -7,6 +7,8 @@ export interface MobilePendingApproval {
   approvalId: string
   tool: string
   summary: string
+  preview?: string
+  previewTruncated?: boolean
   expiresAt: number
 }
 
@@ -19,6 +21,27 @@ export interface MobileAgentSnapshot {
   model: string | null
   workspace: string
   workspaceStatus: 'empty' | 'populated' | 'unavailable'
+}
+
+function approvalPreview(call: ToolCallRecord): string | undefined {
+  const render = (path: string, before: string, after: string) => `--- ${path}\n- ${before}\n+++ ${path}\n+ ${after}`
+  const args = call.arguments
+  if (call.tool === 'write_file' && typeof args.path === 'string' && typeof args.content === 'string') {
+    return render(args.path, '(new or overwritten file)', args.content).slice(0, 20000)
+  }
+  if (call.tool === 'edit_file' && typeof args.path === 'string' && typeof args.oldText === 'string' && typeof args.newText === 'string') {
+    return render(args.path, args.oldText, args.newText).slice(0, 20000)
+  }
+  if (call.tool === 'edit_files' && typeof args.changes === 'string') {
+    try {
+      const changes: unknown = JSON.parse(args.changes)
+      if (!Array.isArray(changes)) return undefined
+      return changes.map(change => change && typeof change.path === 'string' && typeof change.oldText === 'string' && typeof change.newText === 'string'
+        ? render(change.path, change.oldText, change.newText) : '').join('\n\n').slice(0, 20000)
+    } catch { return undefined }
+  }
+  if (call.tool === 'run_command' && typeof args.command === 'string') return `Command: ${args.command}`
+  return undefined
 }
 
 export function mobileAgentProgress(event: AgentEvent): Record<string, unknown> | null {
@@ -73,6 +96,8 @@ export function mobileAgentSnapshot(state: AgentState): MobileAgentSnapshot {
           approvalId: call.approvalId,
           tool: call.tool,
           summary: call.summary ?? call.tool,
+          preview: approvalPreview(call),
+          previewTruncated: ['write_file', 'edit_file', 'edit_files'].includes(call.tool) && JSON.stringify(call.arguments).length > 18000,
           expiresAt: call.approvalExpiresAt,
         }
         break

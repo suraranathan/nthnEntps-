@@ -9,12 +9,12 @@ import { philosophyGuidance, guardPhilosophyReply, philosophySources, verifiedQu
 import { observeProject } from '../server/project-monitor.ts'
 import { scanFollowUps } from '../server/followups.ts'
 import { notificationDue } from '../server/notifications.ts'
-import { AlexRuntime } from '../server/runtime.ts'
+import { JefRuntime } from '../server/runtime.ts'
 import { ModelRouter } from '../server/providers.ts'
 import type { ModelMessage, ModelProvider } from '../server/providers.ts'
 
 async function setup(t: { after: (fn: () => Promise<void>) => void }) {
-  const dir = await mkdtemp(join(tmpdir(), 'alex-personality-'))
+  const dir = await mkdtemp(join(tmpdir(), 'jef-personality-'))
   t.after(async () => rm(dir, { recursive: true, force: true }))
   const store = new MemoryStore(dir); await store.load()
   return { dir, store }
@@ -98,11 +98,11 @@ test('old memory migrates without losing transcript and follow-up actions persis
   const old = JSON.parse(JSON.stringify(store.state))
   delete old.followUps; delete old.projectFingerprint
   for (const key of ['philosophy', 'conversationInitiation', 'followUps', 'reminders', 'stalledAfterDays']) delete old.preferences[key]
-  await writeFile(join(dir, 'alex.json'), JSON.stringify(old))
+  await writeFile(join(dir, 'jef.json'), JSON.stringify(old))
   const restored = new MemoryStore(dir); await restored.load()
   assert.equal(restored.state.messages[0].content, 'hello')
   assert.equal(restored.state.preferences.philosophy, true)
-  const runtime = new AlexRuntime(restored, new ModelRouter([]), join(dir, 'project.md'))
+  const runtime = new JefRuntime(restored, new ModelRouter([]), join(dir, 'project.md'))
   await runtime.action({ action: 'followup.create', text: 'Finish the design', dueAt: '2026-11-02T09:00:00Z' })
   assert.equal(runtime.snapshot().followUps[0].state, 'scheduled')
   await runtime.action({ action: 'followup.update', id: restored.state.followUps[0].id, state: 'completed' })
@@ -112,7 +112,7 @@ test('old memory migrates without losing transcript and follow-up actions persis
   assert.equal(restored.state.followUps[0].dueAt, null)
   assert.equal(restored.state.followUps[0].remindAt, '2026-11-03T09:00:00.000Z')
   await runtime.action({ action: 'followup.update', id: restored.state.followUps[0].id, state: 'completed' })
-  assert.equal((JSON.parse(await readFile(join(dir, 'alex.json'), 'utf8'))).followUps[0].state, 'completed')
+  assert.equal((JSON.parse(await readFile(join(dir, 'jef.json'), 'utf8'))).followUps[0].state, 'completed')
 })
 
 test('provider changes preserve behavioral context without inventing replies', async t => {
@@ -120,7 +120,7 @@ test('provider changes preserve behavioral context without inventing replies', a
   await writeFile(join(dir, 'project.md'), '# Project\nNo verified progress')
   const calls: ModelMessage[][] = []
   const make = (id: string): ModelProvider => ({ info: { id, model: id, configured: true, capabilities: { text: true, tools: false, streaming: false, images: false, discovery: true } }, discover: async () => [], complete: async messages => { calls.push(messages); return 'A fixture response.' } })
-  const runtime = new AlexRuntime(store, new ModelRouter([make('first'), make('second')]), join(dir, 'project.md'))
+  const runtime = new JefRuntime(store, new ModelRouter([make('first'), make('second')]), join(dir, 'project.md'))
   await runtime.action({ action: 'remember', category: 'insideJokes', text: 'compiler dragons' })
   await runtime.action({ action: 'chat', text: 'Should I ship this unstable build?' })
   await runtime.action({ action: 'provider', id: 'second' })
@@ -136,7 +136,7 @@ test('serious-context response is retried once and unsafe humor is never saved',
   const replies = ['Haha, I will roast you.', 'I am sorry. What happened sounds painful.']
   let calls = 0
   const provider: ModelProvider = { info: { id: 'fixture', model: 'fixture', configured: true, capabilities: { text: true, tools: false, streaming: false, images: false, discovery: true } }, discover: async () => [], complete: async () => { calls++; return replies.shift()! } }
-  const runtime = new AlexRuntime(store, new ModelRouter([provider]), join(dir, 'missing.md'))
+  const runtime = new JefRuntime(store, new ModelRouter([provider]), join(dir, 'missing.md'))
   await runtime.action({ action: 'chat', text: 'My friend died yesterday.' })
   assert.equal(calls, 2)
   assert.equal(store.state.messages.at(-1)?.content, 'I am sorry. What happened sounds painful.')
@@ -150,7 +150,7 @@ test('unverified historical quotation is repaired through the assigned provider'
   const replies = ['Seneca wrote “Every error is wisdom.”', 'Paraphrase of Seneca, Moral Letters 1: make deliberate use of limited time. My interpretation is to choose one priority today.']
   let calls = 0
   const provider: ModelProvider = { info: { id: 'fixture', model: 'fixture', configured: true, capabilities: { text: true, tools: false, streaming: false, images: false, discovery: true } }, discover: async () => [], complete: async () => { calls++; return replies.shift()! } }
-  const runtime = new AlexRuntime(store, new ModelRouter([provider]), join(dir, 'missing.md'))
+  const runtime = new JefRuntime(store, new ModelRouter([provider]), join(dir, 'missing.md'))
   await runtime.action({ action: 'chat', text: 'What would Seneca suggest?' })
   assert.equal(calls, 2)
   assert.match(store.state.messages.at(-1)!.content, /Paraphrase/)
@@ -164,7 +164,7 @@ test('scheduler notices a document edit once and recovers delivered state after 
   store.state.preferences = { ...defaultPreferences, proactive: true, quietStart: '00:00', quietEnd: '00:00' }
   let calls = 0
   const provider: ModelProvider = { info: { id: 'fixture', model: 'fixture', configured: true, capabilities: { text: true, tools: false, streaming: false, images: false, discovery: true } }, discover: async () => [], complete: async () => { calls++; return 'The status document changed; review the updated section.' } }
-  const runtime = new AlexRuntime(store, new ModelRouter([provider]), project)
+  const runtime = new JefRuntime(store, new ModelRouter([provider]), project)
   await runtime.initialize()
   await writeFile(project, '# Status\nRevised')
   await runtime.tick(new Date())
@@ -172,7 +172,7 @@ test('scheduler notices a document edit once and recovers delivered state after 
   assert.equal(store.state.events.filter(e => e.type.startsWith('project_change')).length, 1)
   assert.equal(store.state.messages.at(-1)?.kind, 'update')
   const restored = new MemoryStore(dir); await restored.load()
-  const second = new AlexRuntime(restored, new ModelRouter([provider]), project)
+  const second = new JefRuntime(restored, new ModelRouter([provider]), project)
   await second.tick(new Date(Date.now() + 2 * 3600000))
   assert.equal(calls, 1)
   assert.equal(restored.state.events.filter(e => e.type.startsWith('project_change')).length, 1)

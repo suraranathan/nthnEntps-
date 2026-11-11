@@ -63,7 +63,7 @@ export function AiProviders() {
 
   return <section className="providers-page" aria-labelledby="providers-title" aria-busy={pending}>
     <div className="providers-heading"><div><div className="eyebrow">WORKSPACE CONFIGURATION</div><h1 id="providers-title">AI Providers</h1><p>Connect providers, choose models, and assign agents.</p></div></div>
-    <p className="providers-note">Alex uses his saved verified primary for live chat. Automatic switches consider only saved verified fallbacks after repeated slowness or a provider limit signal.</p>
+    <p className="providers-note">Jef uses his saved verified primary for live chat. Automatic switches consider only saved verified fallbacks after repeated slowness or a provider limit signal.</p>
     {recovery.state !== 'connected' && <p className="providers-error" role="status">{recovery.state === 'offline' ? 'Local dashboard backend is offline.' : 'Reconnecting to the local dashboard…'} {recovery.error}</p>}
     {error && <div className="providers-error" role="alert">{error}</div>}
     <div className="providers-notice" role="status" aria-live="polite">{pending ? 'Working… Provider tests and verification may take a moment.' : notice}</div>
@@ -219,7 +219,7 @@ function ModelWorkspace({ snapshot, client, pending, perform, reload }: { snapsh
       {assignmentError && <p className="provider-failure" role="alert">{assignmentError}</p>}
       {assignmentLoading ? <p role="status">Loading assignment…</p> : <>
         <details className="providers-advanced"><summary>Advanced capability requirements</summary><fieldset disabled={pending || !ready} className="capability-options"><legend>Required observed capabilities</legend>{snapshot.capabilities.map(cap => <label className="providers-check" key={cap}><input type="checkbox" checked={requirements.includes(cap)} disabled={cap === 'text' || (agentId === '01' && cap === 'systemInstructions')} onChange={e => { setRequirements(caps => e.target.checked ? [...caps, cap] : caps.filter(c => c !== cap)); setDirty(true) }} />{capabilityLabels[cap]}</label>)}</fieldset></details>
-        {agentId === '01' && <p>Alex always requires verified text and system instructions.</p>}
+        {agentId === '01' && <p>Jef always requires verified text and system instructions.</p>}
         <ol className="candidate-list">{candidateIds.map((id, index) => {
           const route = knownRoutes[id], eligibility = result?.eligibility[id]
           const saved = assignment?.candidates.find(c => c.routeId === id)
@@ -227,7 +227,7 @@ function ModelWorkspace({ snapshot, client, pending, perform, reload }: { snapsh
         })}</ol>
         {!candidateIds.length && <p className="providers-empty">No model candidates selected. Use “Add candidate” on a compatible catalog entry.</p>}
       </>}
-      <div className="providers-actions"><button className="providers-primary" disabled={pending || !ready || !candidateIds.length || !dirty} onClick={() => { if (!window.confirm(`Save ${candidateIds.length} model choice${candidateIds.length === 1 ? '' : 's'} for ${agentId === '01' ? 'Alex' : `agent ${agentId}`}? This changes the model used on future requests.`)) return; void perform({ action: 'assignment.set', revision: assignment?.assignment?.revision ?? 0, assignment: { agentId, candidateRouteIds: candidateIds, requiredCapabilities: requirements } }, 'Assignment and ordered fallbacks saved. Alex checks the selected route before his next request.', () => setAssignmentReload(n => n + 1)) }}>Save assignment</button>{dirty && <button disabled={pending || assignmentLoading} onClick={() => setAssignmentReload(n => n + 1)}>Discard changes</button>}</div>
+      <div className="providers-actions"><button className="providers-primary" disabled={pending || !ready || !candidateIds.length || !dirty} onClick={() => { if (!window.confirm(`Save ${candidateIds.length} model choice${candidateIds.length === 1 ? '' : 's'} for ${agentId === '01' ? 'Jef' : `agent ${agentId}`}? This changes the model used on future requests.`)) return; void perform({ action: 'assignment.set', revision: assignment?.assignment?.revision ?? 0, assignment: { agentId, candidateRouteIds: candidateIds, requiredCapabilities: requirements } }, 'Assignment and ordered fallbacks saved. Jef checks the selected route before his next request.', () => setAssignmentReload(n => n + 1)) }}>Save assignment</button>{dirty && <button disabled={pending || assignmentLoading} onClick={() => setAssignmentReload(n => n + 1)}>Discard changes</button>}</div>
       {dirty && <p className="providers-note">Changing the agent discards this draft. Every candidate must pass the backend’s current compatibility checks before saving.</p>}
     </section>
 

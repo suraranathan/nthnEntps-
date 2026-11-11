@@ -1,16 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { AlexRuntime, InputError } from './runtime.ts'
+import { JefRuntime, InputError } from './runtime.ts'
 import { ProviderError } from './providers.ts'
 import { ManagementError } from './ai/management-types.ts'
 import type { AiManagementApi } from './ai/management-api.ts'
-import { AgentBusyError, type AlexAgent, type AgentEvent } from './agent/agent.ts'
+import { AgentBusyError, type JefAgent, type AgentEvent } from './agent/agent.ts'
 import { PermissionError } from './agent/permissions.ts'
 import { GatewayError } from './agent/gateway.ts'
 
 const origins = new Set(['http://localhost:3000', 'http://127.0.0.1:3000', 'http://[::1]:3000'])
 const AGENT_BODY_LIMIT = 100_000
-export function createApi(runtime: AlexRuntime, extraOrigins: string[] = [], ai?: () => AiManagementApi, agent?: AlexAgent) {
+export function createApi(runtime: JefRuntime, extraOrigins: string[] = [], ai?: () => AiManagementApi, agent?: JefAgent) {
   const allowed = new Set([...origins, ...extraOrigins])
   const sessions = new Map<string, { csrf: string; expires: number }>()
   let nextMutation = 0
@@ -107,9 +107,9 @@ export function createApi(runtime: AlexRuntime, extraOrigins: string[] = [], ai?
     const isAgent = path === '/api/agent' || path.startsWith('/api/agent/')
     const isAiRequest = path === '/api/ai' || path.startsWith('/api/ai/')
     try {
-      if (!allowed.has(`http://${req.headers.host}`) || (req.headers.origin && !allowed.has(req.headers.origin)) || req.headers['sec-fetch-site'] === 'cross-site') throw new InputError('Alex API is restricted to the local dashboard origin', 403)
-      if (req.url !== '/api/alex' && !(isAi && ai) && !(isAgent && agent)) throw new InputError('Not found', 404)
-      const cookie = /(?:^|;\s*)alex_session=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie ?? '')?.[1]
+      if (!allowed.has(`http://${req.headers.host}`) || (req.headers.origin && !allowed.has(req.headers.origin)) || req.headers['sec-fetch-site'] === 'cross-site') throw new InputError('Jef API is restricted to the local dashboard origin', 403)
+      if (req.url !== '/api/jef' && !(isAi && ai) && !(isAgent && agent)) throw new InputError('Not found', 404)
+      const cookie = /(?:^|;\s*)jef_session=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie ?? '')?.[1]
       let session = cookie ? sessions.get(cookie) : undefined
       if (session && session.expires < Date.now()) { sessions.delete(cookie!); session = undefined }
       if (req.method === 'GET') {
@@ -119,14 +119,14 @@ export function createApi(runtime: AlexRuntime, extraOrigins: string[] = [], ai?
           const token = randomBytes(32).toString('hex')
           session = { csrf: randomBytes(32).toString('hex'), expires: Date.now() + 12 * 3600000 }
           sessions.set(token, session)
-          res.setHeader('Set-Cookie', `alex_session=${token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=43200`)
+          res.setHeader('Set-Cookie', `jef_session=${token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=43200`)
         }
         if (isAgent) send(res, 200, { ...agent!.state(), csrf: session.csrf })
         else send(res, 200, isAi ? ai!().snapshot(session.csrf) : runtime.snapshot(session.csrf))
         return
       }
       if (req.method !== 'POST') throw new InputError('Method not allowed', 405)
-      const csrf = req.headers['x-alex-csrf']
+      const csrf = req.headers['x-jef-csrf']
       if (!req.headers.origin || !session || typeof csrf !== 'string' || !/^[a-f0-9]{64}$/.test(csrf) || csrf.length !== session.csrf.length || !timingSafeEqual(Buffer.from(csrf), Buffer.from(session.csrf))) throw new InputError('Session expired or invalid CSRF token; reconnect the chat', 403)
       if (req.headers['content-type'] !== 'application/json') throw new InputError('Expected application/json', 415)
       if (!isAi && !isAgent) {
@@ -159,7 +159,7 @@ export function createApi(runtime: AlexRuntime, extraOrigins: string[] = [], ai?
       const management = isAiRequest && error instanceof ManagementError ? error : null
       const known = error instanceof InputError || error instanceof ProviderError || error instanceof PermissionError || error instanceof AgentBusyError || error instanceof GatewayError
       const message = management?.message ?? (known ? error.message : isAiRequest ? 'Provider operation failed. Reload current state before retrying.' : 'Internal agent error; no action was executed')
-      // Provider management must never write to Alex's memory/audit, including failures.
+      // Provider management must never write to Jef's memory/audit, including failures.
       if (!isAiRequest) {
         runtime.store.log('api.error', known ? message : 'internal failure')
         await runtime.store.save().catch(() => {})

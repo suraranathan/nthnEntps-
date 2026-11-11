@@ -1,4 +1,4 @@
-import type { Preferences } from '../src/alex-contract.ts'
+import type { Preferences } from '../src/jef-contract.ts'
 
 // Source locations identify works and translations. Guidance below is paraphrase,
 // not an alleged verbatim statement by an ancient author.
@@ -21,7 +21,7 @@ export function verifiedQuotation(author: string, text: string) {
 
 export function philosophyGuidance(preferences: Preferences) {
   if (!preferences.philosophy) return 'Philosophical guidance is disabled. Do not introduce historical philosophical perspectives unless the user explicitly asks to change this preference.'
-  return `PHILOSOPHICAL REASONING: Use these source-grounded perspectives only when they help the user's actual question; never insert them mechanically. Compare competing views when useful. Label historical ideas as paraphrases of the named work, and distinguish your own inference as Alex's interpretation. Source index (work, location, URL, paraphrase): ${JSON.stringify(philosophySources)}. Never present a new direct historical quotation from model memory. The only server-verified direct quotation available is ${JSON.stringify(verifiedQuotations)}. For any other requested quotation, offer a paraphrase with a source or say verification is unavailable. Translation wording varies.`
+  return `PHILOSOPHICAL REASONING: Use these source-grounded perspectives only when they help the user's actual question; never insert them mechanically. Compare competing views when useful. Label historical ideas as paraphrases of the named work, and distinguish your own inference as Jef's interpretation. Source index (work, location, URL, paraphrase): ${JSON.stringify(philosophySources)}. Never present a new direct historical quotation from model memory. The only server-verified direct quotation available is ${JSON.stringify(verifiedQuotations)}. For any other requested quotation, offer a paraphrase with a source or say verification is unavailable. Translation wording varies.`
 }
 
 const philosopher = /(?:Marcus Aurelius|Seneca|Epictetus|Socrates|Aristotle|Confucius|Stoic(?:s|ism)?|Confucian)/i

@@ -29,7 +29,7 @@ export function useAgentChat() {
 
   const load = useCallback(async () => {
     const response = await fetch('/api/agent', { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(10_000) })
-    if (!response.ok) throw new Error('The local Alex agent server is unreachable.')
+    if (!response.ok) throw new Error('The local Jef agent server is unreachable.')
     const data = await response.json() as AgentState
     if (!Array.isArray(data.conversations)) throw new Error('The agent server returned an invalid response.')
     if (typeof data.csrf === 'string') csrf.current = data.csrf
@@ -38,7 +38,7 @@ export function useAgentChat() {
   }, [])
 
   useEffect(() => {
-    load().catch(cause => setError(cause instanceof Error ? cause.message : 'Could not load Alex.'))
+    load().catch(cause => setError(cause instanceof Error ? cause.message : 'Could not load Jef.'))
   }, [load])
 
   const post = useCallback(async (path: string, body: Record<string, unknown>) => {
@@ -46,7 +46,7 @@ export function useAgentChat() {
     const response = await fetch(path, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-Alex-CSRF': csrf.current },
+      headers: { 'Content-Type': 'application/json', 'X-Jef-CSRF': csrf.current },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30_000),
     })
@@ -148,20 +148,20 @@ export function useAgentChat() {
       const response = await fetch('/api/agent/chat', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-Alex-CSRF': csrf.current },
+        headers: { 'Content-Type': 'application/json', 'X-Jef-CSRF': csrf.current },
         body: JSON.stringify({ conversationId, text: trimmed }),
         signal: controller.signal,
       })
       if (!response.ok) {
         const data = await response.json().catch(() => ({})) as { error?: string }
-        throw new Error(data.error ?? 'Alex could not start the request.')
+        throw new Error(data.error ?? 'Jef could not start the request.')
       }
       await consume(response, conversationId)
       await load().catch(() => undefined)
       return true
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
-        setError(cause instanceof Error ? cause.message : 'Alex request failed.')
+        setError(cause instanceof Error ? cause.message : 'Jef request failed.')
       }
       return false
     } finally {
@@ -189,7 +189,7 @@ export function useAgentChat() {
       const response = await fetch('/api/agent/approve', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-Alex-CSRF': csrf.current },
+        headers: { 'Content-Type': 'application/json', 'X-Jef-CSRF': csrf.current },
         body: JSON.stringify({ conversationId: pending.conversationId, approvalId: pending.approvalId, approved }),
         signal: controller.signal,
       })

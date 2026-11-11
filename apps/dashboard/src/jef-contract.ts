@@ -22,7 +22,7 @@ export type FollowUp = { id: string; text: string; state: 'pending' | 'scheduled
 export type TeamRequest = { id: string; target: 'sophia'; type: 'request' | 'clarification'; text: string; state: 'awaiting_adapter' | 'submitted' | 'in_progress' | 'completed' | 'failed'; createdAt: string; updates: { text: string; at: string }[] }
 export type ProjectEvent = { id: string; type: string; text: string; at: string }
 export type ProviderInfo = { id: string; model: string; configured: boolean; capabilities: { text: boolean; tools: false; streaming: false; images: false; discovery: boolean } }
-export type AlexSnapshot = {
+export type JefSnapshot = {
   identity: { id: string; name: string; role: string; version: number }
   status: ConnectionState
   detail: string
@@ -38,7 +38,7 @@ export type AlexSnapshot = {
   audit: { at: string; action: string; outcome: string }[]
   csrf: string
 }
-export type AlexAction =
+export type JefAction =
   | { action: 'chat'; text: string }
   | { action: 'probe' }
   | { action: 'preferences'; value: Preferences }

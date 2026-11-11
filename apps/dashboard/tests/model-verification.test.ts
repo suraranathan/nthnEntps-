@@ -12,7 +12,7 @@ import { buildProbe, validateProbe } from '../server/ai/verification-probes.ts'
 import { capabilityNames } from '../server/ai/verification-store.ts'
 import type { ProbeTransport } from '../server/ai/endpoint-policy.ts'
 import { ManagementError } from '../server/ai/management-types.ts'
-import { AlexAssignedProvider, nearAllowance, nextSlowStreak, SLOW_REQUEST_MS } from '../server/ai/alex-assigned-provider.ts'
+import { JefAssignedProvider, nearAllowance, nextSlowStreak, SLOW_REQUEST_MS } from '../server/ai/jef-assigned-provider.ts'
 import { MemoryStore } from '../server/memory.ts'
 
 const secret = 'fixture-secret-not-real'
@@ -43,7 +43,7 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }, handler?
   return { directory, manager, catalog, verification, assignments, connection, route, calls }
 }
 
-test('Alex switch signals require repeated slowness or observed remaining allowance', () => {
+test('Jef switch signals require repeated slowness or observed remaining allowance', () => {
   assert.equal(nextSlowStreak(0, SLOW_REQUEST_MS - 1), 0)
   assert.equal(nextSlowStreak(nextSlowStreak(1, SLOW_REQUEST_MS), SLOW_REQUEST_MS), 3)
   assert.equal(nextSlowStreak(3, 100), 0)
@@ -52,7 +52,7 @@ test('Alex switch signals require repeated slowness or observed remaining allowa
   assert.equal(nearAllowance(0, 0), false)
 })
 
-test('Alex assigned transport uses exact verified route and switches only after a limit signal to saved fallback', async t => {
+test('Jef assigned transport uses exact verified route and switches only after a limit signal to saved fallback', async t => {
   let limitOnce = false
   let clock = 0, simulateSlowness = false
   const config = { providerId: 'openrouter', label: 'primary', baseUrl: 'https://openrouter.ai/api/v1', enabled: true, scope: { account: 'fixture', project: null, region: null } }
@@ -60,7 +60,7 @@ test('Alex assigned transport uses exact verified route and switches only after 
     if (JSON.stringify(options?.body?.messages).match(/[a-f0-9]{32}/)) return { status: 200, body: answer(options!.body!) }
     if (limitOnce) { limitOnce = false; return { status: 429, body: {} } }
     if (simulateSlowness) clock += SLOW_REQUEST_MS + 1
-    return { status: 200, body: { choices: [{ message: { content: 'Fixture Alex reply.' } }] } }
+    return { status: 200, body: { choices: [{ message: { content: 'Fixture Jef reply.' } }] } }
   }, config)
   const verified = await f.verification.verify(f.route.id, ['text', 'systemInstructions'])
   assert.equal(verified.state, 'verified')
@@ -69,28 +69,28 @@ test('Alex assigned transport uses exact verified route and switches only after 
   const fallback = (await f.catalog.search({ connectionIds: [other.id] })).entries[0].route
   assert.equal((await f.verification.verify(fallback.id, ['text', 'systemInstructions'])).state, 'verified')
   await f.assignments.set({ agentId: '01', candidateRouteIds: [f.route.id, fallback.id] }, 0)
-  const store = new MemoryStore(join(f.directory, 'alex')); await store.load()
-  const provider = new AlexAssignedProvider(f.manager, f.catalog, f.assignments, f.verification, store)
+  const store = new MemoryStore(join(f.directory, 'jef')); await store.load()
+  const provider = new JefAssignedProvider(f.manager, f.catalog, f.assignments, f.verification, store)
   await provider.prepare()
-  assert.equal(await provider.complete([{ role: 'system', content: 'Identity' }]), 'Fixture Alex reply.')
-  assert.equal(store.state.events.filter(e => e.type === 'alex_model_switched').length, 0)
+  assert.equal(await provider.complete([{ role: 'system', content: 'Identity' }]), 'Fixture Jef reply.')
+  assert.equal(store.state.events.filter(e => e.type === 'jef_model_switched').length, 0)
   limitOnce = true
   await assert.rejects(provider.complete([{ role: 'system', content: 'Identity' }]), /rate limit/i)
   await provider.prepare()
-  assert.equal(await provider.complete([{ role: 'system', content: 'Identity' }]), 'Fixture Alex reply.')
+  assert.equal(await provider.complete([{ role: 'system', content: 'Identity' }]), 'Fixture Jef reply.')
   assert.match(store.state.events.at(-1)!.text, /rate limit/)
-  assert.equal(store.state.events.at(-1)!.type, 'alex_model_switched')
+  assert.equal(store.state.events.at(-1)!.type, 'jef_model_switched')
   assert.equal(f.calls.filter(c => c.body && !JSON.stringify(c.body.messages).match(/[a-f0-9]{32}/)).length, 3)
-  const slow = new AlexAssignedProvider(f.manager, f.catalog, f.assignments, f.verification, store, () => clock)
+  const slow = new JefAssignedProvider(f.manager, f.catalog, f.assignments, f.verification, store, () => clock)
   await slow.prepare(); simulateSlowness = true
   for (let i = 0; i < 3; i++) await slow.complete([{ role: 'system', content: 'Identity' }])
-  assert.equal(store.state.events.filter(e => e.type === 'alex_model_switched').length, 1)
+  assert.equal(store.state.events.filter(e => e.type === 'jef_model_switched').length, 1)
   await slow.prepare()
-  assert.equal(store.state.events.filter(e => e.type === 'alex_model_switched').length, 2)
+  assert.equal(store.state.events.filter(e => e.type === 'jef_model_switched').length, 2)
   assert.match(store.state.events.at(-1)!.text, /three consecutive responses/)
 })
 
-test('required-capability verification can qualify Alex after an unrelated tools route failure without claiming tools support', async t => {
+test('required-capability verification can qualify Jef after an unrelated tools route failure without claiming tools support', async t => {
   const f = await fixture(t, async (_endpoint, _path, _key, options) => options?.body?.tools ? { status: 404, body: {} } : { status: 200, body: answer(options!.body!) })
   const full = await f.verification.verify(f.route.id)
   assert.equal(full.code, 'MODEL_UNAVAILABLE')
@@ -194,7 +194,7 @@ test('stream parser rejects missing terminators, JSON masquerading as streaming,
   }
 })
 
-test('explicit assignments require evidence; Alex profile cannot drop system requirements; candidates remain separate', async t => {
+test('explicit assignments require evidence; Jef profile cannot drop system requirements; candidates remain separate', async t => {
   const f = await fixture(t)
   const input = { agentId: '01', candidateRouteIds: [f.route.id] }
   await assert.rejects(f.assignments.set(input, 0), code('NO_COMPATIBLE_MODEL'))

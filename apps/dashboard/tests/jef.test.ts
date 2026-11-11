@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { once } from 'node:events'
 import { request as httpRequest } from 'node:http'
-import { MemoryStore, conversationContext, defaultPreferences } from '../server/memory.ts'
-import { AlexRuntime, validatePreferences } from '../server/runtime.ts'
+import { MemoryStore, conversationContext, defaultPreferences, migrateLegacyJefDirectory } from '../server/memory.ts'
+import { JefRuntime, validatePreferences } from '../server/runtime.ts'
 import { HttpProvider, ModelRouter, ProviderError } from '../server/providers.ts'
 import type { ModelMessage, ModelProvider } from '../server/providers.ts'
 import { inQuietHours, notificationDue } from '../server/notifications.ts'
@@ -21,14 +21,32 @@ class FixtureProvider implements ModelProvider {
   async complete(messages: ModelMessage[]) { this.calls.push(messages); if (this.fail) throw new ProviderError('Provider unreachable or request timed out'); return 'Deterministic test fixture response. Not a real model.' }
 }
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
-  const directory = await mkdtemp(join(tmpdir(), 'nthn-alex-test-'))
+  const directory = await mkdtemp(join(tmpdir(), 'nthn-jef-test-'))
   t.after(async () => { await rm(directory, { recursive: true, force: true }) })
   const store = new MemoryStore(directory); await store.load()
   const project = join(directory, 'status.md'); await writeFile(project, 'Test project document: no real task activity.')
   const provider = new FixtureProvider()
-  const runtime = new AlexRuntime(store, new ModelRouter([provider]), project)
+  const runtime = new JefRuntime(store, new ModelRouter([provider]), project)
   return { directory, store, provider, runtime }
 }
+
+test('existing Alex memory and preferences migrate to Jef without losing history', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'nthn-jef-migrate-'))
+  t.after(async () => { await rm(root, { recursive: true, force: true }) })
+  const oldDirectory = join(root, 'alex')
+  const newDirectory = join(root, 'jef')
+  await mkdir(oldDirectory)
+  const original = new MemoryStore(oldDirectory)
+  original.state.messages.push({ id: 'old-chat', role: 'user', content: 'Keep this conversation', createdAt: new Date().toISOString(), kind: 'chat' })
+  original.state.preferences.communication = 'Keep replies concise'
+  await writeFile(join(oldDirectory, 'alex.json'), JSON.stringify(original.state))
+  await migrateLegacyJefDirectory(newDirectory, oldDirectory)
+  const restored = new MemoryStore(newDirectory)
+  await restored.load()
+  assert.equal(restored.state.messages[0].content, 'Keep this conversation')
+  assert.equal(restored.state.preferences.communication, 'Keep replies concise')
+  assert.equal((JSON.parse(await readFile(join(newDirectory, 'jef.json'), 'utf8'))).messages[0].id, 'old-chat')
+})
 
 test('persisted preferences, explicit categorized memory and conversation survive restart/provider change', async t => {
   const { directory, store, runtime, provider } = await fixture(t)
@@ -40,12 +58,12 @@ test('persisted preferences, explicit categorized memory and conversation surviv
   assert.equal(restored.state.notes.insideJokes[0].source, 'user')
   assert.equal(restored.state.preferences.humor, 'serious')
   const other = new FixtureProvider(); other.info = { ...other.info, id: 'other-fixture' }
-  const second = new AlexRuntime(restored, new ModelRouter([provider, other]), runtime.projectFile)
+  const second = new JefRuntime(restored, new ModelRouter([provider, other]), runtime.projectFile)
   await second.action({ action: 'provider', id: 'other-fixture' })
   assert.equal(second.status, 'offline')
   await second.action({ action: 'chat', text: 'Continue that conversation' })
   const prompt = other.calls[0]
-  assert.match(prompt[0].content, /You are Alex, employee 01/)
+  assert.match(prompt[0].content, /You are Jef, employee 01/)
   assert.match(prompt[0].content, /immediately stop jokes/)
   assert.match(prompt[0].content, /never a human/)
   assert.match(prompt[0].content, /USER REPORTS/)
@@ -60,7 +78,7 @@ test('persisted preferences, explicit categorized memory and conversation surviv
 
 test('no provider never generates a canned assistant reply or fake online state', async t => {
   const { store, runtime } = await fixture(t)
-  const offline = new AlexRuntime(store, new ModelRouter([]), runtime.projectFile)
+  const offline = new JefRuntime(store, new ModelRouter([]), runtime.projectFile)
   await assert.rejects(offline.action({ action: 'chat', text: 'Hello' }), /No model provider/)
   assert.equal(offline.status, 'offline'); assert.equal(store.state.messages.length, 0)
   await assert.rejects(offline.action({ action: 'provider', id: 'arbitrary-url' }), /Unknown or unconfigured/)
@@ -163,9 +181,9 @@ test('older relevant context is retrieved while full history stays persisted', a
 
 test('corrupt memory is not silently overwritten', async t => {
   const { directory } = await fixture(t)
-  await writeFile(join(directory, 'alex.json'), '{invalid')
+  await writeFile(join(directory, 'jef.json'), '{invalid')
   await assert.rejects(new MemoryStore(directory).load())
-  assert.equal(await readFile(join(directory, 'alex.json'), 'utf8'), '{invalid')
+  assert.equal(await readFile(join(directory, 'jef.json'), 'utf8'), '{invalid')
 })
 
 test('provider transports use real request schemas; secrets never enter system prompts or returned errors', async () => {
@@ -223,19 +241,19 @@ test('HTTP API protects host/origin, sessions/CSRF, content type and body limits
   const address = api.address(); assert.ok(address && typeof address === 'object')
   const base = `http://127.0.0.1:${address.port}`
   const common = { Host: 'localhost:3000', Origin: 'http://localhost:3000' }
-  assert.equal((await rawFetch(base + '/api/alex', { headers: { Host: 'attacker.example' } })).status, 403)
-  const response = await rawFetch(base + '/api/alex', { headers: common })
+  assert.equal((await rawFetch(base + '/api/jef', { headers: { Host: 'attacker.example' } })).status, 403)
+  const response = await rawFetch(base + '/api/jef', { headers: common })
   assert.equal(response.status, 200)
   assert.equal(response.headers.get('Cache-Control'), 'no-store')
   const cookie = response.headers.get('set-cookie')!.split(';')[0]
   const snapshot = await response.json()
-  const headers = { ...common, Cookie: cookie, 'X-Alex-CSRF': snapshot.csrf, 'Content-Type': 'application/json' }
-  assert.equal((await rawFetch(base + '/api/alex', { method: 'POST', headers: { ...headers, Origin: 'https://attacker.example' }, body: '{}' })).status, 403)
-  assert.equal((await rawFetch(base + '/api/alex', { method: 'POST', headers: { ...headers, 'X-Alex-CSRF': 'invalid' }, body: '{}' })).status, 403)
-  assert.equal((await rawFetch(base + '/api/alex', { method: 'POST', headers: { ...headers, 'Content-Type': 'text/plain' }, body: '{}' })).status, 415)
-  assert.equal((await rawFetch(base + '/api/alex', { method: 'POST', headers, body: JSON.stringify({ action: 'remember', category: 'project', text: 'API test note' }) })).status, 200)
+  const headers = { ...common, Cookie: cookie, 'X-Jef-CSRF': snapshot.csrf, 'Content-Type': 'application/json' }
+  assert.equal((await rawFetch(base + '/api/jef', { method: 'POST', headers: { ...headers, Origin: 'https://attacker.example' }, body: '{}' })).status, 403)
+  assert.equal((await rawFetch(base + '/api/jef', { method: 'POST', headers: { ...headers, 'X-Jef-CSRF': 'invalid' }, body: '{}' })).status, 403)
+  assert.equal((await rawFetch(base + '/api/jef', { method: 'POST', headers: { ...headers, 'Content-Type': 'text/plain' }, body: '{}' })).status, 415)
+  assert.equal((await rawFetch(base + '/api/jef', { method: 'POST', headers, body: JSON.stringify({ action: 'remember', category: 'project', text: 'API test note' }) })).status, 200)
   await new Promise(resolve => setTimeout(resolve, 260))
-  assert.equal((await rawFetch(base + '/api/alex', { method: 'POST', headers, body: 'x'.repeat(16001) })).status, 413)
+  assert.equal((await rawFetch(base + '/api/jef', { method: 'POST', headers, body: 'x'.repeat(16001) })).status, 413)
   assert.equal((await rawFetch(base + '/api/tools', { headers: common })).status, 404)
 })
 
@@ -257,9 +275,9 @@ test('future Sophia updates enforce correlation and cannot complete an undeliver
 test('structurally damaged valid JSON memory is rejected without overwriting it', async t => {
   const { directory, store } = await fixture(t)
   const damaged = { ...store.state, notes: { project: [] } }
-  await writeFile(join(directory, 'alex.json'), JSON.stringify(damaged))
+  await writeFile(join(directory, 'jef.json'), JSON.stringify(damaged))
   await assert.rejects(new MemoryStore(directory).load(), /Invalid memory schema/)
-  assert.deepEqual(JSON.parse(await readFile(join(directory, 'alex.json'), 'utf8')), damaged)
+  assert.deepEqual(JSON.parse(await readFile(join(directory, 'jef.json'), 'utf8')), damaged)
 })
 
 test('dashboard Vite proxy preserves the browser host required by the local API boundary', async t => {
@@ -284,7 +302,7 @@ test('dashboard Vite proxy preserves the browser host required by the local API 
   const privatePath = '/.local/' + privateDirectory.split('/').at(-1) + '/fixture.json'
   const denied = await rawFetch(`http://127.0.0.1:${uiAddress.port}${privatePath}`, { headers: { Host: 'localhost:3000' } })
   assert.equal(denied.status, 403, 'Private memory must not be served by Vite static middleware')
-  const response = await rawFetch(`http://127.0.0.1:${uiAddress.port}/api/alex`, { headers: { Host: 'localhost:3000' } })
+  const response = await rawFetch(`http://127.0.0.1:${uiAddress.port}/api/jef`, { headers: { Host: 'localhost:3000' } })
   assert.equal(response.status, 200)
-  assert.equal((await response.json()).identity.name, 'Alex')
+  assert.equal((await response.json()).identity.name, 'Jef')
 })

@@ -31,7 +31,7 @@ export class AiClient {
     if (!this.#csrf) await this.snapshot(signal)
     const send = () => this.#fetch('/api/ai', {
       method: 'POST', credentials: 'same-origin', cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', 'X-Alex-CSRF': this.#csrf },
+      headers: { 'Content-Type': 'application/json', 'X-Jef-CSRF': this.#csrf },
       body: JSON.stringify(action), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(135000)]) : AbortSignal.timeout(135000),
     })
     let response = await send()

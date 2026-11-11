@@ -1,10 +1,10 @@
-# Alex integration architecture
+# Jef integration architecture
 
 ## Inspection and intended integration
 
 Inspected the root/dashboard README files, PROJECT_STATUS.md, CHANGELOG.md, App.tsx, OfficeScene.tsx, Vite/PWA configuration and package scripts. No AGENTS.md exists in the workspace or ancestor paths. The existing app is React 19 + React Three Fiber/Three.js, Vite and TypeScript. It has seven local employee records, sample activity/tasks, scene selection and camera controls. There is no existing agent runtime, chat, backend, provider abstraction or persistent memory to reuse. No provider credentials/model settings were found in the process environment. The current implementation must remain usable without a provider.
 
-The integration will keep the office/dashboard and add a same-origin API proxied by Vite to a loopback Node server. Alex's identity and scene/team context will be server-owned, with a model-neutral conversation contract and replaceable provider registry. The first two transports will be OpenAI-compatible Chat Completions and Ollama. Server configuration, never browser inputs, defines provider URLs and credentials. No arbitrary command or external-action executor will exist.
+The integration will keep the office/dashboard and add a same-origin API proxied by Vite to a loopback Node server. Jef's identity and scene/team context will be server-owned, with a model-neutral conversation contract and replaceable provider registry. The first two transports will be OpenAI-compatible Chat Completions and Ollama. Server configuration, never browser inputs, defines provider URLs and credentials. No arbitrary command or external-action executor will exist.
 
 Structured local storage will separate preferences, transcript, project context, relationships/inside jokes and temporary task context from the versioned identity. Messages and important actions will be persisted atomically. User-editable memory will be explicit and reviewable; dialogue alone will not silently become a verified project fact. Chat history persists even when only a recent bounded window fits in a model prompt.
 
@@ -21,7 +21,7 @@ OpenAI-compatible transport uses `POST /chat/completions` with `model`, ordered 
 | Component | Responsibility |
 | --- | --- |
 | `src/team.ts` | Shared seven-person roster and explicit authored scene context. Six colleagues remain placeholders. |
-| `server/identity.ts`, `server/personality-context.ts` | Versioned Alex identity, stable values, sensitive-context guidance and user-controlled humor. No fixed jokes or conversational quotas. |
+| `server/identity.ts`, `server/personality-context.ts` | Versioned Jef identity, stable values, sensitive-context guidance and user-controlled humor. No fixed jokes or conversational quotas. |
 | `server/providers.ts` | `ModelProvider`, bounded/timeout-protected HTTP adapters, optional model discovery and allowlisted `ModelRouter.select()` seam for future Nexus. |
 | `server/memory.ts` | Schema-validated private JSON persistence, atomic serialized writes, contextual retrieval, events and audit. |
 | `server/runtime.ts` | Conversation lifecycle, user-controlled memory/settings, local handoff queue and notification generation. Single in-flight generation; local setting changes roll back on write failure. |
@@ -29,28 +29,28 @@ OpenAI-compatible transport uses `POST /chat/completions` with `model`, ordered 
 | `server/notifications.ts`, `server/project-monitor.ts`, `server/followups.ts` | Quiet hours, rate limits, persisted project document fingerprints and user-saved follow-up state/event detection. |
 | `server/philosophy.ts` | Source registry, labeled paraphrase perspectives, curated checked quotation and a fail-closed guard for apparent unverified historical quotes. |
 | `server/http.ts` | Local API boundary, bounded JSON input, session cookie, CSRF, origin/host checks, request pacing and sanitized errors. |
-| `src/useAlex.ts`, `src/AlexChat.tsx` | Polling connection state, interactive chat, explicit saved memory, follow-ups, preferences, model switch/test, queue and action log. |
+| `src/useJef.ts`, `src/JefChat.tsx` | Polling connection state, interactive chat, explicit saved memory, follow-ups, preferences, model switch/test, queue and action log. |
 | `scripts/serve.mjs` | Runs loopback agent API and existing Vite dev/production preview together; forwards shutdown and fails if either process exits. |
 
 ```mermaid
 sequenceDiagram
   participant User
   participant Dashboard
-  participant Alex as Local Alex runtime
+  participant Jef as Local Jef runtime
   participant Store as Private local memory
   participant Model as Configured model provider
   User->>Dashboard: Send message
-  Dashboard->>Alex: Same-origin POST + session + CSRF
-  Alex->>Store: Persist user turn
-  Alex->>Model: Identity + actual supplied context + bounded history
-  Model-->>Alex: Generated text or explicit failure
-  Alex->>Store: Persist reply/provider metadata or sanitized error audit
-  Alex-->>Dashboard: Truthful state and messages
+  Dashboard->>Jef: Same-origin POST + session + CSRF
+  Jef->>Store: Persist user turn
+  Jef->>Model: Identity + actual supplied context + bounded history
+  Model-->>Jef: Generated text or explicit failure
+  Jef->>Store: Persist reply/provider metadata or sanitized error audit
+  Jef-->>Dashboard: Truthful state and messages
 ```
 
 ## Memory and context contract
 
-`apps/dashboard/.local/alex/alex.json` is ignored by Git. Its schema version is separate from the identity version. Default directory/file permissions are 0700/0600, and a PID lock prevents concurrent runtimes from writing the same store. It is local plaintext, not encrypted or a multi-user database. Preserve/backup it privately if moving the application. A custom `ALEX_DATA_DIR` must be protected and excluded from source control by the operator.
+`apps/dashboard/.local/jef/jef.json` is ignored by Git. Its schema version is separate from the identity version. Default directory/file permissions are 0700/0600, and a PID lock prevents concurrent runtimes from writing the same store. It is local plaintext, not encrypted or a multi-user database. Preserve/backup it privately if moving the application. A custom `JEF_DATA_DIR` must be protected and excluded from source control by the operator.
 
 - **Identity/permanent personality:** versioned server source, resent each turn; never learned from provider output.
 - **User preferences:** humor, communication instructions, timezone, quiet hours, notification interval and daily briefing settings; edited explicitly in Settings.
@@ -68,7 +68,7 @@ Server-only `.env.server` or process variables select an accessible text-chat mo
 
 No default paid model is chosen. No provider is marked online at startup or merely because a key exists. A successful real inference changes state to online; this means **last request succeeded**, not a continuous provider heartbeat. Thinking/error/offline states and sanitized error details are exposed. Test real connection performs a real inference and stores its response. Requests time out at 60 seconds per provider HTTP call. Probe discovery plus inference can take up to 120 seconds. Empty, malformed, oversized, tool-only and explicitly truncated responses are rejected. Provider responses are rendered as plain text, without HTML execution. Provider changes preserve local transcript/notes and reset connection verification.
 
-All generation paths use the same identity and context assembly. Changing providers cannot intentionally remove Alex’s identity rules, although actual behavior and instruction adherence depend on the chosen model. Semantic personality consistency/humor quality require live-model evaluation; deterministic tests verify the supplied contract, not the intelligence of test fixtures.
+All generation paths use the same identity and context assembly. Changing providers cannot intentionally remove Jef’s identity rules, although actual behavior and instruction adherence depend on the chosen model. Semantic personality consistency/humor quality require live-model evaluation; deterministic tests verify the supplied contract, not the intelligence of test fixtures.
 
 ## Sophia and consequential actions
 
@@ -80,9 +80,9 @@ A future trusted dispatcher can implement `SophiaAdapter.submit()` and `updates(
 
 ### Personality, philosophy and follow-up extension (2026-10-31)
 
-Alex keeps a stable versioned identity across providers. Each chat turn adds context-sensitive guidance: a small set of high-confidence distress cues suppresses joking, and otherwise the selected model judges whether a question, advice, humor, teasing or disagreement is useful. There are no timed question/joke/disagreement routines. This is a guard and a value framework, not proof that a given model will act naturally. Explicit inside-joke notes and transcript retrieval survive model changes; automatic extraction of private memories from conversation is intentionally unavailable. Users save durable shared facts explicitly.
+Jef keeps a stable versioned identity across providers. Each chat turn adds context-sensitive guidance: a small set of high-confidence distress cues suppresses joking, and otherwise the selected model judges whether a question, advice, humor, teasing or disagreement is useful. There are no timed question/joke/disagreement routines. This is a guard and a value framework, not proof that a given model will act naturally. Explicit inside-joke notes and transcript retrieval survive model changes; automatic extraction of private memories from conversation is intentionally unavailable. Users save durable shared facts explicitly.
 
-Philosophical guidance is optional and source-indexed. The source registry covers Marcus Aurelius, Seneca, Epictetus, Socrates through Plato, Aristotle and Confucius. Its perspective descriptions are paraphrases, and any novel synthesis must be labeled Alex's interpretation. Only the exact Epictetus excerpt in the curated registry is approved as a direct historical quotation, with work, section, translator and source URL. Apparent unverified attributed quotes in generated text are replaced by an explicit verification failure. This conservative guard cannot prove every possible model-generated historical claim or detect all quotation styles. For strict academic quotation work, a larger reviewed corpus and human source review are still required. The source URLs are public reading references; no network fetch runs during Alex requests.
+Philosophical guidance is optional and source-indexed. The source registry covers Marcus Aurelius, Seneca, Epictetus, Socrates through Plato, Aristotle and Confucius. Its perspective descriptions are paraphrases, and any novel synthesis must be labeled Jef's interpretation. Only the exact Epictetus excerpt in the curated registry is approved as a direct historical quotation, with work, section, translator and source URL. Apparent unverified attributed quotes in generated text are replaced by an explicit verification failure. This conservative guard cannot prove every possible model-generated historical claim or detect all quotation styles. For strict academic quotation work, a larger reviewed corpus and human source review are still required. The source URLs are public reading references; no network fetch runs during Jef requests.
 
 The backend fingerprints `PROJECT_STATUS.md` by section on startup and each minute. The first read sets a baseline; later changed sections create a persistent event, with undelivered edits coalesced to the latest document. This reports a document change, not independently verified task progress. User-saved follow-ups hold pending, scheduled, overdue, completed and dismissed states. Due, reminder and stalled signals create at most one event per state; the event waits through quiet hours and survives restart. Unfinished Sophia queue entries are included as unverified context, not silently converted into completed work. There is no Git/file-system watcher beyond the status document, no Android background scheduler, and no automatic extraction of tasks from free-form chat.
 
@@ -90,18 +90,18 @@ Automatic messages require the existing proactive opt-in. Project and provider e
 
 Defaults: proactive updates and daily briefings off, minimum interval 60 minutes, quiet 22:00–08:00 Asia/Manila. Interval is configurable between 15 and 1440 minutes. The server checks once per minute while running. Quiet hours may cross midnight; equal start/end disables them. Scheduled briefings require proactive permission, run at most once per local date after the configured time, and respect quiet hours/intervals. There is no missed-day replay backlog.
 
-Proactive replies summarize real pending events or the supplied project context using the configured model. Event IDs and last delivered briefing day are persisted only on success. Failed attempts remain pending and have at least a five-minute retry backoff. Generated briefings/updates appear in chat, with an unread count on Talk to Alex; the browser stores only a read timestamp for this badge. No OS push, background Android service or scheduler while Termux is stopped is provided. Enabling proactive communication permits provider calls/costs; the UI states this.
+Proactive replies summarize real pending events or the supplied project context using the configured model. Event IDs and last delivered briefing day are persisted only on success. Failed attempts remain pending and have at least a five-minute retry backoff. Generated briefings/updates appear in chat, with an unread count on Talk to Jef; the browser stores only a read timestamp for this badge. No OS push, background Android service or scheduler while Termux is stopped is provided. Enabling proactive communication permits provider calls/costs; the UI states this.
 
 ## API and operational boundary
 
-`GET /api/alex` returns current public state/history and issues a short-lived HttpOnly SameSite=Strict cookie plus CSRF token. `POST /api/alex` accepts only documented JSON actions (chat, probe, briefing, preferences, remember, forget, provider and handoff), with server validation, a 16KB request limit and 250ms minimum request spacing. Unknown actions/tools are rejected. Responses are no-store; the service worker excludes `/api/`.
+`GET /api/jef` returns current public state/history and issues a short-lived HttpOnly SameSite=Strict cookie plus CSRF token. `POST /api/jef` accepts only documented JSON actions (chat, probe, briefing, preferences, remember, forget, provider and handoff), with server validation, a 16KB request limit and 250ms minimum request spacing. Unknown actions/tools are rejected. Responses are no-store; the service worker excludes `/api/`.
 
-The API listens only on 127.0.0.1:3001 and trusts only localhost/127.0.0.1/[::1] dashboard origins on port 3000. The Vite development server explicitly denies environment files, the private `.local` tree, memory JSON/temp files and runtime locks from static serving (including custom memory locations by filename). Vite must preserve the browser Host (`changeOrigin: false`) in dev and preview. LAN access to the office UI does not grant access to Alex. Sessions/CSRF protect the local browser boundary, not authenticated multi-user hosting. Do not expose this runtime as a public service without real authentication, HTTPS, isolated user storage and deployment review. Credentials are never sent to the browser or audit, redirects are rejected, and external provider endpoints require HTTPS (loopback HTTP is allowed). Prompts/transcripts/notes/project document context are sent to the configured provider on generation; the initial chat and setup docs disclose this.
+The API listens only on 127.0.0.1:3001 and trusts only localhost/127.0.0.1/[::1] dashboard origins on port 3000. The Vite development server explicitly denies environment files, the private `.local` tree, memory JSON/temp files and runtime locks from static serving (including custom memory locations by filename). Vite must preserve the browser Host (`changeOrigin: false`) in dev and preview. LAN access to the office UI does not grant access to Jef. Sessions/CSRF protect the local browser boundary, not authenticated multi-user hosting. Do not expose this runtime as a public service without real authentication, HTTPS, isolated user storage and deployment review. Credentials are never sent to the browser or audit, redirects are rejected, and external provider endpoints require HTTPS (loopback HTTP is allowed). Prompts/transcripts/notes/project document context are sent to the configured provider on generation; the initial chat and setup docs disclose this.
 
 ## Verification and current configuration
 
 Deterministic tests cover persistence and model switches, supplied identity/context rules, failures and missing providers, single-flight generation, permission boundaries, queued/undelivered Sophia states, correlated update validation, quiet hours/timezone/day/deduplication, rollback on disk failure, corrupt memory handling, provider wire formats/error redaction, malformed outputs, HTTP protections and the actual Vite-to-API proxy path. Fixtures are isolated under the OS temporary directory; no test fixture is used by the production agent.
 
-The development dashboard and local agent server have been started together and smoke-tested through port 3000. No provider credentials/model/local service were supplied during implementation, so live-model inference and subjective personality quality remain unverified. Alex correctly remains offline; an inference attempt returns HTTP 503 without a fabricated reply. Browser/mobile visual and interaction testing is unavailable in this environment.
+The development dashboard and local agent server have been started together and smoke-tested through port 3000. No provider credentials/model/local service were supplied during implementation, so live-model inference and subjective personality quality remain unverified. Jef correctly remains offline; an inference attempt returns HTTP 503 without a fabricated reply. Browser/mobile visual and interaction testing is unavailable in this environment.
 
 Validation: frontend/server/tests typecheck, 16 deterministic tests and production build pass; existing large-bundle warning remains (1,151.00 kB / 319.93 kB gzip). Live-model inference remains unconfigured.

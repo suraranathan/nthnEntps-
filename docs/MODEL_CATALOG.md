@@ -1,10 +1,10 @@
 # Automatic model discovery and unified catalog — Phase 2, Step 3
 
-The backend discovers model listings for every **enabled** connection in the Step 2 registry. It stores exact provider routes in a searchable SQLite catalog. No discovery request performs inference, proves model access, modifies an agent assignment or changes Alex's provider/personality/memory. Source listings are evidence of listing only.
+The backend discovers model listings for every **enabled** connection in the Step 2 registry. It stores exact provider routes in a searchable SQLite catalog. No discovery request performs inference, proves model access, modifies an agent assignment or changes Jef's provider/personality/memory. Source listings are evidence of listing only.
 
 ## Automatic operation and commands
 
-Normal `npm run dev` and `npm run start` now launch a separate catalog watcher alongside the existing API/UI processes. It scans at startup and polls every five seconds for newly enabled/edited connections or refreshes due. A fatal catalog-worker error is reported without shutting down Alex/the UI; retry it with the standalone command below. Shutdown terminates the worker with the other children, with a bounded forced-cleanup fallback. An interrupted refresh is recovered after its lease expires.
+Normal `npm run dev` and `npm run start` now launch a separate catalog watcher alongside the existing API/UI processes. It scans at startup and polls every five seconds for newly enabled/edited connections or refreshes due. A fatal catalog-worker error is reported without shutting down Jef/the UI; retry it with the standalone command below. Shutdown terminates the worker with the other children, with a bounded forced-cleanup fallback. An interrupted refresh is recovered after its lease expires.
 
 From `apps/dashboard/`:
 
@@ -24,7 +24,7 @@ npm run catalog -- search '{"connectionIds":["CONNECTION_ID"]}'
 
 To continue a page, repeat the same filters/page size with the returned `nextCursor` in the `cursor` field. Catalog/state or connection configuration changes invalidate old cursors with `CATALOG_CHANGED`; restart pagination rather than mixing snapshots. Literal search matches native IDs/display names, including percent and underscore characters. Search page sizes range from 1 to 1000; this is a per-response resource bound, **not a total-model limit**.
 
-Normal refresh interval is five minutes. Server environment `AI_CATALOG_REFRESH_MS` can set another interval of at least 60000 milliseconds. Failures have persisted exponential retry backoff starting at one minute, capped at one hour. Changed configurations retry without waiting for a prior configuration's backoff. Three bounded workers isolate unavailable providers during each scheduling pass. Disabled connections are not contacted; legacy Alex environment configuration is not silently imported into the registry or changed. Existing `AI_PROVIDER_DATA_DIR` and `AI_PROVIDER_LOCAL_PORTS` policies also apply to the catalog worker.
+Normal refresh interval is five minutes. Server environment `AI_CATALOG_REFRESH_MS` can set another interval of at least 60000 milliseconds. Failures have persisted exponential retry backoff starting at one minute, capped at one hour. Changed configurations retry without waiting for a prior configuration's backoff. Three bounded workers isolate unavailable providers during each scheduling pass. Disabled connections are not contacted; legacy Jef environment configuration is not silently imported into the registry or changed. Existing `AI_PROVIDER_DATA_DIR` and `AI_PROVIDER_LOCAL_PORTS` policies also apply to the catalog worker.
 
 The watcher runs only while its process is running. It does not survive stopping Termux/rebooting without operator-managed startup. Failed connections return their own sanitized result; they do not erase other providers' catalogs or stop the overall scan. CLI explicit refresh/sync exits nonzero if any attempted provider fails. Watch progress logs include only connection IDs, states, counts and stable codes, not provider bodies, keys or cursor payloads.
 
@@ -77,9 +77,9 @@ Management connection tests retain the existing 1MB response bound. Discovery us
 - `catalog-service.ts`: protected enumeration, access-state handling and automatic scheduling/backoff.
 - `catalog-cli.ts`: watch/sync/refresh/search/get/status commands.
 - Existing connection manager/transport/adapters: narrow protected listing-request and metadata extensions; existing management operations remain supported.
-- Startup runner: independent catalog worker; catalog errors do not take down Alex/UI.
+- Startup runner: independent catalog worker; catalog errors do not take down Jef/UI.
 
-The catalog suite covers multi-page discovery beyond 1000 models, multiple accounts/routes, exact IDs, metadata/unknowns, literal search and stale cursors, partial failures, removal/rediscovery, unsafe pagination, credential echoes, persistence/permissions, cross-process leases, scheduling, real local HTTP, responses above 1MB, CLI reads, a live watcher subprocess and combined-runner failure isolation. All earlier Alex, contract and connection-management tests remain unchanged. Live external provider access requires real accounts/credentials; fixture listings are never reported as actual connected models.
+The catalog suite covers multi-page discovery beyond 1000 models, multiple accounts/routes, exact IDs, metadata/unknowns, literal search and stale cursors, partial failures, removal/rediscovery, unsafe pagination, credential echoes, persistence/permissions, cross-process leases, scheduling, real local HTTP, responses above 1MB, CLI reads, a live watcher subprocess and combined-runner failure isolation. All earlier Jef, contract and connection-management tests remain unchanged. Live external provider access requires real accounts/credentials; fixture listings are never reported as actual connected models.
 
 Validation completed: 69 tests pass (44 existing + 25 catalog/integration tests), frontend/server typecheck and production build pass, and the catalog help command exits successfully. The existing Vite bundle warning remains, with unchanged frontend asset hashes. No real external inventory or model access was claimed from test fixtures.
 

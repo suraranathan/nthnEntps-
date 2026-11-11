@@ -1,14 +1,14 @@
-# NTHN Alex Coding Agent Implementation Plan
+# NTHN Jef Coding Agent Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Connect the existing Alex coding-agent engine to the `com.nthn` Linux home and Android chat with restart-safe approvals.
+**Goal:** Connect the existing Jef coding-agent engine to the `com.nthn` Linux home and Android chat with restart-safe approvals.
 
 **Architecture:** Package the dashboard agent modules into the APK, add a JSON CLI adapter using the existing encrypted OpenRouter route, and extend the native/WebView bridge to display tool activity and approve exact actions. Generalize only the existing dashboard assumptions needed by the mobile profile.
 
 **Tech Stack:** TypeScript/Node 24, Java/Android WebView bridge, HTML/CSS/JavaScript, Python build patch, GitHub Actions.
 
-**Spec:** `docs/superpowers/specs/2026-11-09-nthn-alex-coding-agent-design.md`
+**Spec:** `docs/superpowers/specs/2026-11-09-nthn-jef-coding-agent-design.md`
 
 ## Global Constraints
 
@@ -38,7 +38,7 @@
 - Test: `apps/dashboard/tests/agent.test.ts`
 
 **Interfaces:**
-- Produces: configurable `AlexAgent` workspace/tool policy and persisted `approvalExpiresAt` tool calls.
+- Produces: configurable `JefAgent` workspace/tool policy and persisted `approvalExpiresAt` tool calls.
 
 - [ ] Write failing tests for full-workspace writes, approval-gated mobile commands, and approval after constructing a fresh agent instance.
 - [ ] Run the focused agent tests and confirm the new assertions fail for missing behavior.
@@ -68,7 +68,7 @@
 - Test: `apps/dashboard/tests/nthn-agent-cli.test.ts`
 
 **Interfaces:**
-- Consumes: saved route in `.local/ai/selected-route.json`, `ConnectionManager`, `CatalogService`, `AgentChatStore`, and mobile `AlexAgent` options.
+- Consumes: saved route in `.local/ai/selected-route.json`, `ConnectionManager`, `CatalogService`, `AgentChatStore`, and mobile `JefAgent` options.
 - Produces: JSON commands `state`, `chat`, `new`, and `approve` with messages, tool calls, and pending approval details.
 
 - [ ] Write failing tests for selected-route response parsing and stable mobile result serialization.

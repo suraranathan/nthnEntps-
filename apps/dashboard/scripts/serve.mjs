@@ -22,9 +22,9 @@ api.on('message', message => {
   children.push(ui)
   const catalog = spawn(process.execPath, ['server/ai/catalog-cli.ts', 'watch'], { cwd, stdio: 'inherit' })
   children.push(catalog)
-  // Catalog storage/config errors must never stop Alex or the office UI.
-  catalog.on('error', () => console.error('Catalog worker could not start; Alex remains available.'))
-  catalog.on('exit', code => { if (!stopping && code) console.error('Catalog worker stopped; use npm run catalog -- watch to retry. Alex remains available.') })
+  // Catalog storage/config errors must never stop Jef or the office UI.
+  catalog.on('error', () => console.error('Catalog worker could not start; Jef remains available.'))
+  catalog.on('exit', code => { if (!stopping && code) console.error('Catalog worker stopped; use npm run catalog -- watch to retry. Jef remains available.') })
   ui.on('error', () => stop(1)); ui.on('exit', code => stop(code ?? 1))
 })
 api.on('error', () => stop(1)); api.on('exit', code => stop(code ?? 1))

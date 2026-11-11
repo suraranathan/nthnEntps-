@@ -9,7 +9,7 @@ export const OFFICE = { width: 22, depth: 17, wall: .2, wallHeight: 2.8, doorWid
 export const ROOMS: readonly Room[] = [
   { id: 'Meeting room', label: 'MEETING', x: -8, z: -5.15, width: 5.8, depth: 6.4, door: [-5, -4.55], side: 'west' },
   { id: 'Consultation', label: 'CONSULTATION', x: -8, z: .55, width: 5.8, depth: 4.65, door: [-5, .15], side: 'west' },
-  { id: 'Private office', label: 'ALEX / PRIVATE', x: 8, z: -5.65, width: 5.8, depth: 5.4, door: [5, -5], side: 'east' },
+  { id: 'Private office', label: 'JEF / PRIVATE', x: 8, z: -5.65, width: 5.8, depth: 5.4, door: [5, -5], side: 'east' },
   { id: 'Product office', label: 'SOPHIA / PRODUCT', x: 8, z: -.45, width: 5.8, depth: 4.7, door: [5, -.45], side: 'east' },
   { id: 'Security office', label: 'VICTOR / SECURITY', x: 8, z: 5.2, width: 5.8, depth: 6.1, door: [5, 4.35], side: 'east' },
 ] as const
@@ -39,7 +39,7 @@ export const FURNITURE: readonly Footprint[] = [
   { id: 'reception-chair', room: 'Reception', x: 2.45, z: 5.1, width: .7, depth: .7 },
   { id: 'waiting-sofa', room: 'Waiting area', x: -3.3, z: 5, width: 1.9, depth: .75 },
   { id: 'waiting-table', room: 'Waiting area', x: -3.3, z: 6.15, width: 1.1, depth: .55 },
-  { id: 'alex-storage', room: 'Private office', x: 8, z: -7.84, width: 2.8, depth: .55 },
+  { id: 'jef-storage', room: 'Private office', x: 8, z: -7.84, width: 2.8, depth: .55 },
   { id: 'product-storage', room: 'Product office', x: 8, z: -2.34, width: 2.65, depth: .55 },
   { id: 'security-storage', room: 'Security office', x: 8.1, z: 2.66, width: 2.8, depth: .55 },
   { id: 'work-storage', room: 'Work area', x: 0, z: -7.9, width: 2.8, depth: .55 },

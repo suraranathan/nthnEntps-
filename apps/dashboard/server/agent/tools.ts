@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import type { JefMemoryStore, MemoryKind } from './memory.ts'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve as resolvePath } from 'node:path'
@@ -55,6 +56,8 @@ export interface ToolRegistryOptions {
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
+  memory?: JefMemoryStore
+  memoryScope?: string
 }
 
 const MAX_TOOL_OUTPUT = 200_000
@@ -337,6 +340,59 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const commandApproval = options.requireCommandApproval ?? false
   const sandboxCommands = options.sandboxCommands ?? false
   return [
+    ...(options.memory ? [{
+      name: 'save_memory',
+      description: 'Save a concise useful fact, preference, decision, goal, checkpoint, or verified lesson for future chats. No secrets or guesses.',
+      requiresApproval: false,
+      required: ['kind', 'text'],
+      arguments: { kind: 'string', text: 'string', scope: 'string', sourcePath: 'string' },
+      summarize: (args: Record<string, unknown>) => `Remember: ${stringArg(args, 'text').slice(0, 100)}`,
+      execute: async (args: Record<string, unknown>) => {
+        const kind = stringArg(args, 'kind') as MemoryKind
+        const scope = stringArg(args, 'scope', 'project') === 'personal' ? 'personal' : options.memoryScope ?? 'personal'
+        try {
+          const item = await options.memory!.add({ scope, kind, text: stringArg(args, 'text'), source: 'Jef conversation', sourcePath: stringArg(args, 'sourcePath') || undefined })
+          return { ok: true, summary: 'Saved memory.', output: item.text }
+        } catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Memory rejected.', output: '' } }
+      },
+    } as ToolDefinition, {
+      name: 'recall_memory',
+      description: 'Find relevant saved personal and current-project memories with source and freshness.',
+      requiresApproval: false,
+      required: ['query'],
+      arguments: { query: 'string' },
+      summarize: (args: Record<string, unknown>) => `Recall memory about ${stringArg(args, 'query')}`,
+      execute: async (args: Record<string, unknown>) => {
+        const found = options.memory!.relevant(options.memoryScope ?? 'personal', stringArg(args, 'query'), 20)
+        return { ok: true, summary: `${found.length} memories found.`, output: found.map(item => `${item.id} [${item.kind}; ${item.source}] ${item.text}`).join('\n') }
+      },
+    } as ToolDefinition, {
+      name: 'revise_memory',
+      description: 'Correct an existing saved memory after new evidence or user feedback.',
+      requiresApproval: false,
+      required: ['id', 'text'],
+      arguments: { id: 'string', text: 'string' },
+      summarize: () => 'Correct saved memory',
+      execute: async (args: Record<string, unknown>) => {
+        const id = stringArg(args, 'id')
+        if (!options.memory!.list(options.memoryScope ?? 'personal').some(item => item.id === id)) return { ok: false, summary: 'Memory not found in this project.', output: '' }
+        try { const item = await options.memory!.update(id, { text: stringArg(args, 'text') }); return { ok: true, summary: 'Memory corrected.', output: item.text } }
+        catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Memory rejected.', output: '' } }
+      },
+    } as ToolDefinition, {
+      name: 'forget_memory',
+      description: 'Delete a saved memory when the user asks or evidence proves it is wrong.',
+      requiresApproval: false,
+      required: ['id'],
+      arguments: { id: 'string' },
+      summarize: () => 'Forget saved memory',
+      execute: async (args: Record<string, unknown>) => {
+        const id = stringArg(args, 'id')
+        if (!options.memory!.list(options.memoryScope ?? 'personal').some(item => item.id === id)) return { ok: false, summary: 'Memory not found in this project.', output: '' }
+        await options.memory!.remove(id)
+        return { ok: true, summary: 'Memory deleted.', output: '' }
+      },
+    } as ToolDefinition] : []),
     {
       name: 'list_dir',
       description: 'List files and directories inside the workspace. Relative paths only.',
@@ -357,6 +413,21 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
           ? '0 entries in workspace root; no project files are visible here.'
           : `${lines.length} entr${lines.length === 1 ? 'y' : 'ies'} in ${target.relative}.`
         return { ok: true, summary, output: output.text, truncated: output.truncated }
+      },
+    },
+    {
+      name: 'find_files',
+      description: 'Find file paths by a case-insensitive name fragment without reading file contents.',
+      requiresApproval: false,
+      required: ['query'],
+      arguments: { query: 'string', path: 'string' },
+      summarize: args => `Find files named ${stringArg(args, 'query')}`,
+      execute: async (args, context) => {
+        const query = stringArg(args, 'query').trim().toLowerCase()
+        if (!query || query.length > 100) return { ok: false, summary: 'Invalid file query.', output: '' }
+        const files = await walkFiles(context.workspace, context.paths, stringArg(args, 'path', '.'), context.signal)
+        const matches = files.map(file => relative(context.workspace, file)).filter(path => path.toLowerCase().includes(query)).slice(0, 100)
+        return { ok: true, summary: `${matches.length} matching file(s).`, output: matches.join('\n') }
       },
     },
     {
@@ -453,6 +524,48 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
         if (updated.length > MAX_FILE_BYTES) return { ok: false, summary: 'Resulting file is too large.', output: '' }
         await writeFile(target, updated, 'utf8')
         return { ok: true, summary: `Edited ${relative(context.workspace, target)}.`, output: `Replaced ${oldText.length} character(s) with ${newText.length} character(s).`, meta: { relative: relative(context.workspace, target) } }
+      },
+    },
+    {
+      name: 'edit_files',
+      description: 'Replace exact unique text in up to 10 files as one reviewed action. Pass changes as a JSON array of {path, oldText, newText}. Requires approval.',
+      requiresApproval: true,
+      required: ['changes'],
+      arguments: { changes: 'string' },
+      summarize: args => {
+        try {
+          const changes: unknown = JSON.parse(stringArg(args, 'changes'))
+          return Array.isArray(changes) ? `Edit ${changes.length} files: ${changes.map(item => String(item?.path ?? '?')).join(', ')}` : 'Edit files'
+        } catch { return 'Edit files' }
+      },
+      execute: async (args, context) => {
+        let changes: unknown
+        try { changes = JSON.parse(stringArg(args, 'changes')) } catch { return { ok: false, summary: 'Invalid changes JSON.', output: '' } }
+        if (!Array.isArray(changes) || changes.length < 1 || changes.length > 10) return { ok: false, summary: 'Provide 1 to 10 changes.', output: '' }
+        const prepared: { path: string; original: string; updated: string }[] = []
+        const seen = new Set<string>()
+        try {
+          for (const change of changes) {
+            if (!change || typeof change.path !== 'string' || typeof change.oldText !== 'string' || typeof change.newText !== 'string' || !change.oldText) throw new Error('Each change needs path, oldText, and newText.')
+            const path = await context.paths.resolveForWrite(change.path)
+            if (seen.has(path)) throw new Error('Each file may appear only once.')
+            seen.add(path)
+            const original = await readFile(path, 'utf8')
+            const first = original.indexOf(change.oldText)
+            if (first < 0 || original.indexOf(change.oldText, first + 1) >= 0) throw new Error(`Text is missing or not unique in ${change.path}.`)
+            const updated = original.slice(0, first) + change.newText + original.slice(first + change.oldText.length)
+            if (updated.length > MAX_FILE_BYTES) throw new Error(`Result is too large in ${change.path}.`)
+            prepared.push({ path, original, updated })
+          }
+        } catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Changes rejected.', output: '' } }
+        const written: typeof prepared = []
+        try {
+          for (const change of prepared) { await writeFile(change.path, change.updated, 'utf8'); written.push(change) }
+        } catch (error) {
+          for (const change of written.reverse()) await writeFile(change.path, change.original, 'utf8').catch(() => undefined)
+          return { ok: false, summary: error instanceof Error ? error.message : 'Write failed.', output: '' }
+        }
+        return { ok: true, summary: `Edited ${prepared.length} files.`, output: prepared.map(change => relative(context.workspace, change.path)).join('\n') }
       },
     },
     {

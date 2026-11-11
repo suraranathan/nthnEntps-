@@ -42,7 +42,7 @@ function ToolCallCard({ call, approval, onApprove }: { call: ToolCallRecord; app
       {call.summary && <p className="agent-tool-summary">{call.summary}</p>}
       {approval && call.status === 'awaiting-approval' && (
         <div className="agent-approval">
-          <span>Alex wants to run this action. It will not run without your approval.</span>
+          <span>Jef wants to run this action. It will not run without your approval.</span>
           <div>
             <button type="button" className="agent-deny" onClick={() => onApprove(false)}>Deny</button>
             <button type="button" className="agent-approve" onClick={() => onApprove(true)}>Approve</button>
@@ -113,7 +113,7 @@ function MessageView({ message, approvalCallId, onApprove }: { message: AgentMes
   )
 }
 
-export function AlexAgentChat() {
+export function JefAgentChat() {
   const chat = useAgentChat()
   const [draft, setDraft] = useState('')
   const [listOpen, setListOpen] = useState(false)
@@ -165,11 +165,11 @@ export function AlexAgentChat() {
   const transport = gateway?.transport === 'buffered' ? 'buffered fallback' : gateway ? 'streaming' : 'not ready'
 
   return (
-    <section className={`agent-shell panel-current ${listOpen ? 'agent-shell-list-open' : ''}`} aria-label="Alex coding agent">
+    <section className={`agent-shell panel-current ${listOpen ? 'agent-shell-list-open' : ''}`} aria-label="Jef coding agent">
       <aside className="agent-conversations" ref={listRef}>
         <div className="agent-conversations-head">
           <div>
-            <span className="eyebrow">ALEX</span>
+            <span className="eyebrow">JEF</span>
             <h2>Conversations</h2>
           </div>
           <button type="button" className="agent-icon-button" aria-label="New conversation" title="New conversation" onClick={() => { setListOpen(false); void chat.newConversation() }}>＋</button>
@@ -187,7 +187,7 @@ export function AlexAgentChat() {
           ))}
         </div>
         <div className="agent-conversations-foot">
-          <span className={`alex-status-dot ${chat.busy ? 'thinking' : 'online'}`} />
+          <span className={`jef-status-dot ${chat.busy ? 'thinking' : 'online'}`} />
           <span>{chat.busy ? 'Working' : 'Ready'}</span>
           <span className="agent-transport">{transport}</span>
         </div>
@@ -197,7 +197,7 @@ export function AlexAgentChat() {
         <header className="agent-header">
           <button type="button" className="agent-list-toggle" aria-label="Show conversations" aria-expanded={listOpen} onClick={() => setListOpen(value => !value)}>☰</button>
           <div className="agent-heading">
-            <div className="agent-heading-title"><h1>Alex</h1><span className="agent-role">Coding agent</span></div>
+            <div className="agent-heading-title"><h1>Jef</h1><span className="agent-role">Coding agent</span></div>
             <p>{status}</p>
           </div>
           <div className="agent-header-actions">
@@ -218,7 +218,7 @@ export function AlexAgentChat() {
             <div className="agent-empty">
               <div className="agent-empty-mark">A</div>
               <h2>What should we build?</h2>
-              <p>Alex can inspect this repository, make scoped changes, run the test suite and build, and explain what changed. Changes that need permission pause for your approval.</p>
+              <p>Jef can inspect this repository, make scoped changes, run the test suite and build, and explain what changed. Changes that need permission pause for your approval.</p>
               <ul>
                 <li>“Find where the dashboard streams provider responses and explain it.”</li>
                 <li>“Add a regression test for the agent decision engine.”</li>
@@ -246,8 +246,8 @@ export function AlexAgentChat() {
               onChange={event => setDraft(event.target.value)}
               onKeyDown={onKeyDown}
               rows={1}
-              placeholder="Ask Alex to inspect, change, test, or explain the codebase…"
-              aria-label="Message Alex"
+              placeholder="Ask Jef to inspect, change, test, or explain the codebase…"
+              aria-label="Message Jef"
               disabled={chat.busy}
             />
             {chat.busy

@@ -7,7 +7,7 @@ async function source(path: string): Promise<string> {
   return await readFile(resolve('../nthn', path), 'utf8')
 }
 
-test('Android patch packages the complete Alex runtime and terminal launcher', async () => {
+test('Android patch packages the complete Jef runtime and terminal launcher', async () => {
   const patch = await source('scripts/patch_nthn.py')
   const installer = await source('branding/app/src/main/java/com/termux/app/NthnAiInstaller.java')
   assert.match(patch, /agent_sources.*'agent'/)
@@ -16,7 +16,7 @@ test('Android patch packages the complete Alex runtime and terminal launcher', a
   assert.match(installer, /nthn-agent-cli\.ts/)
 })
 
-test('native bridge invokes Alex with the private Linux workspace and exact approval contract', async () => {
+test('native bridge invokes Jef with the private Linux workspace and exact approval contract', async () => {
   const backend = await source('branding/app/src/main/java/com/termux/app/NthnBackend.java')
   const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
   assert.match(backend, /NTHN_AGENT_WORKSPACE/)
@@ -32,7 +32,7 @@ test('native bridge invokes Alex with the private Linux workspace and exact appr
   assert.match(activity, /bridge\.deliver\("accounts"/)
 })
 
-test('Android Alex UI renders persisted snapshots, tool output and approval choices', async () => {
+test('Android Jef UI renders persisted snapshots, tool output and approval choices', async () => {
   const ui = await source('ui-preview/index.html')
   assert.match(ui, /function renderSnapshot/)
   assert.match(ui, /pendingApproval/)

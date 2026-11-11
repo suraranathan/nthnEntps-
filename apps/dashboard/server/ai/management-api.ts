@@ -1,7 +1,7 @@
 import { ConnectionManager } from './connection-manager.ts'
 import { CatalogService } from './catalog-service.ts'
 import { VerificationService } from './verification-service.ts'
-import { AgentAssignments, alexRequirements } from './agent-assignments.ts'
+import { AgentAssignments, jefRequirements } from './agent-assignments.ts'
 import { availableProviders } from './connection-adapters.ts'
 import { capabilityNames } from './verification-store.ts'
 import type { Capability } from './verification-store.ts'
@@ -82,7 +82,7 @@ export class AiManagementApi {
         return this.catalog.addManual(data.connectionId, data.nativeModelId, data.displayName)
       case 'catalog.search': {
         const agentId = agent(data.agentId)
-        const required = [...new Set<Capability>(['text', ...(agentId === '01' ? alexRequirements : []), ...capabilities(data.requiredCapabilities)])]
+        const required = [...new Set<Capability>(['text', ...(agentId === '01' ? jefRequirements : []), ...capabilities(data.requiredCapabilities)])]
         const page = await this.catalog.search(objectInput(data.query) as CatalogQuery)
         const eligibility: ModelSearch['eligibility'] = {}
         for (const entry of page.entries) {

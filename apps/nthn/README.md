@@ -10,6 +10,10 @@ This directory contains the build patches and verification scripts for the separ
 
 `VERSION` is the app version source. After `0.9`, use `1`, then increment sequentially (`1.1`, `1.2`, and so on). The build applies it to Android, publishes `nthn-V<version>.apk` in an artifact named `nthn-V<version>-android-apk`, and attaches the APK itself to the matching GitHub Release for direct installation without extracting an Actions artifact ZIP.
 
+V1.6 adds Jef's local second brain and working controls in one app update. Personal memories follow you across projects; project memories stay in the selected workspace. Jef retrieves relevant memories in new chats and can save preferences, decisions, goals, checkpoints and lessons from corrections or verified work. You can view, add, edit, pin and delete memories in Jef's sidebar. Memories stay in app-private storage; relevant excerpts are sent to the selected AI provider when Jef uses them. Do not save credentials. File-linked memories are marked stale when the source file changes. This is memory and feedback, not model retraining; Jef still checks current files before acting. Jev is not required or bundled.
+
+Jef now lists saved chats, offers a Stop button, and shows proposed file text before approval. It can propose up to ten exact file edits under one approval, find filenames without opening file contents, and save a task checkpoint when its step limit is reached. The model choice can favor coding-oriented models or lower provider-listed prices; listed pricing does not guarantee access or final charges. The model list distinguishes listed, untested models from current verified access and lets you test and select a model. File changes and commands still require approval, and confined workspace rules remain in force.
+
 V1.5 carries the visual preview's dark and light palette into the native dashboard and Jef chat. Home shows the real Linux shell state and available device space, while its navigation opens the existing PTY terminal, Jef service, and confined file browser. The preview's simulated shell, replies, and metrics are not packaged into the app.
 
 ## Interface

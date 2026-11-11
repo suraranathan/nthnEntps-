@@ -7,7 +7,7 @@ import { request as httpRequest } from 'node:http'
 import { ConnectionManager } from '../server/ai/connection-manager.ts'
 import { AiManagementApi } from '../server/ai/management-api.ts'
 import { createApi } from '../server/http.ts'
-import { AlexRuntime } from '../server/runtime.ts'
+import { JefRuntime } from '../server/runtime.ts'
 import { ModelRouter } from '../server/providers.ts'
 import { MemoryStore } from '../server/memory.ts'
 import { AiClient, AiRequestError } from '../src/ai-client.ts'
@@ -52,8 +52,8 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
     },
   })
   const ai = new AiManagementApi(manager)
-  const store = new MemoryStore(join(directory, 'alex')); await store.load()
-  const runtime = new AlexRuntime(store, new ModelRouter([]), join(directory, 'status.md'))
+  const store = new MemoryStore(join(directory, 'jef')); await store.load()
+  const runtime = new JefRuntime(store, new ModelRouter([]), join(directory, 'status.md'))
   const memoryBefore = JSON.stringify(store.state)
   const server = createApi(runtime, [], () => ai)
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -69,11 +69,11 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
     return response
   }
   const client = new AiClient(transport)
-  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); ai.close(); await rm(directory, { recursive: true, force: true }); assert.equal(JSON.stringify(store.state), memoryBefore, 'Provider operations must not change Alex memory') })
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); ai.close(); await rm(directory, { recursive: true, force: true }); assert.equal(JSON.stringify(store.state), memoryBefore, 'Provider operations must not change Jef memory') })
   return { directory, manager, ai, store, runtime, base, client, transport, get cookie() { return cookie }, fail: (status: number) => { failure = status }, probes: () => probes }
 }
 
-test('management HTTP shares local session protections, rejects invalid input and never writes Alex memory', async t => {
+test('management HTTP shares local session protections, rejects invalid input and never writes Jef memory', async t => {
   const f = await fixture(t)
   const get = await f.transport('/api/ai')
   assert.equal(get.status, 200); assert.equal(get.headers.get('cache-control'), 'no-store')
@@ -81,13 +81,13 @@ test('management HTTP shares local session protections, rejects invalid input an
   const data = await get.json() as AiSnapshot
   assert.deepEqual(data.providers.map(p => p.id), ['openrouter', 'openai', 'anthropic', 'gemini', 'xkiro', 'groq', 'openai-compatible', 'ollama'])
   assert.deepEqual(data.localPorts, [11434, 1234, 8000, 8080])
-  const headers = { Host: 'localhost:3000', Origin: 'http://localhost:3000', Cookie: f.cookie, 'X-Alex-CSRF': data.csrf, 'Content-Type': 'application/json' }
+  const headers = { Host: 'localhost:3000', Origin: 'http://localhost:3000', Cookie: f.cookie, 'X-Jef-CSRF': data.csrf, 'Content-Type': 'application/json' }
   const post = (body: string, patch = {}) => rawFetch(f.base + '/api/ai', { method: 'POST', headers: { ...headers, ...patch }, body })
   assert.equal((await rawFetch(f.base + '/api/ai', { headers: { Host: 'attacker.example' } })).status, 403)
   assert.equal((await post('{}', { Origin: 'https://attacker.example' })).status, 403)
   assert.equal((await post('{}', { 'Sec-Fetch-Site': 'cross-site' })).status, 403)
   assert.equal((await post('{}', { Origin: '' })).status, 403)
-  assert.equal((await post('{}', { 'X-Alex-CSRF': 'invalid' })).status, 403)
+  assert.equal((await post('{}', { 'X-Jef-CSRF': 'invalid' })).status, 403)
   assert.equal((await post('{}', { 'Content-Type': 'text/plain' })).status, 415)
   assert.equal((await post('x'.repeat(16001))).status, 413)
   assert.equal((await post('{')).status, 400)
@@ -96,8 +96,8 @@ test('management HTTP shares local session protections, rejects invalid input an
   assert.equal((await post(JSON.stringify({ action: 'connection.enable', id: 'x', revision: 1, enabled: 'true' }))).status, 400)
   assert.equal((await post(JSON.stringify({ action: 'connection.add', connection: { ...input, baseUrl: 'http://169.254.169.254/' }, apiKey: secret }))).status, 400)
   assert.equal(f.manager.list().length, 0)
-  const alex = await f.transport('/api/alex')
-  assert.equal(alex.status, 200); assert.equal((await alex.json()).identity.name, 'Alex')
+  const jef = await f.transport('/api/jef')
+  assert.equal(jef.status, 200); assert.equal((await jef.json()).identity.name, 'Jef')
   assert.equal((await f.transport('/api/ai/made-up')).status, 404)
 })
 
@@ -172,7 +172,7 @@ test('catalog search, pagination, explicit verification and compatible ordered f
   await f.client.request({ action: 'connection.remove', id: c.id, revision: c.revision })
   const removed = await f.client.request<AssignmentView>({ action: 'assignment.get', agentId: '01' })
   assert.ok(removed.candidates.every(c => !c.compatible))
-  assert.equal(f.runtime.status, 'offline', 'Saved assignments do not activate Alex or Nexus')
+  assert.equal(f.runtime.status, 'offline', 'Saved assignments do not activate Jef or Nexus')
 })
 
 test('verification and discovery errors are sanitized, persistent and invalidate eligibility', async t => {
@@ -195,7 +195,7 @@ test('verification and discovery errors are sanitized, persistent and invalidate
   assert.ok(!JSON.stringify([failed, result, snapshot]).includes(secret))
 })
 
-test('provider initialization failure returns a safe error while Alex remains available', async t => {
+test('provider initialization failure returns a safe error while Jef remains available', async t => {
   const f = await fixture(t)
   const api = createApi(f.runtime, [], () => { throw new Error(secret) })
   await new Promise<void>(resolve => api.listen(0, '127.0.0.1', resolve))
@@ -204,7 +204,7 @@ test('provider initialization failure returns a safe error while Alex remains av
   const url = `http://127.0.0.1:${address.port}`
   const response = await rawFetch(url + '/api/ai', { headers: { Host: 'localhost:3000' } })
   assert.equal(response.status, 500); assert.ok(!(await response.text()).includes(secret))
-  assert.equal((await rawFetch(url + '/api/alex', { headers: { Host: 'localhost:3000' } })).status, 200)
+  assert.equal((await rawFetch(url + '/api/jef', { headers: { Host: 'localhost:3000' } })).status, 200)
 })
 
 test('discovered unverified routes are distinguished from per-model failures and disabled connections', async t => {
@@ -240,7 +240,7 @@ test('browser client refreshes a rejected session once, uses no-store and never 
   await client.request({ action: 'connection.add', connection: input, apiKey: secret })
   assert.equal(posts, 2); assert.equal(gets, 2)
   assert.ok(calls.every(c => c.url === '/api/ai' && c.init?.cache === 'no-store' && c.init.credentials === 'same-origin'))
-  assert.equal(new Headers(calls.at(-1)!.init!.headers).get('X-Alex-CSRF'), 'csrf-2')
+  assert.equal(new Headers(calls.at(-1)!.init!.headers).get('X-Jef-CSRF'), 'csrf-2')
   const invalid = new AiClient(async () => new Response('<html>Dashboard shell</html>'))
   await assert.rejects(invalid.snapshot(), /Provider API unavailable/)
 })
@@ -288,7 +288,7 @@ test('Vite forwards provider reads and protected writes to the existing local AP
   const response = await rawFetch(url + '/api/ai', { headers: { Host: 'localhost:3000' } })
   assert.equal(response.status, 200)
   const data = await response.json() as AiSnapshot
-  const headers = { Host: 'localhost:3000', Origin: 'http://localhost:3000', Cookie: response.headers.get('set-cookie')!.split(';')[0], 'X-Alex-CSRF': data.csrf, 'Content-Type': 'application/json' }
+  const headers = { Host: 'localhost:3000', Origin: 'http://localhost:3000', Cookie: response.headers.get('set-cookie')!.split(';')[0], 'X-Jef-CSRF': data.csrf, 'Content-Type': 'application/json' }
   const saved = await rawFetch(url + '/api/ai', { method: 'POST', headers, body: JSON.stringify({ action: 'connection.add', connection: input, apiKey: secret }) })
   assert.equal(saved.status, 200); assert.ok(!(await saved.text()).includes(secret))
   assert.equal(f.manager.list().length, 1)

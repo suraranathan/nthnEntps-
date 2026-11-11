@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { TeamRequest } from '../src/alex-contract.ts'
+import type { TeamRequest } from '../src/jef-contract.ts'
 export type SophiaUpdate = { requestId: string; state: 'submitted' | 'in_progress' | 'completed' | 'failed'; text: string; source: 'sophia' }
 export interface SophiaAdapter {
   readonly available: boolean

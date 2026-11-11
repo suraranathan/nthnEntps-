@@ -1,6 +1,6 @@
 import type { MemoryStore } from '../memory.ts'
 import { ProviderError, type ModelMessage, type ModelProvider } from '../providers.ts'
-import type { ProviderInfo } from '../../src/alex-contract.ts'
+import type { ProviderInfo } from '../../src/jef-contract.ts'
 import { AgentAssignments } from './agent-assignments.ts'
 import { CatalogService } from './catalog-service.ts'
 import { ConnectionManager } from './connection-manager.ts'
@@ -16,7 +16,7 @@ export const nextSlowStreak = (previous: number, elapsedMs: number) => elapsedMs
 export const nearAllowance = (limit: number, remaining: number) => Number.isFinite(limit) && Number.isFinite(remaining) && limit > 0 && remaining >= 0 && remaining / limit <= 0.1
 
 /** Uses the saved exact route and encrypted connection via the protected Phase 2 transport. */
-export class AlexAssignedProvider implements ModelProvider {
+export class JefAssignedProvider implements ModelProvider {
   readonly info: ProviderInfo
   #manager: ConnectionManager
   #catalog: CatalogService
@@ -51,10 +51,10 @@ export class AlexAssignedProvider implements ModelProvider {
       return candidate.compatible ? candidate.route : null
     } catch { return null }
   }
-  /** Called before Alex builds the system prompt, so model metadata matches the request. */
+  /** Called before Jef builds the system prompt, so model metadata matches the request. */
   async prepare() {
     const assignment = this.#assignments.get('01')
-    if (!assignment) throw new ProviderError('No saved Alex model assignment. Choose a verified primary model in AI Providers.', 503)
+    if (!assignment) throw new ProviderError('No saved Jef model assignment. Choose a verified primary model in AI Providers.', 503)
     const primary = assignment.candidateRouteIds[0]
     if (!this.#routeId || !assignment.candidateRouteIds.includes(this.#routeId)) { this.#routeId = primary; this.#pendingReason = null; this.#slow = 0 }
     if (this.#pendingReason) {
@@ -69,11 +69,11 @@ export class AlexAssignedProvider implements ModelProvider {
       if (replacement) {
         this.#routeId = replacement.id; this.#slow = 0; this.#unavailable = ''
         const cause = reason === 'slow' ? `three consecutive responses exceeded ${SLOW_REQUEST_MS / 1000} seconds` : reason === 'allowance' ? 'the API key allowance fell below 10%' : 'the provider rate limit was reached'
-        this.#store.event('alex_model_switched', `Alex switched to ${replacement.providerId} / ${replacement.ref.nativeModelId} because ${cause}. Conversation and memory are retained.`)
+        this.#store.event('jef_model_switched', `Jef switched to ${replacement.providerId} / ${replacement.ref.nativeModelId} because ${cause}. Conversation and memory are retained.`)
         await this.#store.save()
       } else {
         this.#pendingReason = reason
-        this.#unavailable = reason === 'slow' ? 'Alex is consistently slow; no saved verified compatible fallback is available.' : reason === 'allowance' ? 'Provider key allowance is near its limit; no saved verified compatible fallback is available.' : 'Provider rate limit reached; no saved verified compatible fallback is available.'
+        this.#unavailable = reason === 'slow' ? 'Jef is consistently slow; no saved verified compatible fallback is available.' : reason === 'allowance' ? 'Provider key allowance is near its limit; no saved verified compatible fallback is available.' : 'Provider rate limit reached; no saved verified compatible fallback is available.'
       }
     }
     const assessment = await this.#assignments.assess(this.#routeId, assignment.requiredCapabilities)
@@ -83,7 +83,7 @@ export class AlexAssignedProvider implements ModelProvider {
   }
   async complete(messages: ModelMessage[]) {
     const assignment = this.#assignments.get('01')
-    if (!assignment || !this.#routeId) throw new ProviderError('No verified Alex assignment is ready.', 503)
+    if (!assignment || !this.#routeId) throw new ProviderError('No verified Jef assignment is ready.', 503)
     const checked = await this.#assignments.assess(this.#routeId, assignment.requiredCapabilities)
     if (!checked.compatible || !checked.route) throw new ProviderError(`Assigned model is unavailable (${checked.code}).`, 503)
     const route = checked.route

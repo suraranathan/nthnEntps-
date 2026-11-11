@@ -120,7 +120,7 @@ test('native streams keep no-argument calls and a final frame without a newline'
   }
 })
 
-test('resolved route gateway sends Alex tool context through the saved model route', async () => {
+test('resolved route gateway sends Jef tool context through the saved model route', async () => {
   const Gateway = (gatewayModule as typeof gatewayModule & { ResolvedRouteGateway?: new (manager: unknown, resolver: () => Promise<ModelRoute>) => gatewayModule.Gateway }).ResolvedRouteGateway
   assert.equal(typeof Gateway, 'function')
   const route = {
@@ -133,7 +133,7 @@ test('resolved route gateway sends Alex tool context through the saved model rou
       assert.equal(connectionId, 'account')
       assert.equal(revision, 3)
       request = body
-      yield 'data: {"choices":[{"delta":{"content":"Tool-ready Alex"}}]}\n\n'
+      yield 'data: {"choices":[{"delta":{"content":"Tool-ready Jef"}}]}\n\n'
       yield 'data: [DONE]\n\n'
     },
   }
@@ -143,14 +143,14 @@ test('resolved route gateway sends Alex tool context through the saved model rou
     { role: 'system', content: 'Use workspace tools.' },
     { role: 'user', content: 'Inspect this project.' },
   ])) if (typeof chunk === 'string') output.push(chunk)
-  assert.equal(output.join(''), 'Tool-ready Alex')
+  assert.equal(output.join(''), 'Tool-ready Jef')
   const captured = request as unknown as Record<string, unknown>
   assert.equal(captured.model, 'openrouter/coder')
   assert.match(JSON.stringify(captured), /Use workspace tools/)
   assert.deepEqual(gateway.info(), { provider: 'openrouter', model: 'openrouter/coder', transport: 'streaming' })
 })
 
-test('Alex switches provider accounts when a request fails before model output', async () => {
+test('Jef switches provider accounts when a request fails before model output', async () => {
   const first = { id: 'first', ref: { connectionId: 'openrouter-account', nativeModelId: 'router/model' }, providerId: 'openrouter', connectionRevision: 1 } as ModelRoute
   const second = { id: 'second', ref: { connectionId: 'openai-account', nativeModelId: 'gpt-model' }, providerId: 'openai', connectionRevision: 1 } as ModelRoute
   const calls: string[] = []
@@ -239,9 +239,10 @@ test('mobile snapshot exposes persistent messages and one exact pending approval
   assert.equal(snapshot.conversationId, 'conversation')
   assert.equal(snapshot.messages.length, 2)
   assert.deepEqual(snapshot.pendingApproval, {
-    conversationId: 'conversation', approvalId: 'approval-1', tool: 'edit_file', summary: 'Edit src/app.ts', expiresAt: 2_000_000_000_000,
+    conversationId: 'conversation', approvalId: 'approval-1', tool: 'edit_file', summary: 'Edit src/app.ts',
+    preview: '--- src/app.ts\n- a\n+++ src/app.ts\n+ b', previewTruncated: false, expiresAt: 2_000_000_000_000,
   })
-  assert.equal(JSON.stringify(snapshot).includes('oldText'), false)
+  assert.equal(JSON.stringify(snapshot.messages).includes('oldText'), false)
   state.active!.messages[1].toolCalls![0].approvalExpiresAt = 1
   assert.equal(mobile.mobileAgentSnapshot(state).pendingApproval, null)
 })

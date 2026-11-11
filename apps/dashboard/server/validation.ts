@@ -1,4 +1,4 @@
-import type { MemoryCategory, Preferences } from '../src/alex-contract.ts'
+import type { MemoryCategory, Preferences } from '../src/jef-contract.ts'
 import { localClock } from './notifications.ts'
 export class InputError extends Error { readonly status: number; constructor(message: string, status = 400) { super(message); this.status = status } }
 export function textInput(value: unknown, max = 8000) {

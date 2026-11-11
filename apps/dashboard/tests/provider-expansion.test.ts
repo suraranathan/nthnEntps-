@@ -11,7 +11,7 @@ import { AgentAssignments } from '../server/ai/agent-assignments.ts'
 import { AiManagementApi } from '../server/ai/management-api.ts'
 import { availableProviders } from '../server/ai/connection-adapters.ts'
 import { buildProbe, validateProbe } from '../server/ai/verification-probes.ts'
-import { AlexAssignedProvider } from '../server/ai/alex-assigned-provider.ts'
+import { JefAssignedProvider } from '../server/ai/jef-assigned-provider.ts'
 import { MemoryStore } from '../server/memory.ts'
 import type { ProbeTransport } from '../server/ai/endpoint-policy.ts'
 import { requestPinnedJson } from '../server/ai/endpoint-policy.ts'
@@ -117,12 +117,12 @@ test('connection creation checks status automatically without returning secrets'
   assert.ok(!JSON.stringify(api.snapshot('csrf')).includes(secret))
 })
 
-test('Alex can use an explicitly assigned native Anthropic or Gemini route', async t => {
+test('Jef can use an explicitly assigned native Anthropic or Gemini route', async t => {
   for (const providerId of ['anthropic', 'gemini'] as const) {
     const f = await fixture(t, async (_endpoint, _path, _key, options) => {
       if (!options?.body) return { status: 200, body: providerId === 'anthropic' ? { data: [{ id: 'fixture-model' }] } : { models: [{ name: 'models/fixture-model', supportedGenerationMethods: ['generateContent'] }] } }
       const token = JSON.stringify(options.body).match(/[a-f0-9]{32}/)?.[0]
-      const content = token ?? 'Native Alex reply.'
+      const content = token ?? 'Native Jef reply.'
       return { status: 200, body: providerId === 'anthropic' ? { content: [{ type: 'text', text: content }] } : { candidates: [{ content: { parts: [{ text: content }] } }] } }
     })
     const baseUrl = providerId === 'anthropic' ? 'https://api.anthropic.com/v1' : 'https://generativelanguage.googleapis.com/v1beta'
@@ -131,10 +131,10 @@ test('Alex can use an explicitly assigned native Anthropic or Gemini route', asy
     const route = (await f.catalog.search({ connectionIds: [connection.id] })).entries[0].route
     assert.equal((await f.verification.verify(route.id, ['text', 'systemInstructions'])).state, 'verified')
     await f.assignments.set({ agentId: '01', candidateRouteIds: [route.id] }, 0)
-    const memory = new MemoryStore(join(f.directory, 'alex')); await memory.load()
-    const alex = new AlexAssignedProvider(f.manager, f.catalog, f.assignments, f.verification, memory)
-    await alex.prepare()
-    assert.equal(await alex.complete([{ role: 'system', content: 'Identity' }, { role: 'user', content: 'Hello' }]), 'Native Alex reply.')
+    const memory = new MemoryStore(join(f.directory, 'jef')); await memory.load()
+    const jef = new JefAssignedProvider(f.manager, f.catalog, f.assignments, f.verification, memory)
+    await jef.prepare()
+    assert.equal(await jef.complete([{ role: 'system', content: 'Identity' }, { role: 'user', content: 'Hello' }]), 'Native Jef reply.')
   }
 })
 

@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { AgentChatStore, type Conversation, type ToolCallRecord } from './store.ts'
 import { ApprovalRegistry, PathPolicy, PermissionError } from './permissions.ts'
 import { ToolRegistry, stableSignature, type ToolRegistryOptions } from './tools.ts'
+import type { JefMemoryStore } from './memory.ts'
 import { GatewayError, type ChatTurn, type Gateway } from './gateway.ts'
 import {
   assessRisk,
@@ -149,6 +150,8 @@ interface AgentOptions {
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
+  memory?: JefMemoryStore
+  memoryScope?: string
 }
 
 export interface AgentState {
@@ -178,7 +181,7 @@ function toolPrompt(tools: ReturnType<ToolRegistry['list']>): string {
   return lines.join('\n')
 }
 
-export class AlexAgent {
+export class JefAgent {
   private readonly displayName: string
   private readonly store: AgentChatStore
   private readonly gateway: Gateway
@@ -190,10 +193,14 @@ export class AlexAgent {
   private readonly running = new Map<string, AbortController>()
   private readonly maxSteps: number
   private readonly now: () => number
+  private readonly memory?: JefMemoryStore
+  private readonly memoryScope: string
   private readonly protectedPaths: string[]
 
   constructor(options: AgentOptions) {
-    this.displayName = options.name ?? 'Alex'
+    this.displayName = options.name ?? 'Jef'
+    this.memory = options.memory
+    this.memoryScope = options.memoryScope ?? 'personal'
     this.store = options.store
     this.gateway = options.gateway
     this.workspace = resolve(options.workspace ?? defaultWorkspace())
@@ -202,7 +209,7 @@ export class AlexAgent {
       writablePrefixes: options.writablePrefixes ?? ['apps/dashboard'],
       deniedSegments: options.deniedSegments ?? ['.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer'],
     })
-    const toolOptions: ToolRegistryOptions = { taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands }
+    const toolOptions: ToolRegistryOptions = { taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope }
     this.tools = new ToolRegistry(toolOptions)
     this.maxSteps = options.maxSteps ?? MAX_STEPS
     this.now = options.now ?? (() => Date.now())
@@ -246,7 +253,7 @@ export class AlexAgent {
             })
           } catch { /* Invalid or expired persisted approvals remain non-executable. */ }
         }
-        if (changed) await this.store.update(conversation!.id, message.id, { toolCalls: message.toolCalls })
+        if (changed) await this.store.update(conversation!.id, message.id, { status: message.status, toolCalls: message.toolCalls })
       }
     }
   }
@@ -478,6 +485,7 @@ export class AlexAgent {
       'After a tool runs, its result appears as a TOOL RESULT message. Then continue the task.',
       'Some tools require user approval. If approval is required, the turn pauses and the user decides.',
       'Never put secrets in tool arguments. Never attempt to read .env, credential or key files.',
+      ...(this.memory ? ['You have persistent local memory across chats, and this conversation is saved. Describe this accurately when asked. Save useful preferences, decisions, goals, checkpoints, and verified lessons with save_memory. Use recall_memory when past context matters. Save a lesson after a user correction or a confirmed root cause; do not save guesses or one-off errors. When a memory is corrected, revise or forget it instead of adding a contradiction. Memory may be stale: check current files before relying on project facts.'] : []),
       '',
       'Available tools:',
       toolPrompt(this.tools.list()),
@@ -503,6 +511,11 @@ export class AlexAgent {
       if (used + content.length > MAX_CONTEXT_CHARS) break
       used += content.length
       selected.unshift({ role: message.role, content, ...(message.role === 'tool' && typeof message.meta?.callId === 'string' ? { toolCallId: message.meta.callId } : {}), ...(message.role === 'assistant' && message.toolCalls?.length ? { toolCalls: message.toolCalls.map(call => ({ id: call.id, name: call.tool, arguments: call.arguments })) } : {}) })
+    }
+    if (this.memory) {
+      const query = [...recent].reverse().find(message => message.role === 'user')?.content ?? ''
+      const recalled = this.memory.relevant(this.memoryScope, query, 8)
+      if (recalled.length) messages[0].content += '\n\nRelevant saved memory (verify project facts):\n' + recalled.map(item => `- [${item.kind}; ${item.source}] ${item.text}`).join('\n')
     }
     messages.push(...selected)
     return messages
@@ -633,6 +646,10 @@ export class AlexAgent {
     const conversation = this.store.get(conversationId)
     if (conversation) {
       const last = conversation.messages.at(-1)
+      const goal = [...conversation.messages].reverse().find(message => message.role === 'user')?.content
+      if (goal && this.memory) {
+        await this.memory.add({ scope: this.memoryScope, kind: 'checkpoint', text: `Task paused after ${this.maxSteps} steps: ${goal.slice(0, 500)}`, source: 'Jef task limit' }).catch(() => undefined)
+      }
       emit({ type: 'error', conversationId, message: `Reached the ${this.maxSteps}-step limit. Ask ${this.displayName} to continue.`, code: 'STEP_LIMIT' })
       if (last?.role === 'assistant') await this.store.update(conversationId, last.id, { status: 'complete' })
     }
@@ -661,7 +678,7 @@ export class AlexAgent {
 
 export class AgentBusyError extends Error {
   readonly code = 'AGENT_BUSY'
-  constructor(agentName = 'Alex') {
+  constructor(agentName = 'Jef') {
     super(`${agentName} is already working in this conversation.`)
     this.name = 'AgentBusyError'
   }

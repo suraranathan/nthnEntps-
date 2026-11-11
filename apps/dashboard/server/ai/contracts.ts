@@ -1,4 +1,4 @@
-/** Provider-neutral contracts; implemented services remain independent of Alex runtime. */
+/** Provider-neutral contracts; implemented services remain independent of Jef runtime. */
 import type { ModelMessage, ModelProvider, ModelRouter } from '../providers.ts'
 
 export const AI_CONTRACT_VERSION = 1 as const
@@ -182,7 +182,7 @@ export interface ProviderAdapter {
 export interface InferenceRequest {
   route: ModelRoute
   agentId: string
-  messages: readonly ModelMessage[] // reuse Alex's provider-neutral text contract
+  messages: readonly ModelMessage[] // reuse Jef's provider-neutral text contract
   maxOutputTokens?: number
 }
 export interface InferenceResult {

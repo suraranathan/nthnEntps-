@@ -189,7 +189,7 @@ export class AssignedGateway implements Gateway {
     } catch (error) {
       throw friendly(error)
     }
-    if (!resolved.primary) throw new GatewayError('NO_MODEL', 'No verified compatible model is assigned to Alex. Configure and verify one in AI Providers.')
+    if (!resolved.primary) throw new GatewayError('NO_MODEL', 'No verified compatible model is assigned to Jef. Configure and verify one in AI Providers.')
     return resolved.primary
   }
 
@@ -368,7 +368,7 @@ export class RouterGateway implements Gateway {
   }
 }
 
-/** Prefer the verified saved Alex assignment; fall back to environment providers. */
+/** Prefer the verified saved Jef assignment; fall back to environment providers. */
 export class AutoGateway implements Gateway {
   private readonly assigned: AssignedGateway | null
   private readonly router: RouterGateway

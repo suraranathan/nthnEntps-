@@ -474,7 +474,7 @@ export function OfficeScene({ agents, selected, hovered, onHover, onSelectAgent,
   const roomFacts: Record<string, [string, string[]]> = {
     'Meeting room': ['North-west · eight seats', ['Shared conference table and presentation screen', 'Glazed door from the central walkway']],
     'Consultation': ['West · two-person conversation', ['Facing chairs and a small discussion table', 'Enclosed room with storage and a separate door']],
-    'Private office': ['North-east · Alex', ['Dedicated desk, computer and ergonomic chair', 'Glazed room with storage and inward-open door']],
+    'Private office': ['North-east · Jef', ['Dedicated desk, computer and ergonomic chair', 'Glazed room with storage and inward-open door']],
     'Product office': ['East · Sophia', ['Private workstation and storage', 'Door opens from the central circulation area']],
     'Security office': ['South-east · Victor', ['Dedicated security workstation', 'Perimeter shelving and cabinet storage']],
     'Work area': ['Central · four workstations', ['Daniel, Marcus, Emma and Oliver', 'Wide side aisles connect every room']],

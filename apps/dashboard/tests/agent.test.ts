@@ -23,7 +23,8 @@ import {
 } from '../server/agent/permissions.ts'
 import { ToolRegistry, parseCommand, stableSignature } from '../server/agent/tools.ts'
 import { AgentChatStore } from '../server/agent/store.ts'
-import { AlexAgent, ToolStreamFilter, type AgentEvent } from '../server/agent/agent.ts'
+import { JefMemoryStore } from '../server/agent/memory.ts'
+import { JefAgent, ToolStreamFilter, type AgentEvent } from '../server/agent/agent.ts'
 import type { ChatTurn, Gateway, GatewayInfo } from '../server/agent/gateway.ts'
 
 class FakeGateway implements Gateway {
@@ -181,7 +182,7 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   const store = new AgentChatStore(join(directory, 'chats'))
   await store.load()
   const gateway = new FakeGateway([['No project files are here.']])
-  const agent = new AlexAgent({ store, gateway, workspace: directory })
+  const agent = new JefAgent({ store, gateway, workspace: directory })
   const conversation = await agent.newConversation()
   await agent.run(conversation.id, 'Check the app', () => {})
   const prompt = gateway.calls[0][0].content
@@ -189,6 +190,28 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   assert.match(prompt, /casual conversation/i)
   assert.match(prompt, /selected project workspace/i)
   assert.match(prompt, /native tool calls/i)
+})
+
+test('Jef carries relevant personal and project memories into a new chat and can save a lesson', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const memory = new JefMemoryStore(join(directory, 'memory.json'), workspace)
+  await memory.add({ scope: 'personal', kind: 'preference', text: 'Prefer concise answers', source: 'user' })
+  await memory.add({ scope: 'project:one', kind: 'decision', text: 'Dashboard uses Vite', source: 'user' })
+  await memory.add({ scope: 'project:two', kind: 'fact', text: 'The other project uses Python', source: 'user' })
+  const store = new AgentChatStore(join(directory, 'chats'))
+  await store.load()
+  const gateway = new FakeGateway([
+    ['<<<NTHN_TOOL>>>{"tool":"save_memory","arguments":{"kind":"lesson","text":"Check Vite build before claiming success"}}<<<END_NTHN_TOOL>>>'],
+    ['I will check the build.'],
+  ])
+  const agent = new JefAgent({ store, gateway, workspace, memory, memoryScope: 'project:one' })
+  const conversation = await agent.newConversation()
+  await agent.run(conversation.id, 'Check the dashboard Vite build', () => {})
+  const prompt = gateway.calls[0][0].content
+  assert.match(prompt, /Prefer concise answers/)
+  assert.match(prompt, /Dashboard uses Vite/)
+  assert.doesNotMatch(prompt, /other project uses Python/)
+  assert.equal(memory.list('project:one').some(item => item.kind === 'lesson' && item.text.includes('Check Vite')), true)
 })
 
 test('Jef recognizes its source and backend in the bundled NTHN workspace', async t => {
@@ -204,7 +227,7 @@ test('Jef recognizes its source and backend in the bundled NTHN workspace', asyn
   const store = new AgentChatStore(join(directory, 'chats'))
   await store.load()
   const gateway = new FakeGateway([['I can inspect this source.']])
-  const agent = new AlexAgent({ store, gateway, workspace, name: 'Jef', writablePrefixes: ['.'] })
+  const agent = new JefAgent({ store, gateway, workspace, name: 'Jef', writablePrefixes: ['.'] })
   const conversation = await agent.newConversation()
   await agent.run(conversation.id, 'Where is your source?', () => {})
   const prompt = gateway.calls[0][0].content
@@ -303,7 +326,7 @@ test('agent streams text, executes a read tool, and reports structured decisions
     ],
     ['The file contains hello world.'],
   ])
-  const agent = new AlexAgent({ store, gateway, workspace })
+  const agent = new JefAgent({ store, gateway, workspace })
   const conversation = await agent.newConversation()
   const events: AgentEvent[] = []
   await agent.run(conversation.id, 'Read apps/dashboard/hello.txt', event => events.push(event))
@@ -322,7 +345,7 @@ test('agent streams text, executes a read tool, and reports structured decisions
   assert.ok(events.some(event => event.type === 'done'))
 })
 
-test('tool exceptions become failed results and Alex can continue', async t => {
+test('tool exceptions become failed results and Jef can continue', async t => {
   const { directory, workspace } = await workspaceFixture(t)
   const store = new AgentChatStore(join(directory, 'failed-tool-chats'))
   await store.load()
@@ -330,7 +353,7 @@ test('tool exceptions become failed results and Alex can continue', async t => {
     ['<<<NTHN_TOOL>>>{"tool":"read_file","arguments":{"path":"missing.txt"}}<<<END_NTHN_TOOL>>>'],
     ['The requested file does not exist.'],
   ])
-  const agent = new AlexAgent({ store, gateway, workspace })
+  const agent = new JefAgent({ store, gateway, workspace })
   const conversation = await agent.newConversation()
   await agent.run(conversation.id, 'Read the missing file', () => undefined)
   const messages = store.get(conversation.id)?.messages ?? []
@@ -352,7 +375,7 @@ test('loading marks expired persisted approvals cancelled', async t => {
     }],
   })
   const restored = new AgentChatStore(storeDirectory)
-  const agent = new AlexAgent({ store: restored, gateway: new FakeGateway([]), workspace })
+  const agent = new JefAgent({ store: restored, gateway: new FakeGateway([]), workspace })
   await agent.load()
   assert.equal(restored.get(conversation.id)?.messages[0].toolCalls?.[0].status, 'cancelled')
 })
@@ -369,7 +392,7 @@ test('write tools pause for approval and only execute after approval', async t =
     ],
     ['The file was written.'],
   ])
-  const agent = new AlexAgent({ store, gateway, workspace })
+  const agent = new JefAgent({ store, gateway, workspace })
   const conversation = await agent.newConversation()
   const events: AgentEvent[] = []
   await agent.run(conversation.id, 'Create approved.txt', event => events.push(event))
@@ -394,7 +417,7 @@ test('pending mobile approval survives a fresh agent process', async t => {
   const storeDirectory = join(directory, 'restart-chats')
   const firstStore = new AgentChatStore(storeDirectory)
   await firstStore.load()
-  const first = new AlexAgent({
+  const first = new JefAgent({
     store: firstStore,
     gateway: new FakeGateway([[
       'I need approval.\n<<<NTHN_TOOL>>>',
@@ -412,7 +435,7 @@ test('pending mobile approval survives a fresh agent process', async t => {
   assert.ok(approval && approval.type === 'approval')
 
   const restartedStore = new AgentChatStore(storeDirectory)
-  const restarted = new AlexAgent({
+  const restarted = new JefAgent({
     store: restartedStore,
     gateway: new FakeGateway([['The approved file was written.']]),
     workspace,
@@ -434,7 +457,7 @@ test('denied approval does not execute the tool and lets the model continue', as
     ['<<<NTHN_TOOL>>>{"tool":"write_file","arguments":{"path":"apps/dashboard/denied.txt","content":"nope"}}<<<END_NTHN_TOOL>>>'],
     ['Understood; I will not write the file.'],
   ])
-  const agent = new AlexAgent({ store, gateway, workspace })
+  const agent = new JefAgent({ store, gateway, workspace })
   const conversation = await agent.newConversation()
   const events: AgentEvent[] = []
   await agent.run(conversation.id, 'Write denied.txt', event => events.push(event))
@@ -449,7 +472,7 @@ test('cancellation aborts an in-flight model stream', async t => {
   const { directory, workspace } = await workspaceFixture(t)
   const store = new AgentChatStore(join(directory, 'chats'))
   await store.load()
-  const agent = new AlexAgent({ store, gateway: new SlowGateway(), workspace })
+  const agent = new JefAgent({ store, gateway: new SlowGateway(), workspace })
   const conversation = await agent.newConversation()
   const events: AgentEvent[] = []
   const running = agent.run(conversation.id, 'Take a long time', event => events.push(event))
@@ -459,4 +482,86 @@ test('cancellation aborts an in-flight model stream', async t => {
   assert.ok(events.some(event => event.type === 'cancelled'))
   const assistant = store.get(conversation.id)?.messages.find(message => message.role === 'assistant')
   assert.equal(assistant?.status, 'cancelled')
+})
+
+test('Jef reviews multiple exact edits in one approval and rejects a conflicting set', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  await writeFile(join(workspace, 'apps/dashboard/second.txt'), 'old second')
+  const changes = JSON.stringify([
+    { path: 'apps/dashboard/hello.txt', oldText: 'hello world', newText: 'hello Jef' },
+    { path: 'apps/dashboard/second.txt', oldText: 'old second', newText: 'new second' },
+  ])
+  const store = new AgentChatStore(join(directory, 'batch-chats'))
+  await store.load()
+  const gateway = new FakeGateway([[`<<<NTHN_TOOL>>>{"tool":"edit_files","arguments":{"changes":${JSON.stringify(changes)}}}<<<END_NTHN_TOOL>>>`], ['Done']])
+  const agent = new JefAgent({ store, gateway, workspace, writablePrefixes: ['.'] })
+  const conversation = await agent.newConversation()
+  await agent.run(conversation.id, 'Edit both files', () => {})
+  const call = store.get(conversation.id)?.messages.find(message => message.toolCalls?.length)?.toolCalls?.[0]
+  assert.equal(call?.status, 'awaiting-approval')
+  assert.equal(await readFile(join(workspace, 'apps/dashboard/hello.txt'), 'utf8'), 'hello world\nsecond line\n')
+  await agent.approve(conversation.id, call!.approvalId!, true, () => {})
+  assert.match(await readFile(join(workspace, 'apps/dashboard/hello.txt'), 'utf8'), /hello Jef/)
+  assert.equal(await readFile(join(workspace, 'apps/dashboard/second.txt'), 'utf8'), 'new second')
+  const tools = new ToolRegistry({ taskRoot: '.' })
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  const result = await tools.execute('edit_files', { changes: JSON.stringify([
+    { path: 'apps/dashboard/hello.txt', oldText: 'hello Jef', newText: 'changed again' },
+    { path: 'apps/dashboard/second.txt', oldText: 'missing', newText: 'not written' },
+  ]) }, { workspace, paths, signal: new AbortController().signal })
+  assert.equal(result.ok, false)
+  assert.match(await readFile(join(workspace, 'apps/dashboard/hello.txt'), 'utf8'), /hello Jef/)
+})
+
+test('Jef saves a task checkpoint at the step limit', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const memory = new JefMemoryStore(join(directory, 'memory.json'), workspace)
+  const store = new AgentChatStore(join(directory, 'checkpoint-chats'))
+  await store.load()
+  const gateway = new FakeGateway([['<<<NTHN_TOOL>>>{"tool":"list_dir","arguments":{"path":"."}}<<<END_NTHN_TOOL>>>']])
+  const agent = new JefAgent({ store, gateway, workspace, maxSteps: 1, memory, memoryScope: 'project:x' })
+  const conversation = await agent.newConversation()
+  await agent.run(conversation.id, 'Inspect the dashboard and fix its build', () => {})
+  assert.equal(memory.list('project:x').some(item => item.kind === 'checkpoint' && item.text.includes('fix its build')), true)
+})
+
+test('find_files locates paths without reading every file body', async t => {
+  const { workspace } = await workspaceFixture(t)
+  const tools = new ToolRegistry()
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  const result = await tools.execute('find_files', { query: 'hello' }, { workspace, paths, signal: new AbortController().signal })
+  assert.equal(result.ok, true)
+  assert.match(result.output, /hello\.txt/)
+  assert.doesNotMatch(result.output, /hello world/)
+})
+
+test('Jef can recall, revise, and forget a scoped memory', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const memory = new JefMemoryStore(join(directory, 'memory.json'), workspace)
+  const current = await memory.add({ scope: 'project:one', kind: 'fact', text: 'Build uses Vite', source: 'chat' })
+  await memory.add({ scope: 'project:two', kind: 'fact', text: 'Build uses Webpack', source: 'chat' })
+  const tools = new ToolRegistry({ memory, memoryScope: 'project:one' })
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  const context = { workspace, paths, signal: new AbortController().signal }
+  const found = await tools.execute('recall_memory', { query: 'build' }, context)
+  assert.match(found.output, /Build uses Vite/)
+  assert.doesNotMatch(found.output, /Webpack/)
+  const revised = await tools.execute('revise_memory', { id: current.id, text: 'Build uses Vite 6' }, context)
+  assert.equal(revised.ok, true)
+  assert.equal(memory.list('project:one')[0].text, 'Build uses Vite 6')
+  const forgotten = await tools.execute('forget_memory', { id: current.id }, context)
+  assert.equal(forgotten.ok, true)
+  assert.equal(memory.list('project:one').length, 0)
+})
+
+
+test('loading chat state does not cancel a stream owned by another process', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const store = new AgentChatStore(join(directory, 'active-chats'))
+  await store.load()
+  const conversation = await store.create('Active')
+  const message = await store.append(conversation.id, { role: 'assistant', content: 'partial', status: 'streaming' })
+  const reader = new JefAgent({ store: new AgentChatStore(join(directory, 'active-chats')), gateway: new FakeGateway([]), workspace })
+  await reader.load()
+  assert.equal(reader.conversation(conversation.id)?.messages.find(item => item.id === message.id)?.status, 'streaming')
 })

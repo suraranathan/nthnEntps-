@@ -16,7 +16,7 @@ const help = `Provider connection management (backend only)
   npm run providers -- enable | disable | test | remove ID REVISION
 Keys must be supplied through redirected private stdin, never arguments or a browser.
 Connections default to disabled; test is an explicit read-only provider API request.
-No model inference, download, catalog refresh or Alex routing is performed.`
+No model inference, download, catalog refresh or Jef routing is performed.`
 async function input() {
   if (process.stdin.isTTY) throw new ManagementError('INVALID_INPUT')
   let bytes = 0; const chunks: Buffer[] = []

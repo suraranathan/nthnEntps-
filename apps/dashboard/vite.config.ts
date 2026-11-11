@@ -92,7 +92,7 @@ export default defineConfig({
   }],
   preview: { host: '0.0.0.0', port: 3000, strictPort: true, proxy: { '/api': { target: 'http://127.0.0.1:3001', changeOrigin: false } } },
   server: {
-    fs: { deny: ['.env', '.env.*', '*.{crt,pem,key}', '**/.git/**', '**/.local/**', '**/alex.json', '**/alex-*.tmp', '**/runtime.lock'] },
+    fs: { deny: ['.env', '.env.*', '*.{crt,pem,key}', '**/.git/**', '**/.local/**', '**/jef.json', '**/jef-*.tmp', '**/runtime.lock'] },
     proxy: { '/api': { target: 'http://127.0.0.1:3001', changeOrigin: false } },
     host: '0.0.0.0',
     port: 3000,

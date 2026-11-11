@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { validatePreferences } from './validation.ts'
 import { randomUUID } from 'node:crypto'
-import type { ChatMessage, FollowUp, MemoryCategory, MemoryNote, Preferences, ProjectEvent, TeamRequest } from '../src/alex-contract.ts'
+import type { ChatMessage, FollowUp, MemoryCategory, MemoryNote, Preferences, ProjectEvent, TeamRequest } from '../src/jef-contract.ts'
 export const defaultPreferences: Preferences = { humor: 'balanced', communication: '', proactive: false, intervalMinutes: 60, quietStart: '22:00', quietEnd: '08:00', timezone: 'Asia/Manila', dailyBriefing: false, briefingTime: '09:00', philosophy: true, conversationInitiation: 'relevant', followUps: true, reminders: true, stalledAfterDays: 7 }
 export type MemoryState = {
   version: 1
@@ -29,8 +29,16 @@ export class MemoryStore {
   constructor(directory: string) { this.directory = directory }
   async load() {
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
+    let legacy = false
     try {
-      const saved = JSON.parse(await readFile(join(this.directory, 'alex.json'), 'utf8'))
+      let contents: string
+      try { contents = await readFile(join(this.directory, 'jef.json'), 'utf8') }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        contents = await readFile(join(this.directory, 'alex.json'), 'utf8')
+        legacy = true
+      }
+      const saved = JSON.parse(contents)
       // Add new optional fields to existing private stores without discarding history.
       if (saved?.version === 1 && saved.preferences && typeof saved.preferences === 'object') {
         saved.preferences = { ...defaultPreferences, ...saved.preferences }
@@ -39,6 +47,7 @@ export class MemoryStore {
       }
       validateMemory(saved)
       this.state = saved
+      if (legacy) await this.save()
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       await this.save()
@@ -48,9 +57,9 @@ export class MemoryStore {
     const data = JSON.stringify(this.state, null, 2)
     // Serialize atomic rename writes; failed writes must not poison later attempts.
     const operation = this.pending.catch(() => {}).then(async () => {
-      const temporary = join(this.directory, `alex-${randomUUID()}.tmp`)
+      const temporary = join(this.directory, `jef-${randomUUID()}.tmp`)
       await writeFile(temporary, data, { mode: 0o600 })
-      await rename(temporary, join(this.directory, 'alex.json'))
+      await rename(temporary, join(this.directory, 'jef.json'))
     })
     this.pending = operation
     await operation
@@ -63,6 +72,12 @@ export class MemoryStore {
     const event = { id: randomUUID(), at: new Date().toISOString(), type, text }
     this.state.events.push(event); this.state.events = this.state.events.slice(-500)
     return event
+  }
+}
+export async function migrateLegacyJefDirectory(current: string, legacy: string) {
+  try { await rename(legacy, current) }
+  catch (error) {
+    if (!['ENOENT', 'EEXIST', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
   }
 }
 export function conversationContext(messages: ChatMessage[], query: string) {

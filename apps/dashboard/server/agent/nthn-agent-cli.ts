@@ -8,7 +8,9 @@ import { ManagementError } from '../ai/management-types.ts'
 import { jefCanUse, jefProbeCapabilities, jefTransportSupportsTools } from '../ai/jef-model-policy.ts'
 import { selectionConnection, type SavedSelection } from '../ai/nthn-cli-state.ts'
 import type { CatalogEntry, ModelRoute } from '../ai/contracts.ts'
-import { AlexAgent, type AgentEvent } from './agent.ts'
+import { JefAgent, type AgentEvent } from './agent.ts'
+import { JefMemoryStore, type MemoryKind } from './memory.ts'
+import { compareJefCandidates, type JefModelPreference } from './model-preference.ts'
 import { ResolvedRouteGateway } from './gateway.ts'
 import { AgentChatStore } from './store.ts'
 import { PermissionError } from './permissions.ts'
@@ -19,6 +21,7 @@ const appRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)))
 const providerDirectory = resolve(appRoot, '.local/ai')
 const agentDirectory = resolve(appRoot, '.local/agent')
 const selectedPath = join(providerDirectory, 'selected-route.json')
+const preferencePath = join(agentDirectory, 'model-preference.json')
 const home = resolve(process.env.NTHN_AGENT_WORKSPACE || process.env.HOME || join(appRoot, 'workspace'))
 const help = `nthn Jef coding agent
   nthn-agent state
@@ -28,6 +31,12 @@ const help = `nthn Jef coding agent
   nthn-agent workspace < request.json
   nthn-agent approve < request.json
   nthn-agent approve-stream < request.json
+  nthn-agent select < request.json
+  nthn-agent memory-list
+  nthn-agent memory-add < request.json
+  nthn-agent memory-update < request.json
+  nthn-agent memory-remove < request.json
+  nthn-agent model-preference < request.json
 Chat JSON: {"text":"...","conversationId":"optional"}
 Workspace JSON: {"path":"project-folder"} or {"path":"."} for Linux home
 Approval JSON: {"conversationId":"...","approvalId":"...","approved":true}`
@@ -43,11 +52,19 @@ function input(): Record<string, unknown> {
   } catch { throw new ManagementError('INVALID_INPUT') }
 }
 
+function modelPreference(): JefModelPreference {
+  try {
+    const value: unknown = JSON.parse(readFileSync(preferencePath, 'utf8'))
+    return value === 'low-cost' ? 'low-cost' : 'automatic'
+  } catch { return 'automatic' }
+}
+
 function selected(): SavedSelection | null {
   if (!existsSync(selectedPath)) return null
   try {
     const value = JSON.parse(readFileSync(selectedPath, 'utf8')) as Record<string, unknown>
     if (typeof value.routeId !== 'string') return null
+    if (value.manual !== true && value.preference !== modelPreference() && !(modelPreference() === 'automatic' && value.preference === undefined)) return null
     return {
       routeId: value.routeId,
       modelId: typeof value.modelId === 'string' ? value.modelId : null,
@@ -58,16 +75,10 @@ function selected(): SavedSelection | null {
 
 function saveSelected(route: ModelRoute): void {
   const temporary = `${selectedPath}.${process.pid}.tmp`
-  writeFileSync(temporary, JSON.stringify({ routeId: route.id, modelId: route.ref.nativeModelId, connectionId: route.ref.connectionId }), { mode: 0o600, flag: 'wx' })
+  writeFileSync(temporary, JSON.stringify({ routeId: route.id, modelId: route.ref.nativeModelId, connectionId: route.ref.connectionId, preference: modelPreference() }), { mode: 0o600, flag: 'wx' })
   renameSync(temporary, selectedPath)
 }
 
-function rank(entry: CatalogEntry): number {
-  const value = `${entry.route.model.displayName} ${entry.route.ref.nativeModelId}`.toLowerCase()
-  if (/\b(code|coder|coding|devstral)\b/.test(value)) return 0
-  if (/\b(reason|thinking|opus|sonnet|gpt|gemini|deepseek|qwen)\b/.test(value)) return 1
-  return 2
-}
 
 let manager: ConnectionManager | undefined
 let catalog: CatalogService | undefined
@@ -102,7 +113,7 @@ async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
     candidates.push(...page.entries.filter(entry => !excluded.has(entry.route.id) && entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable' && jefTransportSupportsTools(entry.route.providerId) && entry.route.model.capabilities.tools !== 'unsupported'))
     cursor = page.nextCursor ?? undefined
   } while (cursor)
-  candidates.sort((left, right) => rank(left) - rank(right) || left.route.ref.nativeModelId.localeCompare(right.route.ref.nativeModelId))
+  candidates.sort((left, right) => compareJefCandidates(left, right, modelPreference()))
   for (const candidate of candidates) {
     const prior = verification.store.latest(candidate.route.id)
     const current = prior?.connectionRevision === candidate.route.connectionRevision && Date.now() - Date.parse(prior.checkedAt) < 86_400_000
@@ -116,7 +127,7 @@ async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
 
 async function main(): Promise<void> {
   const [command = 'help', ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream', 'select', 'memory-list', 'memory-add', 'memory-update', 'memory-remove', 'model-preference'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); return }
 
   let choice = loadMobileWorkspace(home, agentDirectory)
@@ -132,8 +143,10 @@ async function main(): Promise<void> {
   const saved = selected()
   const gateway = new ResolvedRouteGateway(manager, resolveRoute, saved?.modelId ? { provider: 'configured', model: saved.modelId, transport: 'streaming' } : null)
   const store = new AgentChatStore(choice.storeDirectory)
-  const agent = new AlexAgent({
-    store, gateway, workspace: choice.workspace, name: 'Jef',
+  const memoryScope = `project:${choice.relative}`
+  const memory = new JefMemoryStore(join(agentDirectory, 'memories.json'), choice.workspace)
+  const agent = new JefAgent({
+    store, gateway, workspace: choice.workspace, name: 'Jef', memory, memoryScope,
     writablePrefixes: ['.'],
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],
     protectedPaths: ['provider vault', 'credentials', 'Android app files outside Linux home'],
@@ -142,6 +155,12 @@ async function main(): Promise<void> {
     sandboxCommands: true,
   })
   await agent.load()
+  if (command === 'chat-stream' || command === 'approve-stream') {
+    process.once('SIGTERM', () => {
+      const activeId = agent.state().activeId
+      if (activeId) agent.cancel(activeId)
+    })
+  }
   const events: AgentEvent[] = []
   const streaming = command === 'chat-stream' || command === 'approve-stream'
   const emit = (event: AgentEvent): void => {
@@ -149,7 +168,28 @@ async function main(): Promise<void> {
     const progress = mobileAgentProgress(event)
     if (progress) console.log(JSON.stringify({ progress }))
   }
-  if (command === 'new') {
+  if (command === 'model-preference') {
+    const body = input()
+    if (body.value !== 'automatic' && body.value !== 'low-cost') throw new ManagementError('INVALID_INPUT')
+    const temporary = `${preferencePath}.${process.pid}.tmp`
+    writeFileSync(temporary, JSON.stringify(body.value), { mode: 0o600, flag: 'wx' })
+    renameSync(temporary, preferencePath)
+  } else if (command === 'select') {
+    const body = input()
+    if (typeof body.conversationId !== 'string' || !await agent.select(body.conversationId)) throw new ManagementError('INVALID_INPUT')
+  } else if (command === 'memory-add') {
+    const body = input()
+    if (typeof body.text !== 'string' || typeof body.kind !== 'string') throw new ManagementError('INVALID_INPUT')
+    await memory.add({ scope: body.scope === 'personal' ? 'personal' : memoryScope, kind: body.kind as MemoryKind, text: body.text, source: 'User', sourcePath: typeof body.sourcePath === 'string' ? body.sourcePath : undefined })
+  } else if (command === 'memory-update') {
+    const body = input()
+    if (typeof body.id !== 'string' || !memory.list(memoryScope).some(item => item.id === body.id)) throw new ManagementError('INVALID_INPUT')
+    await memory.update(body.id, { ...(typeof body.text === 'string' ? { text: body.text } : {}), ...(typeof body.pinned === 'boolean' ? { pinned: body.pinned } : {}) })
+  } else if (command === 'memory-remove') {
+    const body = input()
+    if (typeof body.id !== 'string' || !memory.list(memoryScope).some(item => item.id === body.id)) throw new ManagementError('INVALID_INPUT')
+    await memory.remove(body.id)
+  } else if (command === 'new') {
     await agent.newConversation()
   } else if (command === 'chat' || command === 'chat-stream') {
     const body = input()
@@ -166,6 +206,9 @@ async function main(): Promise<void> {
     ...mobileAgentSnapshot(agent.state()),
     workspaceRelative: choice.relative,
     projects: listMobileProjects(home),
+    conversations: agent.state().conversations,
+    ...(!['chat', 'chat-stream', 'approve', 'approve-stream'].includes(command) ? { memories: memory.list(memoryScope) } : {}),
+    modelPreference: modelPreference(),
   }, events }))
 }
 

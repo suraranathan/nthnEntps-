@@ -19,8 +19,8 @@ try {
   npm run models -- resolve AGENT_ID
 Verification defaults to all five probes and may incur provider charges. Missing public credentials are recorded untested.
 JSON_ASSIGNMENT: {"agentId":"01","candidateRouteIds":["route ID"],"requiredCapabilities":["text","systemInstructions"]}
-Revision 0 creates an assignment. Alex (01) always requires text and systemInstructions.
-Assignments do not activate or replace Alex's current environment-based transport. No Nexus.`)
+Revision 0 creates an assignment. Jef (01) always requires text and systemInstructions.
+Assignments do not activate or replace Jef's current environment-based transport. No Nexus.`)
   else {
     if (!['verify', 'history', 'assign', 'assignment', 'resolve'].includes(command) || args.length < 1 || args.length > (['verify', 'assign'].includes(command) ? 2 : 1) || (command === 'assign' && args.length !== 2)) throw new ManagementError('INVALID_INPUT')
     const directory = resolve(fileURLToPath(new URL('../../', import.meta.url)), process.env.AI_PROVIDER_DATA_DIR || '.local/ai')

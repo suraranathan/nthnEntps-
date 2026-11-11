@@ -312,10 +312,16 @@
     .tool-details.failed summary, .tool-details.denied summary { color: var(--danger); }
 
     .approval-card { margin-top: 14px; padding: 13px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft); }
+    .approval-preview { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 var(--mono); }
+    .memory-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .memory-row small { display: block; color: var(--muted); margin-top: 4px; }
     .approval-card p { color: var(--ink); font: 12px/1.5 var(--mono); }
     .approval-actions { display: flex; gap: 8px; margin-top: 10px; }
     .approval-actions button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; font: 11px/1 var(--mono); }
     .approval-actions .approve { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 700; }
+    .model-preference { margin: 0 16px 14px; }
+    .sidebar-actions { display: flex; gap: 8px; padding: 0 16px 12px; }
+    .sidebar-actions .thread-action { flex: 1; }
     .thread-action { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; font: 11px/1 var(--mono); }
 
     .composer-wrap {
@@ -386,7 +392,7 @@
     .dialog-body { display: grid; gap: 15px; padding: 18px; }
     .field { display: grid; gap: 7px; }
     .field label { color: var(--muted); font: 10px/1 var(--mono); }
-    .field input {
+    .field input, .field textarea, .field select {
       width: 100%;
       padding: 11px 12px;
       border: 1px solid var(--line);
@@ -395,9 +401,10 @@
       color: var(--ink);
       font: 12px/1.2 var(--mono);
     }
+    .field textarea { min-height: 88px; resize: vertical; line-height: 1.5; }
     .security-note { color: var(--faint); font: 10px/1.5 var(--mono); }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 0 18px 18px; }
-    .button { padding: 9px 13px; border: 1px solid var(--line); border-radius: 7px; background: transparent; cursor: pointer; font: 11px/1 var(--mono); }
+    .button { padding: 9px 13px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--ink); cursor: pointer; font: 11px/1 var(--mono); }
     .button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 700; }
 
     .project-list { display: grid; gap: 7px; max-height: 38vh; overflow-y: auto; }
@@ -459,6 +466,10 @@
         </div>
       </div>
 
+      <div class="sidebar-heading"><span>Jef</span></div>
+      <p class="provider-note" id="active-model">Active model: automatic</p>
+      <div class="field model-preference"><label for="model-preference">Automatic model choice</label><select id="model-preference"><option value="automatic">Coding focused</option><option value="low-cost">Lower listed price</option></select></div>
+      <div class="sidebar-actions"><button class="thread-action" id="history-button" type="button">Saved chats</button><button class="thread-action" id="memory-button" type="button">Memory</button></div>
       <div class="sidebar-heading">
         <span>Providers</span>
         <button class="add-provider" id="add-provider" aria-label="Add API provider" title="Add API provider">+</button>
@@ -473,6 +484,7 @@
       </div>
 
       <div class="sidebar-heading"><span>Discovered models</span><button class="add-provider" id="refresh-models" type="button" aria-label="Refresh models" title="Refresh models">↻</button></div>
+      <p class="provider-note">Listed models are untested until Jef verifies real access. Tap a model to test and select it.</p>
       <div class="catalog-preview" id="catalog-preview">Add an account to discover models.</div>
 
       <p class="provider-note">Add OpenRouter, OpenAI, Anthropic, Gemini, xKiro or Groq accounts, or connect local Ollama. Keys stay in the encrypted private vault. Verified models may use paid credits.</p>
@@ -497,7 +509,7 @@
         </div>
       </section>
 
-      <div class="activity-status" id="activity-status" role="status"><span class="activity-dot" aria-hidden="true"></span><span>Jef is working…</span></div>
+      <div class="activity-status" id="activity-status" role="status"><span class="activity-dot" aria-hidden="true"></span><span>Jef is working…</span><button id="stop-button" class="thread-action" type="button">Stop</button></div>
 
       <div class="composer-wrap">
         <form class="composer" id="composer">
@@ -511,6 +523,24 @@
     </main>
   </div>
 
+  <dialog id="history-dialog" aria-label="Saved chats">
+    <div class="dialog-head"><span class="dialog-title">Saved chats</span><button class="dialog-close" type="button" onclick="document.querySelector('#history-dialog').close()">×</button></div>
+    <div class="dialog-body" id="history-list"></div>
+  </dialog>
+  <dialog id="memory-dialog" aria-label="Jef memory">
+    <div class="dialog-head"><span class="dialog-title">Jef memory</span><button class="dialog-close" type="button" onclick="document.querySelector('#memory-dialog').close()">×</button></div>
+    <div class="dialog-body">
+      <p class="security-note">Personal memories follow you across projects. Project memories stay with this workspace. Jef checks file-backed facts before using them.</p>
+      <p id="memory-error" class="security-note" role="alert"></p>
+      <div id="memory-list"></div>
+      <form id="memory-form">
+        <div class="field"><label for="memory-text">Memory</label><textarea id="memory-text" maxlength="1000" required></textarea></div>
+        <div class="field"><label for="memory-kind">Kind</label><select id="memory-kind"><option value="fact">Fact</option><option value="preference">Preference</option><option value="decision">Decision</option><option value="goal">Goal</option><option value="checkpoint">Checkpoint</option><option value="lesson">Lesson</option></select></div>
+        <div class="field"><label for="memory-scope">Scope</label><select id="memory-scope"><option value="project">This project</option><option value="personal">Personal</option></select></div>
+        <div class="dialog-actions"><button class="button primary" type="submit">Save memory</button></div>
+      </form>
+    </div>
+  </dialog>
   <dialog id="provider-dialog">
     <form method="dialog" id="provider-form">
       <div class="dialog-head">
@@ -578,6 +608,8 @@
       sendButton.disabled = value || !input.value.trim();
       document.querySelector('#new-conversation').disabled = value;
       document.querySelector('#workspace-switch').disabled = value;
+      document.querySelector('#history-button').disabled = value;
+      document.querySelector('#memory-button').disabled = value;
     }
 
     function setSidebar(open) {
@@ -728,8 +760,12 @@
       else snapshot.messages.filter(item => item.role !== 'tool').forEach(appendMessage);
       document.querySelector('.thread-name').textContent = snapshot.title || 'New conversation';
       document.querySelector('#model-chip').textContent = snapshot.model || 'automatic';
+      document.querySelector('#active-model').textContent = `Active model: ${snapshot.provider || 'AI'} / ${snapshot.model || 'automatic'}`;
       document.querySelector('#workspace-switch').textContent = snapshot.workspaceRelative && snapshot.workspaceRelative !== '.' ? `⌁ ${snapshot.workspaceRelative}` : '⌁ Linux home';
       renderProjects(snapshot);
+      renderHistory(snapshot.conversations || []);
+      if (Array.isArray(snapshot.memories)) renderMemories(snapshot.memories);
+      document.querySelector('#model-preference').value = snapshot.modelPreference || 'automatic';
       document.querySelector('#provider-meta').textContent = snapshot.workspaceStatus === 'empty'
         ? `Empty workspace · ${snapshot.workspace}`
         : snapshot.workspaceStatus === 'unavailable'
@@ -743,9 +779,11 @@
         const wrap = document.createElement('div');
         const author = document.createElement('div'); author.className = 'message-author'; author.textContent = 'approval required';
         const card = document.createElement('div'); card.className = 'approval-card';
-        const text = document.createElement('p'); text.textContent = pendingApproval.summary;
+        const text = document.createElement('p'); text.textContent = pendingApproval.summary; card.append(text);
+        if (pendingApproval.preview) { const preview = document.createElement('pre'); preview.className = 'approval-preview'; preview.textContent = pendingApproval.preview; card.append(preview); }
         const actions = document.createElement('div'); actions.className = 'approval-actions';
-        const approve = document.createElement('button'); approve.className = 'approve'; approve.textContent = 'Approve';
+        if (pendingApproval.previewTruncated) { const warning = document.createElement('p'); warning.textContent = 'This edit is too large to review here. Deny it and ask Jef to split the change.'; card.append(warning); }
+        const approve = document.createElement('button'); approve.className = 'approve'; approve.textContent = 'Approve'; approve.disabled = Boolean(pendingApproval.previewTruncated);
         const deny = document.createElement('button'); deny.textContent = 'Deny';
         const decide = (approved) => {
           approve.disabled = true; deny.disabled = true;
@@ -753,13 +791,42 @@
         };
         approve.addEventListener('click', () => decide(true));
         deny.addEventListener('click', () => decide(false));
-        actions.append(approve, deny); card.append(text, actions); wrap.append(author, card); article.append(mark, wrap); messages.append(article);
+        actions.append(approve, deny); card.append(actions); wrap.append(author, card); article.append(mark, wrap); messages.append(article);
       }
       conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });
       setBusy(false);
       input.disabled = Boolean(pendingApproval);
       sendButton.disabled = Boolean(pendingApproval) || !input.value.trim();
       input.placeholder = pendingApproval ? 'Approve or deny Jef’s action to continue…' : 'Ask Jef to inspect, build, fix, or just talk…';
+    }
+
+    function renderHistory(chats) {
+      const list = document.querySelector('#history-list'); list.textContent = '';
+      if (!chats.length) { list.textContent = 'No saved chats yet.'; return; }
+      for (const chat of chats) {
+        const button = document.createElement('button'); button.className = 'project-choice'; button.type = 'button';
+        button.textContent = `${chat.title} · ${chat.messageCount} messages`;
+        button.addEventListener('click', () => { document.querySelector('#history-dialog').close(); if (window.NthnAI) { setBusy(true); window.NthnAI.selectConversation(chat.id); } });
+        list.append(button);
+      }
+    }
+
+    function renderMemories(items) {
+      const list = document.querySelector('#memory-list'); list.textContent = '';
+      if (!items.length) { const empty = document.createElement('p'); empty.textContent = 'No memories yet.'; list.append(empty); }
+      for (const item of items) {
+        const row = document.createElement('div'); row.className = 'memory-row';
+        const text = document.createElement('div'); text.textContent = `${item.pinned ? '★ ' : ''}${item.text}`;
+        const meta = document.createElement('small'); meta.textContent = `${item.scope === 'personal' ? 'Personal' : 'Project'} · ${item.kind} · ${item.source}${item.stale ? ' · stale' : ''}`;
+        const actions = document.createElement('div'); actions.className = 'approval-actions';
+        const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Edit';
+        edit.addEventListener('click', () => { const field = document.querySelector('#memory-text'); field.value = item.text; field.dataset.editId = item.id; field.dataset.pinned = String(item.pinned); document.querySelector('#memory-kind').value = item.kind; document.querySelector('#memory-scope').value = item.scope === 'personal' ? 'personal' : 'project'; field.focus(); });
+        const pin = document.createElement('button'); pin.type = 'button'; pin.textContent = item.pinned ? 'Unpin' : 'Pin';
+        pin.addEventListener('click', () => { if (window.NthnAI) window.NthnAI.updateMemory(item.id, item.text, !item.pinned); });
+        const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Delete';
+        remove.addEventListener('click', () => { if (window.NthnAI) window.NthnAI.removeMemory(item.id); });
+        actions.append(edit, pin, remove); row.append(text, meta, actions); list.append(row);
+      }
     }
 
     function renderAccounts(raw) {
@@ -794,13 +861,27 @@
       view.textContent = '';
       const lines = String(raw || '').split('\n').filter(line => line.includes('\t'));
       if (!lines.length) { view.textContent = 'No models listed for connected accounts.'; return; }
-      for (const line of lines.slice(0, 30)) {
-        const [id, name, account] = line.split('\t');
-        const item = document.createElement('div'); item.textContent = `${name || id} · ${account || ''}`; view.append(item);
+      for (const line of lines.slice(0, 100)) {
+        const [id, name, account, availability] = line.split('\t');
+        const item = document.createElement('button'); item.type = 'button'; item.className = 'project-choice';
+        item.textContent = `${name || id} · ${account || ''} · ${availability || 'listed, untested'}`;
+        item.title = id;
+        item.addEventListener('click', () => { if (window.NthnAI) { setSidebar(false); setBusy(true); window.NthnAI.selectModel(id); } });
+        view.append(item);
       }
-      if (lines.length > 30) { const more = document.createElement('div'); more.textContent = `${lines.length - 30} more listed. Use nthn-ai models in Terminal.`; view.append(more); }
+      if (lines.length > 100) { const more = document.createElement('div'); more.textContent = `${lines.length - 100} more listed. Use nthn-ai models in Terminal.`; view.append(more); }
     }
 
+    document.querySelector('#model-preference').addEventListener('change', event => { if (window.NthnAI) window.NthnAI.modelPreference(event.target.value); });
+    document.querySelector('#history-button').addEventListener('click', () => document.querySelector('#history-dialog').showModal());
+    document.querySelector('#memory-button').addEventListener('click', () => { document.querySelector('#memory-dialog').showModal(); if (window.NthnAI) window.NthnAI.memories(); });
+    document.querySelector('#stop-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.stop(); });
+    document.querySelector('#memory-form').addEventListener('submit', event => {
+      event.preventDefault(); const field = document.querySelector('#memory-text'); const text = field.value.trim(); if (!text || !window.NthnAI) return;
+      if (field.dataset.editId) window.NthnAI.updateMemory(field.dataset.editId, text, field.dataset.pinned === 'true');
+      else window.NthnAI.addMemory(document.querySelector('#memory-kind').value, text, document.querySelector('#memory-scope').value);
+      field.value = ''; delete field.dataset.editId; delete field.dataset.pinned;
+    });
     document.querySelector('#add-provider').addEventListener('click', openProviderDialog);
     document.querySelector('#refresh-models').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.models(); });
     document.querySelector('#workspace-switch').addEventListener('click', () => { if (!busy) workspaceDialog.showModal(); });
@@ -852,8 +933,9 @@
       if (kind === 'accounts') renderAccounts(value);
       if (kind === 'models') renderModels(value);
       if (kind === 'progress') renderProgress(value);
-      if (kind === 'snapshot') renderSnapshot(value);
+      if (kind === 'snapshot') { renderSnapshot(value); document.querySelector('#memory-error').textContent = ''; }
       if (kind === 'error') {
+        if (document.querySelector('#memory-dialog').open) document.querySelector('#memory-error').textContent = value;
         setBusy(false);
         appendMessage({ role: 'assistant', content: value });
         conversation.scrollTo({ top: conversation.scrollHeight, behavior: 'smooth' });

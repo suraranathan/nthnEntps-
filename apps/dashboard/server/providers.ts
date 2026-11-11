@@ -1,4 +1,4 @@
-import type { ProviderInfo } from '../src/alex-contract.ts'
+import type { ProviderInfo } from '../src/jef-contract.ts'
 export type ModelMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 export interface ModelProvider {
   info: ProviderInfo
@@ -97,7 +97,7 @@ export class ModelRouter {
 }
 export function providersFromEnv(env: NodeJS.ProcessEnv): ModelProvider[] {
   const providers: ModelProvider[] = []
-  if (env.ALEX_BASE_URL || env.ALEX_API_KEY || env.OPENAI_API_KEY || env.ALEX_MODEL) providers.push(new HttpProvider('openai-compatible', env.ALEX_MODEL ?? '', env.ALEX_BASE_URL || 'https://api.openai.com/v1', env.ALEX_API_KEY || env.OPENAI_API_KEY || '', 'openai-compatible'))
-  if (env.ALEX_OLLAMA_MODEL) providers.push(new HttpProvider('ollama', env.ALEX_OLLAMA_MODEL, env.ALEX_OLLAMA_URL || 'http://127.0.0.1:11434', '', 'ollama'))
+  if (env.JEF_BASE_URL || env.JEF_API_KEY || env.OPENAI_API_KEY || env.JEF_MODEL) providers.push(new HttpProvider('openai-compatible', env.JEF_MODEL ?? '', env.JEF_BASE_URL || 'https://api.openai.com/v1', env.JEF_API_KEY || env.OPENAI_API_KEY || '', 'openai-compatible'))
+  if (env.JEF_OLLAMA_MODEL) providers.push(new HttpProvider('ollama', env.JEF_OLLAMA_MODEL, env.JEF_OLLAMA_URL || 'http://127.0.0.1:11434', '', 'ollama'))
   return providers
 }

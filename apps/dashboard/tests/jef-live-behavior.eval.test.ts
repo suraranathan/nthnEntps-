@@ -8,9 +8,9 @@ import { providersFromEnv } from '../server/providers.ts'
 
 // Explicit opt-in: this sends synthetic prompts to a configured provider and
 // may incur charges. The default deterministic suite never calls a live model.
-test('optional live behavior evaluation with explicit criteria', { skip: process.env.ALEX_LIVE_EVAL !== '1' }, async () => {
+test('optional live behavior evaluation with explicit criteria', { skip: process.env.JEF_LIVE_EVAL !== '1' }, async () => {
   const provider = providersFromEnv(process.env).find(x => x.info.configured)
-  assert.ok(provider, 'Configure an environment provider before ALEX_LIVE_EVAL=1')
+  assert.ok(provider, 'Configure an environment provider before JEF_LIVE_EVAL=1')
   const memory = emptyMemory()
   const ask = async (input: string) => guardPhilosophyReply(await provider.complete([
     { role: 'system', content: buildSystem(memory, provider.info, 'No verified project progress.') + '\n' + conversationGuidance(memory, input) },

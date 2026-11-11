@@ -2,14 +2,14 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { OfficeScene } from './OfficeScene'
 import { team } from './team'
-import { useAlex } from './useAlex'
-import { AlexAgentChat } from './agent/AlexAgentChat'
+import { useJef } from './useJef'
+import { JefAgentChat } from './agent/JefAgentChat'
 import { AiProviders } from './AiProviders'
 
 type Inspection = { kind: 'profile' | 'workstation' | 'room'; title: string; subtitle: string; facts: string[] }
-type Section = 'Office' | 'Alex' | 'Agents' | 'Activity' | 'Tasks' | 'AI Providers'
-const sections: Section[] = ['Office', 'Alex', 'Agents', 'Activity', 'Tasks', 'AI Providers']
-function lastAlexRead() { try { return Number(localStorage.getItem('nthn-alex-last-read')) || 0 } catch { return 0 } }
+type Section = 'Office' | 'Jef' | 'Agents' | 'Activity' | 'Tasks' | 'AI Providers'
+const sections: Section[] = ['Office', 'Jef', 'Agents', 'Activity', 'Tasks', 'AI Providers']
+function lastJefRead() { try { return Number(localStorage.getItem('nthn-jef-last-read') ?? localStorage.getItem('nthn-alex-last-read')) || 0 } catch { return 0 } }
 
 const activity = [
   { time: '09:42', title: 'Office initialized', detail: 'Dashboard preview is ready', color: '#8bd6bd' },
@@ -18,8 +18,8 @@ const activity = [
 ]
 
 function App() {
-  const alex = useAlex()
-  const agents = useMemo(() => team.map(agent => agent.id === '01' ? { ...agent, state: alex.status } : agent), [alex.status])
+  const jef = useJef()
+  const agents = useMemo(() => team.map(agent => agent.id === '01' ? { ...agent, state: jef.status } : agent), [jef.status])
   const [selected, setSelected] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Section>('Office')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -31,7 +31,7 @@ function App() {
   const [inspection, setInspection] = useState<Inspection | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const selectedAgent = agents.find((agent) => agent.id === selected)
-  const unread = alex.snapshot?.messages.filter(message => message.role === 'assistant' && message.kind !== 'chat' && new Date(message.createdAt).getTime() > lastAlexRead()).length ?? 0
+  const unread = jef.snapshot?.messages.filter(message => message.role === 'assistant' && message.kind !== 'chat' && new Date(message.createdAt).getTime() > lastJefRead()).length ?? 0
 
   useEffect(() => {
     if (!menuOpen) return
@@ -46,7 +46,7 @@ function App() {
   const selectAgent = (id: string) => {
     const agent = agents.find((item) => item.id === id)
     if (!agent) return
-    if (id === '01') { navigate('Alex'); setSelected(null); setInspection(null); return }
+    if (id === '01') { navigate('Jef'); setSelected(null); setInspection(null); return }
     navigate('Office')
     setSelected(id)
     setInspection({ kind: 'profile', title: agent.name, subtitle: agent.role, facts: [`Status · ${agent.state}`, `Workstation · ${agent.id}`] })
@@ -85,13 +85,13 @@ function App() {
         <div className="sidebar-heading"><div><span className="eyebrow">NTHN ENTERPRISES</span><h2>Workspace</h2></div><button ref={closeButton} className="sidebar-close" aria-label="Close navigation menu" onClick={() => { setMenuOpen(false); menuButton.current?.focus() }}>×</button></div>
         <nav aria-label="Dashboard navigation">
           {sections.map(section => <button key={section} aria-current={activeTab === section ? 'page' : undefined} className={activeTab === section ? 'nav-active' : ''} onClick={() => navigate(section)}><span>{section}</span><span aria-hidden="true">↗</span></button>)}
-          <button onClick={() => navigate('Alex')}><span>Talk to Alex</span><span>{unread ? `${unread} new` : alex.status}</span></button>
+          <button onClick={() => navigate('Jef')}><span>Talk to Jef</span><span>{unread ? `${unread} new` : jef.status}</span></button>
         </nav>
-        <div className="sidebar-footer"><span className={`alex-status-dot ${alex.status}`} /> Alex · {alex.status}<p>© 2024 NTHN ENTERPRISES</p></div>
+        <div className="sidebar-footer"><span className={`jef-status-dot ${jef.status}`} /> Jef · {jef.status}<p>© 2024 NTHN ENTERPRISES</p></div>
       </aside>
 
       <section className="dashboard">
-        {activeTab === 'Alex' && <AlexAgentChat />}
+        {activeTab === 'Jef' && <JefAgentChat />}
         {activeTab === 'AI Providers' && <AiProviders />}
         {activeTab === 'Agents' && <section className="panel agent-panel panel-current">
           <div className="panel-heading"><div><div className="eyebrow">WORKSPACE</div><h2>Team</h2></div><span className="count-chip">07</span></div>
@@ -100,10 +100,10 @@ function App() {
             {agents.map((agent) => <button className={`agent-row ${selected === agent.id ? 'agent-selected' : ''}`} key={agent.id} onClick={() => selectAgent(agent.id)}>
               <span className="agent-avatar" style={{ '--agent-color': agent.color } as React.CSSProperties}>{agent.id}</span>
               <span className="agent-copy"><strong>{agent.name}</strong><small>{agent.role}</small></span>
-              <span className={agent.id === '01' ? `alex-status-dot ${alex.status}` : 'status-dot'} title={agent.state} />
+              <span className={agent.id === '01' ? `jef-status-dot ${jef.status}` : 'status-dot'} title={agent.state} />
             </button>)}
           </div>
-          <div className="panel-footnote"><span className="status-dot" /> Alex · {alex.status} <span className="footnote-spacer" /> 6 placeholders</div>
+          <div className="panel-footnote"><span className="status-dot" /> Jef · {jef.status} <span className="footnote-spacer" /> 6 placeholders</div>
           <div className="summary-row"><div className="summary-card"><span className="summary-icon mint">◇</span><div><small>TEAM CAPACITY</small><b>7 <span>positions</span></b></div><span className="summary-meta">SETUP</span></div></div>
         </section>}
 
@@ -111,12 +111,12 @@ function App() {
           <div className="office-heading"><div><div className="eyebrow">LOCAL WORKSPACE</div><h1>Office<span>.</span></h1></div></div>
           <div className="scene-card">
             <div className="scene-topline"><span><i className="scene-indicator" /> OFFICE FLOOR <b>01</b></span><span className="scene-count">7 DESKS <i /> PREVIEW MODE</span></div>
-            <div className="scene-canvas" aria-label="Interactive 3D office with Alex and six placeholder employees">
+            <div className="scene-canvas" aria-label="Interactive 3D office with Jef and six placeholder employees">
               <Canvas dpr={[1, 1.3]} shadows="soft" camera={{ position: [22, 22, 27], fov: 38 }} gl={{ antialias: true, alpha: false, powerPreference: 'low-power' }}>
                 <OfficeScene agents={agents} selected={selected} hovered={hovered} onHover={setHovered} onSelectAgent={selectAgent} onInspectWorkstation={inspectWorkstation} onInspectRoom={inspectRoom} onClearSelection={clearInspection} view={view} onViewChange={setView} zoom={zoom} onZoomChange={setZoom} resetToken={cameraReset} />
               </Canvas>
               <div className="scene-legend"><span className="legend-dot" /> Tap people, desks &amp; rooms <span className="legend-separator">·</span> Drag / pinch camera</div>
-              {inspection && <div className="selection-card inspection-card"><span className="selection-avatar">{selectedAgent?.id ?? '⌂'}</span><span><small className="inspection-type">{inspection.kind === 'profile' ? 'EMPLOYEE PROFILE' : inspection.kind === 'workstation' ? 'WORKSTATION' : 'OFFICE AREA'}</small><b>{inspection.title}</b><small>{inspection.subtitle}</small>{(selectedAgent?.id === '01' && inspection.kind === 'profile' ? [`Status · ${alex.status}`, `Model · ${alex.snapshot?.model || 'Unconfigured'}`, 'Open Alex chat using Talk to Alex'] : inspection.facts).map((fact) => <small className="inspection-fact" key={fact}>{fact}</small>)}</span><button onClick={clearInspection} aria-label="Close inspection">×</button></div>}
+              {inspection && <div className="selection-card inspection-card"><span className="selection-avatar">{selectedAgent?.id ?? '⌂'}</span><span><small className="inspection-type">{inspection.kind === 'profile' ? 'EMPLOYEE PROFILE' : inspection.kind === 'workstation' ? 'WORKSTATION' : 'OFFICE AREA'}</small><b>{inspection.title}</b><small>{inspection.subtitle}</small>{(selectedAgent?.id === '01' && inspection.kind === 'profile' ? [`Status · ${jef.status}`, `Model · ${jef.snapshot?.model || 'Unconfigured'}`, 'Open Jef chat using Talk to Jef'] : inspection.facts).map((fact) => <small className="inspection-fact" key={fact}>{fact}</small>)}</span><button onClick={clearInspection} aria-label="Close inspection">×</button></div>}
             </div>
             <div className="scene-controls"><div className="view-toggle"><button className={view === 'isometric' ? 'control-active' : ''} onClick={() => setView('isometric')}>Isometric</button><button className={view === 'top' ? 'control-active' : ''} onClick={() => setView('top')}>Top view</button></div><div className="zoom-controls"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(.75, zoom - .1))}>−</button><span>{Math.round(zoom * 100)}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(1.9, zoom + .1))}>＋</button><button className="reset-camera" aria-label="Reset camera" title="Reset camera" onClick={() => { clearInspection(); setZoom(1); setView('isometric'); setCameraReset((token) => token + 1) }}>Reset</button></div></div>
           </div>

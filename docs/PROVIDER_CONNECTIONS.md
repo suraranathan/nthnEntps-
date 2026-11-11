@@ -1,6 +1,6 @@
 # Provider connection management — Phase 2, Step 2
 
-Step 2 adds persistent backend connection management, operated through a local CLI. It does not change Alex's provider selection, identity, memory, API or chat. It adds no browser credential form, HTTP administration endpoint, dashboard redesign or Nexus implementation.
+Step 2 adds persistent backend connection management, operated through a local CLI. It does not change Jef's provider selection, identity, memory, API or chat. It adds no browser credential form, HTTP administration endpoint, dashboard redesign or Nexus implementation.
 
 The later [AI Providers dashboard](AI_PROVIDERS_DASHBOARD.md) now exposes these same services through the protected local `/api/ai` transport and write-only credential forms. The Step 2 CLI instructions below remain valid; its historical lack of an HTTP interface is no longer a current integration gap.
 
@@ -88,7 +88,7 @@ npm run providers -- remove ID REVISION
 - Edit input permits `label`, `baseUrl`, `networkPolicy`, `enabled`, and `scope` only. Scope, if present, contains all three `account`, `project`, `region` string-or-null fields. Scope is metadata, not an implemented native provider authentication/header scheme. Provider type is immutable; create a new connection to change it.
 - Credential input is `{"apiKey":"NEW_VALUE_IN_PRIVATE_FILE"}` or `{"apiKey":null}` to clear. A credential change increments both configuration/credential revisions and resets health. Metadata-only changes preserve credentials.
 - Endpoint/network-policy changes automatically clear credentials and health, preventing an old key from being forwarded to a new host/path. Set the intended replacement credential explicitly afterward.
-- Enabled is an operator eligibility flag, not proof of connectivity. It does not alter Alex's existing route or launch automatic activity. An explicit `test` is allowed while disabled; other operations never make provider requests.
+- Enabled is an operator eligibility flag, not proof of connectivity. It does not alter Jef's existing route or launch automatic activity. An explicit `test` is allowed while disabled; other operations never make provider requests.
 - Test persists independent authentication/discovery observations, sanitized failure codes and check time; inference remains `never-tested`. An OpenAI-compatible models listing can succeed while authentication remains `unknown`. OpenRouter's key test marks authentication accepted, not model inference available.
 - Health updates do not change configuration revisions. If configuration changes during a network test, its stale result is rejected rather than applied to the new configuration. Concurrent tests in one manager are rejected; separate processes still use revision-checked transactions.
 - Remove deletes the connection and encrypted credential atomically, preserving a sanitized audit event. There are no assignments to cascade yet.
@@ -97,7 +97,7 @@ CLI failures return exit code 1 and stable sanitized JSON errors on stderr. A fa
 
 ## Encryption and recovery
 
-Credentials are encrypted with AES-256-GCM, fresh 96-bit nonces and authenticated data bound to connection ID and credential revision. The backend master key is separate from the SQLite database. An authenticated verifier detects an incorrect replacement key, including when there are no connections. Missing keys are never silently regenerated for an existing database. Credentials, ciphertext and audit changes commit together in SQLite transactions; no new dependencies or Alex memory migrations are introduced.
+Credentials are encrypted with AES-256-GCM, fresh 96-bit nonces and authenticated data bound to connection ID and credential revision. The backend master key is separate from the SQLite database. An authenticated verifier detects an incorrect replacement key, including when there are no connections. Missing keys are never silently regenerated for an existing database. Credentials, ciphertext and audit changes commit together in SQLite transactions; no new dependencies or Jef memory migrations are introduced.
 
 Back up the database and master key privately, with access controls; keep the key separate from shared/exported database backups. Do not delete or replace the key as a way to reset credentials: restore its private backup instead. Credential replacement/clearing is supported; master-key rotation is not implemented yet. Encrypted credentials are not an OS keychain or protection against compromise of the same user account, which can read both files. Non-secret connection metadata is plaintext.
 
@@ -118,9 +118,9 @@ DNS is revalidated before every explicit test; the transport connects directly t
 - `management-types.ts`: management input/output types and stable sanitized errors.
 - `provider-cli.ts`: backend-only user interface, private stdin and safe JSON output.
 
-Tests cover persistence, multiple accounts, credential encryption/redaction/tampering/rotation, missing/wrong keys, permissions/symlinks, optimistic concurrency, endpoint-change key clearing, database rollback, endpoint validation, DNS/metadata/rebinding attacks, provider-specific health, actual local HTTP requests, redirects/body bounds and CLI workflows. All prior Alex and contract tests remain unchanged. Live external account validation requires real credentials and was not performed. Provider catalog discovery, agent assignment and Nexus remain future work.
+Tests cover persistence, multiple accounts, credential encryption/redaction/tampering/rotation, missing/wrong keys, permissions/symlinks, optimistic concurrency, endpoint-change key clearing, database rollback, endpoint validation, DNS/metadata/rebinding attacks, provider-specific health, actual local HTTP requests, redirects/body bounds and CLI workflows. All prior Jef and contract tests remain unchanged. Live external account validation requires real credentials and was not performed. Provider catalog discovery, agent assignment and Nexus remain future work.
 
-Verification completed: 44 tests pass (16 Alex + 7 contracts + 21 management), typecheck and production build pass, and the CLI help command exits successfully. The frontend asset hashes are unchanged; Vite retains its existing bundle-size warning. Real external credentials were unavailable, so external account success and live inference were not tested.
+Verification completed: 44 tests pass (16 Jef + 7 contracts + 21 management), typecheck and production build pass, and the CLI help command exits successfully. The frontend asset hashes are unchanged; Vite retains its existing bundle-size warning. Real external credentials were unavailable, so external account success and live inference were not tested.
 
 ## Step 3 integration
 

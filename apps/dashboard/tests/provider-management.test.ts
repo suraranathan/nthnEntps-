@@ -23,7 +23,7 @@ async function directory(t: { after: (fn: () => Promise<void>) => void }) {
   return path
 }
 
-// Fixtures never become operational providers or replace the existing Alex runtime.
+// Fixtures never become operational providers or replace the existing Jef runtime.
 test('multiple accounts persist independently with encrypted credentials and no plaintext in metadata/audit/database', async t => {
   const path = await directory(t)
   const manager = new ConnectionManager(path)

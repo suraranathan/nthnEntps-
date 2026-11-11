@@ -10,6 +10,7 @@ import { ManagementError } from './management-types.ts'
 import { connectionAdapter } from './connection-adapters.ts'
 import { connectionSummary, openRouterAccounts, selectionConnection } from './nthn-cli-state.ts'
 import { jefCanUse, jefProbeCapabilities, jefTransportSupportsTools } from './jef-model-policy.ts'
+import { jefAvailability } from './jef-model-availability.ts'
 import { providerKeyHint } from './provider-key-hints.ts'
 import type { ManagedConnection } from './management-types.ts'
 
@@ -73,13 +74,13 @@ function selected(): { routeId: string, modelId: string | null, connectionId?: s
   }
   catch { return null }
 }
-function saveSelected(routeId: string, modelId: string, connectionId: string) {
+function saveSelected(routeId: string, modelId: string, connectionId: string, manual = false) {
   const temporary = `${selectedPath}.${process.pid}.tmp`
-  writeFileSync(temporary, JSON.stringify({ routeId, modelId, connectionId }), { mode: 0o600, flag: 'wx' })
+  writeFileSync(temporary, JSON.stringify({ routeId, modelId, connectionId, manual }), { mode: 0o600, flag: 'wx' })
   renameSync(temporary, selectedPath)
 }
 
-function rankForAlex(name: string, modelId: string): number {
+function rankForJef(name: string, modelId: string): number {
   const value = `${name} ${modelId}`.toLowerCase()
   if (/\b(code|coder|coding|devstral)\b/.test(value)) return 0
   if (/\b(reason|thinking|opus|sonnet|gpt|gemini|deepseek|qwen)\b/.test(value)) return 1
@@ -103,7 +104,7 @@ async function autoSelect(connectionIds: string[]): Promise<{ modelId: string; r
     candidates.push(...page.entries.filter(entry => entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable' && jefTransportSupportsTools(entry.route.providerId) && entry.route.model.capabilities.tools !== 'unsupported'))
     cursor = page.nextCursor ?? undefined
   } while (cursor)
-  candidates.sort((left, right) => rankForAlex(left.route.model.displayName, left.route.ref.nativeModelId) - rankForAlex(right.route.model.displayName, right.route.ref.nativeModelId)
+  candidates.sort((left, right) => rankForJef(left.route.model.displayName, left.route.ref.nativeModelId) - rankForJef(right.route.model.displayName, right.route.ref.nativeModelId)
     || left.route.ref.nativeModelId.localeCompare(right.route.ref.nativeModelId))
   for (const candidate of candidates) {
     const prior = verification.store.latest(candidate.route.id)
@@ -266,9 +267,11 @@ try {
         else refreshed.push(...usable.map(account => account.id))
         if (!refreshed.length) throw new ManagementError('REQUEST_FAILED')
         const page = await catalog.search({ connectionIds: refreshed, outputModality: 'text', pageSize: 100 })
+        verification = new VerificationService(manager, catalog)
         for (const entry of page.entries) {
-          const price = entry.pricing.freeAccess.kind === 'verified-zero-price' ? 'listed $0' : entry.pricing.freeAccess.kind === 'paid' ? 'paid' : 'price unknown'
-          console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName} · ${price}\t${accounts.find(account => account.id === entry.route.ref.connectionId)?.label ?? entry.route.providerId} · context ${entry.route.model.contextTokens ?? '?'} tokens`)
+          const components = entry.pricing.components.filter(item => ['input', 'output'].includes(item.dimension) && item.currency === 'USD')
+          const price = entry.pricing.freeAccess.kind === 'verified-zero-price' ? 'listed $0' : components.length ? components.map(item => `${item.dimension} $${item.amount}/${item.per}`).join(' + ') : entry.pricing.freeAccess.kind === 'paid' ? 'paid, price unknown' : 'price unknown'
+          console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName} · ${price}\t${accounts.find(account => account.id === entry.route.ref.connectionId)?.label ?? entry.route.providerId} · context ${entry.route.model.contextTokens ?? '?'} tokens\t${jefAvailability(entry, verification.store.latest(entry.route.id))}`)
         }
         if (page.nextCursor) console.log('More models available; refine selection by exact model ID.')
       } else if (command === 'select') {
@@ -286,7 +289,7 @@ try {
           if (jefCanUse(result)) { chosen = route; checkedAt = result.checkedAt; break }
         }
         if (!checkedAt) throw new ManagementError('MODEL_UNAVAILABLE')
-        saveSelected(chosen.id, argument, chosen.ref.connectionId)
+        saveSelected(chosen.id, argument, chosen.ref.connectionId, true)
         console.log(JSON.stringify({ selected: argument, accountId: chosen.ref.connectionId, inference: 'verified', checkedAt }))
       }
     }

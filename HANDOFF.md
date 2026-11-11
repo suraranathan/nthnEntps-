@@ -11,7 +11,7 @@ Updated: 2026-11-07
 - Tests: 134 passing, 1 skipped.
 - Local typecheck and production build pass.
 - Latest verified CI APK: `app-debug.apk`, 4,528,413 bytes, SHA-256 `07a970655e21de2f174391a730f346053155f11528647e3ff7d21473d3a9c591`.
-- Commit `144b6ff` ("Complete Alex personality, follow-ups and office layout work") pushed to `main`.
+- Commit `144b6ff` ("Complete Jef personality, follow-ups and office layout work") pushed to `main`.
 
 ### Linux environment (`apps/nthn`)
 

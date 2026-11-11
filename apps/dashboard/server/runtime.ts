@@ -2,7 +2,7 @@ import { InputError, textInput, categoryInput, validatePreferences, optionalDate
 export { InputError, validatePreferences } from './validation.ts'
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import type { AlexSnapshot } from '../src/alex-contract.ts'
+import type { JefSnapshot } from '../src/jef-contract.ts'
 import { buildSystem, identity } from './identity.ts'
 import { conversationContext, MemoryStore } from './memory.ts'
 import { localClock, notificationDue, pendingProactiveEvents } from './notifications.ts'
@@ -13,8 +13,8 @@ import { guardPhilosophyReply } from './philosophy.ts'
 import { observeProject } from './project-monitor.ts'
 import { scanFollowUps } from './followups.ts'
 
-export class AlexRuntime {
-  status: AlexSnapshot['status'] = 'offline'
+export class JefRuntime {
+  status: JefSnapshot['status'] = 'offline'
   detail = 'No model connection verified. Configure a server provider and test the connection.'
   busy = false
   private lastAttempt = 0
@@ -24,13 +24,13 @@ export class AlexRuntime {
   readonly projectFile: string
   private changing = false
   constructor(store: MemoryStore, router: ModelRouter, projectFile: string) { this.store = store; this.router = router; this.projectFile = projectFile }
-  snapshot(csrf = ''): AlexSnapshot {
+  snapshot(csrf = ''): JefSnapshot {
     const provider = this.router.current()?.info
     return { identity, status: this.status, detail: this.detail, provider: provider?.id ?? null, model: provider?.model ?? null, providers: this.router.providers.map(x => x.info), preferences: this.store.state.preferences, memory: this.store.state.notes, messages: this.store.state.messages.slice(-200), requests: this.store.state.requests.slice(-50), followUps: this.store.state.followUps.slice(-100), events: this.store.state.events.slice(-30), audit: this.store.state.audit.slice(-20), csrf }
   }
   async initialize() {
     await this.observe()
-    this.store.event('runtime_started', 'Alex local runtime started. Other employees remain placeholders; model connectivity has not yet been verified.')
+    this.store.event('runtime_started', 'Jef local runtime started. Other employees remain placeholders; model connectivity has not yet been verified.')
     this.store.log('runtime.start', 'offline; awaiting real inference')
     await this.store.save()
   }
@@ -46,7 +46,7 @@ export class AlexRuntime {
     return provider
   }
   async generate(kind: 'chat' | 'briefing' | 'update' | 'probe', text = '', automatic = kind === 'update') {
-    if (this.busy) throw new InputError('Alex is already thinking. Please wait.', 409)
+    if (this.busy) throw new InputError('Jef is already thinking. Please wait.', 409)
     const provider = this.requireProvider()
     this.busy = true; this.status = 'thinking'; this.detail = 'Waiting for the configured model.'
     try {
@@ -115,7 +115,7 @@ export class AlexRuntime {
   }
   private async performAction(input: unknown) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new InputError('Invalid action')
-    if (this.busy) throw new InputError('Alex is thinking. Please wait before changing settings.', 409)
+    if (this.busy) throw new InputError('Jef is thinking. Please wait before changing settings.', 409)
     const a = input as Record<string, unknown>
     switch (a.action) {
       case 'chat': await this.generate('chat', textInput(a.text)); return
