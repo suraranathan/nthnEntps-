@@ -31,17 +31,20 @@ export interface PathPolicyOptions {
   root: string
   writablePrefixes?: string[]
   deniedSegments?: string[]
+  allowNTHNSourceWrites?: boolean
 }
 
 export class PathPolicy {
   readonly root: string
   private readonly writablePrefixes: string[]
   private readonly deniedSegments: Set<string>
+  private readonly allowNTHNSourceWrites: boolean
 
   constructor(options: PathPolicyOptions) {
     this.root = resolve(options.root)
     this.writablePrefixes = (options.writablePrefixes ?? []).map(prefix => resolve(this.root, prefix))
     this.deniedSegments = new Set([...SENSITIVE_SEGMENTS, ...(options.deniedSegments ?? [])])
+    this.allowNTHNSourceWrites = options.allowNTHNSourceWrites ?? false
   }
 
   private assertRelative(relativePath: string): void {
@@ -119,6 +122,12 @@ export class PathPolicy {
     for (const protectedPrefix of ALLOWED_TOP_LEVEL_PROTECTED) {
       const protectedRoot = resolve(this.root, protectedPrefix)
       if (target === protectedRoot || target.startsWith(`${protectedRoot}${sep}`)) {
+        const rel = relative(this.root, target).split(sep).join('/')
+        const approvedSource = this.allowNTHNSourceWrites && (
+          rel.startsWith('apps/nthn/branding/') || rel.startsWith('apps/nthn/ui-preview/') ||
+          ['apps/nthn/README.md', 'apps/nthn/VERSION', 'apps/nthn/scripts/patch_nthn.py', 'apps/nthn/scripts/verify_apk.py'].includes(rel)
+        )
+        if (approvedSource) break
         throw new PermissionError('protected-project', `Writes to ${protectedPrefix} are protected. Modify this project through its own task boundary.`)
       }
     }
