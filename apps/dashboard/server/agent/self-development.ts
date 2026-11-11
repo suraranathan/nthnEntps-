@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { lstat, readdir, readFile } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
 
-const SKIP_DIRS = new Set(['.git', '.local', '.ssh', '.gnupg', '.npm', '.cache', 'node_modules', 'dist', 'build'])
+const SKIP_DIRS = new Set(['.git', '.local', '.ssh', '.gnupg', '.npm', '.cache', '.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer', 'node_modules', 'dist', 'build'])
 const SECRET_NAMES = /^(?:\.env(?:\..*)?|credentials?\.(?:json|ya?ml)|secrets?\.(?:json|ya?ml|toml)|.*\.(?:pem|key|p12|pfx))$/i
 const MAX_FILES = 5000
 const MAX_BYTES = 50_000_000
