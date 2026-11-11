@@ -190,6 +190,13 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   assert.match(prompt, /casual conversation/i)
   assert.match(prompt, /selected project workspace/i)
   assert.match(prompt, /native tool calls/i)
+  assert.match(prompt, /You are Jef, the user's personal AI inside NTHN/i)
+  assert.match(prompt, /Help with everyday questions, planning, and personal context/i)
+  assert.match(prompt, /This Jef instance serves one owner: the person speaking to you/i)
+  assert.match(prompt, /Do not invent other users, social features, or live user-presence tracking/i)
+  assert.match(prompt, /Do not claim a connectivity or provider outage without an explicit error from the app or a tool/i)
+  assert.match(prompt, /NTHN is the app name; do not invent an expansion for its letters/i)
+  assert.match(prompt, /You can discuss general topics and chat casually/i)
 })
 
 test('Jef carries relevant personal and project memories into a new chat and can save a lesson', async t => {
@@ -236,6 +243,10 @@ test('Jef recognizes its source and backend in the bundled NTHN workspace', asyn
   assert.match(prompt, /apps\/dashboard\/server\/http\.ts/)
   assert.match(prompt, /source snapshot.*not.*running/i)
   assert.match(prompt, /approval/i)
+  assert.match(prompt, /If asked to fix your own behavior, inspect the bundled source and propose a concrete change/i)
+  assert.match(prompt, /do not say you cannot fix your own implementation/i)
+  assert.match(prompt, /If asked whether Alex appears in the app, search the source for Alex/i)
+  assert.match(prompt, /Alex was Jef's former app identity/i)
 })
 
 test('mobile tool policy allows workspace projects but approval-gates every executable action', async t => {
