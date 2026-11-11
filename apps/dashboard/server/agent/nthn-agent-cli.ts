@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ConnectionManager } from '../ai/connection-manager.ts'
@@ -9,19 +10,34 @@ import { jefCanUse, jefProbeCapabilities, jefTransportSupportsTools } from '../a
 import { selectionConnection, type SavedSelection } from '../ai/nthn-cli-state.ts'
 import type { CatalogEntry, ModelRoute } from '../ai/contracts.ts'
 import { JefAgent, type AgentEvent } from './agent.ts'
-import { JefMemoryStore, type MemoryKind } from './memory.ts'
+import type { MemoryKind } from './memory.ts'
+import { SqliteMemoryStore } from './memory-db.ts'
+import { EmbeddingService, loadEmbeddingConfig, saveEmbeddingConfig } from './embeddings.ts'
+import { TaskStore } from './tasks.ts'
+import { loadAutonomyPolicy, saveAutonomyConfig } from './autonomy.ts'
 import { compareJefCandidates, type JefModelPreference } from './model-preference.ts'
 import { ResolvedRouteGateway } from './gateway.ts'
 import { AgentChatStore } from './store.ts'
 import { PermissionError } from './permissions.ts'
 import { mobileAgentProgress, mobileAgentSnapshot } from './nthn-agent-mobile.ts'
 import { chooseMobileWorkspace, listMobileProjects, loadMobileWorkspace } from './mobile-workspace.ts'
+import { ResearchService } from './research.ts'
+import { loadResearchConfig, saveResearchConfig } from './research-config.ts'
+import { CredentialVault, createPrivateFile, readPrivateFile } from '../ai/credential-vault.ts'
+import { loadReleaseConfig, saveReleaseConfig } from './release-config.ts'
+import { ReleaseUpdateService } from './release-update.ts'
 
 const appRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)))
 const providerDirectory = resolve(appRoot, '.local/ai')
 const agentDirectory = resolve(appRoot, '.local/agent')
 const selectedPath = join(providerDirectory, 'selected-route.json')
 const preferencePath = join(agentDirectory, 'model-preference.json')
+const researchPath = join(agentDirectory, 'research.json')
+const embeddingPath = join(agentDirectory, 'embedding.json')
+const autonomyPath = join(agentDirectory, 'autonomy.json')
+const agentKeyPath = join(agentDirectory, 'master.key')
+const releasePath = join(agentDirectory, 'release.json')
+const updateDirectory = join(agentDirectory, 'updates')
 const home = resolve(process.env.NTHN_AGENT_WORKSPACE || process.env.HOME || join(appRoot, 'workspace'))
 const help = `nthn Jef coding agent
   nthn-agent state
@@ -37,6 +53,17 @@ const help = `nthn Jef coding agent
   nthn-agent memory-update < request.json
   nthn-agent memory-remove < request.json
   nthn-agent model-preference < request.json
+  nthn-agent research-config < request.json
+  nthn-agent embedding-config < request.json
+  nthn-agent memory-export
+  nthn-agent memory-search < request.json
+  nthn-agent memory-link < request.json
+  nthn-agent memory-history < request.json
+  nthn-agent task-list
+  nthn-agent autonomy-config < request.json
+  nthn-agent release-config < request.json
+  nthn-agent update-check
+  nthn-agent update-download
 Chat JSON: {"text":"...","conversationId":"optional"}
 Workspace JSON: {"path":"project-folder"} or {"path":"."} for Linux home
 Approval JSON: {"conversationId":"...","approvalId":"...","approved":true}`
@@ -57,6 +84,14 @@ function modelPreference(): JefModelPreference {
     const value: unknown = JSON.parse(readFileSync(preferencePath, 'utf8'))
     return value === 'low-cost' ? 'low-cost' : 'automatic'
   } catch { return 'automatic' }
+}
+
+function appVersion(): string {
+  const installed = join(appRoot, 'version.txt')
+  const source = resolve(appRoot, '../../apps/nthn/VERSION')
+  const version = readFileSync(existsSync(installed) ? installed : source, 'utf8').trim()
+  if (!/^\d+(?:\.\d+){0,2}$/.test(version)) throw new Error('Installed NTHN version is invalid.')
+  return version
 }
 
 function selected(): SavedSelection | null {
@@ -83,6 +118,9 @@ function saveSelected(route: ModelRoute): void {
 let manager: ConnectionManager | undefined
 let catalog: CatalogService | undefined
 let verification: VerificationService | undefined
+let mobileMemory: SqliteMemoryStore | undefined
+let mobileTasks: TaskStore | undefined
+let agentVault: CredentialVault | undefined
 
 async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
   if (!manager || !catalog || !verification) throw new ManagementError('REQUEST_FAILED')
@@ -127,7 +165,7 @@ async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
 
 async function main(): Promise<void> {
   const [command = 'help', ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream', 'select', 'memory-list', 'memory-add', 'memory-update', 'memory-remove', 'model-preference'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream', 'select', 'memory-list', 'memory-add', 'memory-update', 'memory-remove', 'memory-export', 'memory-search', 'memory-link', 'memory-history', 'task-list', 'model-preference', 'research-config', 'embedding-config', 'autonomy-config', 'release-config', 'update-check', 'update-download'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); return }
 
   let choice = loadMobileWorkspace(home, agentDirectory)
@@ -140,14 +178,42 @@ async function main(): Promise<void> {
   manager = new ConnectionManager(providerDirectory)
   catalog = new CatalogService(manager)
   verification = new VerificationService(manager, catalog)
+  mkdirSync(agentDirectory, { recursive: true, mode: 0o700 })
+  if (!existsSync(agentKeyPath)) {
+    if (existsSync(researchPath) || existsSync(embeddingPath) || existsSync(releasePath)) throw new Error('Agent credential key is missing; saved credentials cannot be opened.')
+    try { createPrivateFile(agentKeyPath, randomBytes(32)) }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error }
+  }
+  agentVault = new CredentialVault(readPrivateFile(agentKeyPath))
   const saved = selected()
   const gateway = new ResolvedRouteGateway(manager, resolveRoute, saved?.modelId ? { provider: 'configured', model: saved.modelId, transport: 'streaming' } : null)
+  if (command === 'research-config') await saveResearchConfig(researchPath, input(), agentVault)
+  if (command === 'embedding-config') await saveEmbeddingConfig(embeddingPath, input(), agentVault)
+  if (command === 'release-config') await saveReleaseConfig(releasePath, input(), agentVault)
+  if (command === 'autonomy-config') saveAutonomyConfig(autonomyPath, input())
+  const researchConfig = loadResearchConfig(researchPath, agentVault)
+  const research = new ResearchService({ ...(researchConfig ? { search: researchConfig } : {}) })
+  const embeddingConfig = loadEmbeddingConfig(embeddingPath, agentVault)
+  const embedding = embeddingConfig ? new EmbeddingService(embeddingConfig) : undefined
+  const autonomy = loadAutonomyPolicy(autonomyPath)
+  const releaseConfig = loadReleaseConfig(releasePath, agentVault)
+  const updater = new ReleaseUpdateService({ ...(releaseConfig ? { token: releaseConfig.token } : {}) })
+  if (command === 'update-check' || command === 'update-download') {
+    const release = await updater.check(appVersion())
+    if (command === 'update-check' || !release) { console.log(JSON.stringify({ release, currentVersion: appVersion(), privateTokenConfigured: !!releaseConfig })); return }
+    console.log(JSON.stringify({ release, apk: await updater.download(release, updateDirectory), currentVersion: appVersion() }))
+    return
+  }
   const store = new AgentChatStore(choice.storeDirectory)
   const memoryScope = `project:${choice.relative}`
-  const memory = new JefMemoryStore(join(agentDirectory, 'memories.json'), choice.workspace)
+  const memory = new SqliteMemoryStore(join(agentDirectory, 'memories.sqlite'), join(agentDirectory, 'memories.json'), choice.workspace, embedding)
+  mobileMemory = memory
+  const tasks = new TaskStore(join(agentDirectory, 'tasks.sqlite'))
+  mobileTasks = tasks
   const agent = new JefAgent({
-    store, gateway, workspace: choice.workspace, name: 'Jef', memory, memoryScope,
+    store, gateway, workspace: choice.workspace, name: 'Jef', memory, memoryScope, research, tasks, autonomy,
     writablePrefixes: ['.'],
+    allowNTHNSourceWrites: choice.relative === 'nthnEntps' && existsSync(join(choice.workspace, 'apps/nthn/VERSION')) && existsSync(join(choice.workspace, 'apps/dashboard/server/agent/agent.ts')),
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],
     protectedPaths: ['provider vault', 'credentials', 'Android app files outside Linux home'],
     taskRoot: '.',
@@ -189,6 +255,28 @@ async function main(): Promise<void> {
     const body = input()
     if (typeof body.id !== 'string' || !memory.list(memoryScope).some(item => item.id === body.id)) throw new ManagementError('INVALID_INPUT')
     await memory.remove(body.id)
+  } else if (command === 'memory-search') {
+    const body = input()
+    if (typeof body.query !== 'string') throw new ManagementError('INVALID_INPUT')
+    console.log(JSON.stringify({ results: await memory.semanticRelevant(memoryScope, body.query, 20) }))
+    return
+  } else if (command === 'memory-export') {
+    console.log(JSON.stringify({ memories: memory.export(memoryScope) }))
+    return
+  } else if (command === 'memory-link') {
+    const body = input()
+    if (typeof body.from !== 'string' || typeof body.to !== 'string' || typeof body.relation !== 'string') throw new ManagementError('INVALID_INPUT')
+    const visible = new Set(memory.list(memoryScope).map(item => item.id))
+    if (!visible.has(body.from) || !visible.has(body.to)) throw new ManagementError('INVALID_INPUT')
+    await memory.link(body.from, body.to, body.relation)
+  } else if (command === 'memory-history') {
+    const body = input()
+    if (typeof body.id !== 'string' || !memory.list(memoryScope).some(item => item.id === body.id)) throw new ManagementError('INVALID_INPUT')
+    console.log(JSON.stringify({ history: memory.history(body.id), links: memory.links(body.id) }))
+    return
+  } else if (command === 'task-list') {
+    console.log(JSON.stringify({ tasks: tasks.list() }))
+    return
   } else if (command === 'new') {
     await agent.newConversation()
   } else if (command === 'chat' || command === 'chat-stream') {
@@ -209,6 +297,11 @@ async function main(): Promise<void> {
     conversations: agent.state().conversations,
     ...(!['chat', 'chat-stream', 'approve', 'approve-stream'].includes(command) ? { memories: memory.list(memoryScope) } : {}),
     modelPreference: modelPreference(),
+    research: { searchConfigured: research.configuredSearch, provider: researchConfig?.kind ?? null, pageRetrieval: true },
+    embedding: { configured: !!embeddingConfig, provider: embeddingConfig?.kind ?? null, model: embeddingConfig?.model ?? null },
+    autonomy: autonomy.snapshot(),
+    task: agent.state().activeId ? tasks.latestForConversation(agent.state().activeId!) : null,
+    release: { privateTokenConfigured: !!releaseConfig, installedVersion: appVersion() },
   }, events }))
 }
 
@@ -222,4 +315,7 @@ catch (error) {
   verification?.close()
   catalog?.close()
   manager?.close()
+  mobileMemory?.close()
+  mobileTasks?.close()
+  agentVault?.destroy()
 }

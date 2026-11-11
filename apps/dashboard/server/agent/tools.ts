@@ -1,5 +1,11 @@
 import { spawn } from 'node:child_process'
-import type { JefMemoryStore, MemoryKind } from './memory.ts'
+import type { MemoryKind } from './memory.ts'
+import type { MemoryStoreLike } from './memory-db.ts'
+import type { ResearchService } from './research.ts'
+import type { TaskStore, TaskStep } from './tasks.ts'
+import type { AutonomyPolicy } from './autonomy.ts'
+import { inspectEnvironment, inspectTask } from './system-tools.ts'
+import { createSourceManifest } from './self-development.ts'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve as resolvePath } from 'node:path'
@@ -30,6 +36,7 @@ export interface ToolContext {
   signal: AbortSignal
   timeoutMs?: number
   onOutput?: (chunk: string) => void
+  taskId?: string
 }
 
 export interface ToolResult {
@@ -56,8 +63,11 @@ export interface ToolRegistryOptions {
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
-  memory?: JefMemoryStore
+  memory?: MemoryStoreLike
   memoryScope?: string
+  research?: ResearchService
+  tasks?: TaskStore
+  autonomy?: AutonomyPolicy
 }
 
 const MAX_TOOL_OUTPUT = 200_000
@@ -286,8 +296,10 @@ function toolDecision(args: Record<string, unknown>): ToolResult {
 
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition>()
+  private readonly autonomy?: AutonomyPolicy
 
   constructor(options: ToolRegistryOptions = {}) {
+    this.autonomy = options.autonomy
     for (const tool of buildTools(options)) this.tools.set(tool.name, tool)
   }
 
@@ -308,6 +320,7 @@ export class ToolRegistry {
 
   needsApproval(name: string, args: Record<string, unknown>): boolean {
     const tool = this.get(name)
+    if (name === 'run_command' && this.autonomy?.useCommand(stringArg(args, 'command'))) return false
     return typeof tool.requiresApproval === 'boolean' ? tool.requiresApproval : tool.requiresApproval(args)
   }
 
@@ -340,6 +353,89 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const commandApproval = options.requireCommandApproval ?? false
   const sandboxCommands = options.sandboxCommands ?? false
   return [
+    {
+      name: 'source_manifest',
+      description: 'Hash the selected NTHN source tree and report its version and integrity. This does not build or install the app.',
+      requiresApproval: false,
+      required: [],
+      arguments: {},
+      summarize: () => 'Inspect NTHN source integrity',
+      execute: async (_args, context) => {
+        try {
+          const manifest = await createSourceManifest(context.workspace)
+          return { ok: true, summary: `Hashed ${manifest.files.length} source files for V${manifest.version}; build not run.`,
+            output: JSON.stringify({ version: manifest.version, rootSha256: manifest.rootSha256, fileCount: manifest.files.length, totalBytes: manifest.totalBytes, buildStatus: manifest.buildStatus }) }
+        } catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Source manifest failed.', output: '' } }
+      },
+    },
+    {
+      name: 'inspect_environment',
+      description: 'Read Node/Linux runtime, selected workspace, memory, CPU count, and free space. Does not inspect other Android apps.',
+      requiresApproval: false,
+      required: [],
+      arguments: {},
+      summarize: () => 'Inspect environment',
+      execute: async (_args, context) => {
+        try { return { ok: true, summary: 'Inspected app environment.', output: JSON.stringify(await inspectEnvironment(context)) } }
+        catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Environment inspection failed.', output: '' } }
+      },
+    },
+    ...(options.tasks ? [{
+      name: 'task_status',
+      description: 'Read the current task plan and progress log.',
+      requiresApproval: false,
+      required: [],
+      arguments: {},
+      summarize: () => 'Inspect current task',
+      execute: async (_args: Record<string, unknown>, context: ToolContext) => {
+        if (!context.taskId) return { ok: false, summary: 'No active task.', output: '' }
+        try { return { ok: true, summary: 'Task status available.', output: JSON.stringify(inspectTask(options.tasks!, context.taskId)) } }
+        catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Task status unavailable.', output: '' } }
+      },
+    } as ToolDefinition] : []),
+    ...(options.research ? [{
+      name: 'web_search',
+      description: 'Search the public web using the configured provider. Returns real titles, snippets, and source URLs. A provider must be configured.',
+      requiresApproval: false,
+      required: ['query'],
+      arguments: { query: 'string' },
+      summarize: (args: Record<string, unknown>) => `Search web for ${stringArg(args, 'query').slice(0, 100)}`,
+      execute: async (args: Record<string, unknown>, context: ToolContext) => {
+        try {
+          const sources = await options.research!.search(stringArg(args, 'query'), context.signal)
+          return { ok: true, summary: `${sources.length} web source(s) found.`, output: JSON.stringify(sources) }
+        } catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Web search failed.', output: '' } }
+      },
+    } as ToolDefinition, {
+      name: 'open_url',
+      description: 'Retrieve a public HTTPS page and extract readable text, its title, and final source URL.',
+      requiresApproval: false,
+      required: ['url'],
+      arguments: { url: 'string' },
+      summarize: (args: Record<string, unknown>) => `Open ${stringArg(args, 'url').slice(0, 150)}`,
+      execute: async (args: Record<string, unknown>, context: ToolContext) => {
+        try {
+          const page = await options.research!.open(stringArg(args, 'url'), context.signal)
+          return { ok: true, summary: `Opened ${page.title}.`, output: JSON.stringify(page) }
+        } catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Page retrieval failed.', output: '' } }
+      },
+    } as ToolDefinition] : []),
+    ...(options.tasks ? [{
+      name: 'set_task_plan',
+      description: 'Record a short executable plan for the current task. Pass steps as JSON array of {action,done}. Update it as work progresses.',
+      requiresApproval: false,
+      required: ['steps'],
+      arguments: { steps: 'string' },
+      summarize: () => 'Update task plan',
+      execute: async (args: Record<string, unknown>, context: ToolContext) => {
+        if (!context.taskId) return { ok: false, summary: 'No active task.', output: '' }
+        try {
+          const steps = JSON.parse(stringArg(args, 'steps')) as TaskStep[]
+          options.tasks!.setPlan(context.taskId, steps)
+          return { ok: true, summary: `Saved ${steps.length} task step(s).`, output: JSON.stringify(steps) }
+        } catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Invalid task plan.', output: '' } }
+      },
+    } as ToolDefinition] : []),
     ...(options.memory ? [{
       name: 'save_memory',
       description: 'Save a concise useful fact, preference, decision, goal, checkpoint, or verified lesson for future chats. No secrets or guesses.',
@@ -391,6 +487,33 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
         if (!options.memory!.list(options.memoryScope ?? 'personal').some(item => item.id === id)) return { ok: false, summary: 'Memory not found in this project.', output: '' }
         await options.memory!.remove(id)
         return { ok: true, summary: 'Memory deleted.', output: '' }
+      },
+    } as ToolDefinition, {
+      name: 'link_memory',
+      description: 'Connect two visible saved memories with a named relationship.',
+      requiresApproval: false,
+      required: ['from', 'to', 'relation'],
+      arguments: { from: 'string', to: 'string', relation: 'string' },
+      summarize: () => 'Connect memories',
+      execute: async (args: Record<string, unknown>) => {
+        if (!options.memory!.link) return { ok: false, summary: 'Memory relationships are unavailable.', output: '' }
+        const from = stringArg(args, 'from'), to = stringArg(args, 'to')
+        const visible = new Set(options.memory!.list(options.memoryScope ?? 'personal').map(item => item.id))
+        if (!visible.has(from) || !visible.has(to)) return { ok: false, summary: 'Memory not found in this project.', output: '' }
+        try { await options.memory!.link(from, to, stringArg(args, 'relation')); return { ok: true, summary: 'Memories connected.', output: `${from} → ${to}` } }
+        catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'Memory link failed.', output: '' } }
+      },
+    } as ToolDefinition, {
+      name: 'memory_history',
+      description: 'Read the change history and relationships of one visible saved memory.',
+      requiresApproval: false,
+      required: ['id'],
+      arguments: { id: 'string' },
+      summarize: () => 'Inspect memory history',
+      execute: async (args: Record<string, unknown>) => {
+        const id = stringArg(args, 'id')
+        if (!options.memory!.list(options.memoryScope ?? 'personal').some(item => item.id === id)) return { ok: false, summary: 'Memory not found in this project.', output: '' }
+        return { ok: true, summary: 'Memory history available.', output: JSON.stringify({ history: options.memory!.history?.(id) ?? [], links: options.memory!.links?.(id) ?? [] }) }
       },
     } as ToolDefinition] : []),
     {

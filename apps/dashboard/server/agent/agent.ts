@@ -5,7 +5,11 @@ import { randomUUID } from 'node:crypto'
 import { AgentChatStore, type Conversation, type ToolCallRecord } from './store.ts'
 import { ApprovalRegistry, PathPolicy, PermissionError } from './permissions.ts'
 import { ToolRegistry, stableSignature, type ToolRegistryOptions } from './tools.ts'
-import type { JefMemoryStore } from './memory.ts'
+import type { MemoryStoreLike } from './memory-db.ts'
+import type { ResearchService } from './research.ts'
+import type { TaskStore } from './tasks.ts'
+import type { AutonomyPolicy } from './autonomy.ts'
+import { extractMemoryCandidates } from './memory-extraction.ts'
 import { GatewayError, type ChatTurn, type Gateway } from './gateway.ts'
 import {
   assessRisk,
@@ -145,13 +149,17 @@ interface AgentOptions {
   maxSteps?: number
   now?: () => number
   writablePrefixes?: string[]
+  allowNTHNSourceWrites?: boolean
   deniedSegments?: string[]
   protectedPaths?: string[]
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
-  memory?: JefMemoryStore
+  memory?: MemoryStoreLike
   memoryScope?: string
+  research?: ResearchService
+  tasks?: TaskStore
+  autonomy?: AutonomyPolicy
 }
 
 export interface AgentState {
@@ -193,23 +201,27 @@ export class JefAgent {
   private readonly running = new Map<string, AbortController>()
   private readonly maxSteps: number
   private readonly now: () => number
-  private readonly memory?: JefMemoryStore
+  private readonly memory?: MemoryStoreLike
   private readonly memoryScope: string
   private readonly protectedPaths: string[]
+  private readonly tasks?: TaskStore
+  private readonly taskIds = new Map<string, string>()
 
   constructor(options: AgentOptions) {
     this.displayName = options.name ?? 'Jef'
     this.memory = options.memory
     this.memoryScope = options.memoryScope ?? 'personal'
     this.store = options.store
+    this.tasks = options.tasks
     this.gateway = options.gateway
     this.workspace = resolve(options.workspace ?? defaultWorkspace())
     this.paths = new PathPolicy({
       root: this.workspace,
       writablePrefixes: options.writablePrefixes ?? ['apps/dashboard'],
+      allowNTHNSourceWrites: options.allowNTHNSourceWrites,
       deniedSegments: options.deniedSegments ?? ['.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer'],
     })
-    const toolOptions: ToolRegistryOptions = { taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope }
+    const toolOptions: ToolRegistryOptions = { taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope, research: options.research, tasks: options.tasks, autonomy: options.autonomy }
     this.tools = new ToolRegistry(toolOptions)
     this.maxSteps = options.maxSteps ?? MAX_STEPS
     this.now = options.now ?? (() => Date.now())
@@ -334,11 +346,21 @@ export class JefAgent {
     const controller = new AbortController()
     this.running.set(conversationId, controller)
     const decision = this.summarizeDecision(trimmed)
+    const task = this.tasks?.create(conversationId, trimmed, this.maxSteps)
+    if (task) this.taskIds.set(conversationId, task.id)
+    const taskEmit = this.taskEmit(conversationId, emit)
     try {
       await this.store.append(conversationId, { role: 'user', content: trimmed, status: 'complete' })
-      await this.drive(conversationId, decision, controller.signal, emit)
+      if (this.memory) {
+        for (const candidate of extractMemoryCandidates(trimmed)) {
+          await this.memory.add({ scope: candidate.scope === 'personal' ? 'personal' : this.memoryScope,
+            kind: candidate.kind, text: candidate.text, source: 'User conversation' }).catch(() => undefined)
+        }
+      }
+      await this.drive(conversationId, decision, controller.signal, taskEmit)
     } finally {
       this.running.delete(conversationId)
+      this.taskIds.delete(conversationId)
     }
   }
 
@@ -354,6 +376,12 @@ export class JefAgent {
     const controller = new AbortController()
     this.running.set(conversationId, controller)
     this.pending.delete(approvalId)
+    const task = this.tasks?.latestForConversation(conversationId)
+    if (task?.status === 'awaiting-approval') {
+      this.tasks!.resume(task.id)
+      this.taskIds.set(conversationId, task.id)
+    }
+    const taskEmit = this.taskEmit(conversationId, emit)
     try {
       const assistant = conversation.messages.find(message => message.id === pending.messageId)
       const call = assistant?.toolCalls?.find(item => item.id === pending.callId)
@@ -362,7 +390,7 @@ export class JefAgent {
         call.status = 'denied'
         call.summary = 'User denied this action.'
         await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
-        emit({ type: 'tool-output', conversationId, messageId: assistant.id, call })
+        taskEmit({ type: 'tool-output', conversationId, messageId: assistant.id, call })
         await this.store.append(conversationId, {
           role: 'tool',
           content: `Tool ${pending.tool} was denied by the user. Do not retry it without a new instruction.`,
@@ -374,22 +402,22 @@ export class JefAgent {
           remaining.status = 'denied'
           remaining.summary = 'Other calls in the same response were cancelled after approval was denied.'
           await this.store.append(conversationId, { role: 'tool', content: `Tool ${remaining.tool} was cancelled.`, status: 'complete', meta: { tool: remaining.tool, callId: remaining.id, denied: true } })
-          emit({ type: 'tool-output', conversationId, messageId: assistant.id, call: remaining })
+          taskEmit({ type: 'tool-output', conversationId, messageId: assistant.id, call: remaining })
         }
         await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
-        await this.drive(conversationId, null, controller.signal, emit)
+        await this.drive(conversationId, null, controller.signal, taskEmit)
         return
       }
       this.approvals.consume(approvalId, conversationId, pending.tool, pending.signature)
       call.status = 'running'
       await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
-      emit({ type: 'tool', conversationId, messageId: assistant.id, call })
-      const result = await this.executeTool(pending.tool, pending.arguments, controller.signal)
+      taskEmit({ type: 'tool', conversationId, messageId: assistant.id, call })
+      const result = await this.executeTool(conversationId, pending.tool, pending.arguments, controller.signal)
       call.status = result.ok ? 'succeeded' : 'failed'
       call.summary = result.summary
       call.output = result.output.slice(0, 20_000)
       await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
-      emit({ type: 'tool-output', conversationId, messageId: assistant.id, call })
+      taskEmit({ type: 'tool-output', conversationId, messageId: assistant.id, call })
       await this.store.append(conversationId, {
         role: 'tool',
         content: this.toolMessage(pending.tool, result),
@@ -409,12 +437,12 @@ export class JefAgent {
             remaining.approvalExpiresAt = ticket.expiresAt
             this.pending.set(ticket.id, { id: ticket.id, conversationId, messageId: assistant.id, callId: remaining.id, tool: remaining.tool, arguments: remaining.arguments, signature, expiresAt: ticket.expiresAt })
             await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
-            emit({ type: 'approval', conversationId, messageId: assistant.id, call: remaining, approvalId: ticket.id })
+            taskEmit({ type: 'approval', conversationId, messageId: assistant.id, call: remaining, approvalId: ticket.id })
             return
           }
           remaining.status = 'running'
-          emit({ type: 'tool', conversationId, messageId: assistant.id, call: remaining })
-          const next = await this.executeTool(remaining.tool, remaining.arguments, controller.signal)
+          taskEmit({ type: 'tool', conversationId, messageId: assistant.id, call: remaining })
+          const next = await this.executeTool(conversationId, remaining.tool, remaining.arguments, controller.signal)
           remaining.status = next.ok ? 'succeeded' : 'failed'
           remaining.summary = next.summary
           remaining.output = next.output.slice(0, 20_000)
@@ -425,11 +453,27 @@ export class JefAgent {
           await this.store.append(conversationId, { role: 'tool', content: `Tool ${remaining.tool} was rejected: ${remaining.summary}`, status: 'complete', meta: { tool: remaining.tool, callId: remaining.id, ok: false } })
         }
         await this.store.update(conversationId, assistant.id, { toolCalls: assistant.toolCalls })
-        emit({ type: 'tool-output', conversationId, messageId: assistant.id, call: remaining })
+        taskEmit({ type: 'tool-output', conversationId, messageId: assistant.id, call: remaining })
       }
-      await this.drive(conversationId, null, controller.signal, emit)
+      await this.drive(conversationId, null, controller.signal, taskEmit)
     } finally {
       this.running.delete(conversationId)
+      this.taskIds.delete(conversationId)
+    }
+  }
+
+  private taskEmit(conversationId: string, emit: Emit): Emit {
+    return event => {
+      const id = this.taskIds.get(conversationId)
+      if (id && this.tasks) {
+        if (event.type === 'tool' || event.type === 'tool-output' || event.type === 'approval') {
+          this.tasks.append(id, event.type, `${event.call.tool}: ${event.call.summary ?? event.call.status}`)
+        } else if (event.type === 'done') { this.tasks.append(id, 'done', 'Task completed.'); this.tasks.finish(id, 'completed') }
+        else if (event.type === 'cancelled') { this.tasks.append(id, 'cancelled', 'Task cancelled.'); this.tasks.finish(id, 'cancelled') }
+        else if (event.type === 'error') { this.tasks.append(id, 'error', event.message); this.tasks.finish(id, 'failed') }
+        if (event.type === 'approval') this.tasks.finish(id, 'awaiting-approval')
+      }
+      emit(event)
     }
   }
 
@@ -490,6 +534,7 @@ export class JefAgent {
       'Use relative paths from the workspace root. You may request several tools in one reply.',
       'After a tool runs, its result appears as a TOOL RESULT message. Then continue the task.',
       'Some tools require user approval. If approval is required, the turn pauses and the user decides.',
+      ...(this.tasks ? ['For multi-step tasks, use set_task_plan to record concrete steps and mark them done as you verify each result.'] : []),
       'Never put secrets in tool arguments. Never attempt to read .env, credential or key files.',
       ...(this.memory ? ['You have persistent local memory across chats, and this conversation is saved. Describe this accurately when asked. Save useful preferences, decisions, goals, checkpoints, and verified lessons with save_memory. Use recall_memory when past context matters. Save a lesson after a user correction or a confirmed root cause; do not save guesses or one-off errors. When a memory is corrected, revise or forget it instead of adding a contradiction. Memory may be stale: check current files before relying on project facts.'] : []),
       '',
@@ -501,7 +546,7 @@ export class JefAgent {
     ].join('\n')
   }
 
-  private buildMessages(conversation: Conversation): ChatTurn[] {
+  private async buildMessages(conversation: Conversation): Promise<ChatTurn[]> {
     const messages: ChatTurn[] = [{ role: 'system', content: this.buildSystemPrompt() }]
     const recent = conversation.messages.slice(-RETENTION)
     let used = 0
@@ -520,7 +565,9 @@ export class JefAgent {
     }
     if (this.memory) {
       const query = [...recent].reverse().find(message => message.role === 'user')?.content ?? ''
-      const recalled = this.memory.relevant(this.memoryScope, query, 8)
+      const lexical = this.memory.relevant(this.memoryScope, query, 8)
+      const semantic = this.memory.semanticRelevant ? await this.memory.semanticRelevant(this.memoryScope, query, 8).catch(() => []) : []
+      const recalled = [...new Map([...lexical, ...semantic].map(item => [item.id, item])).values()].slice(0, 8)
       if (recalled.length) messages[0].content += '\n\nRelevant saved memory (verify project facts):\n' + recalled.map(item => `- [${item.kind}; ${item.source}] ${item.text}`).join('\n')
     }
     messages.push(...selected)
@@ -548,7 +595,7 @@ export class JefAgent {
       const intents: ToolIntent[] = []
       let failed: unknown = null
       try {
-        for await (const delta of this.gateway.stream(this.buildMessages(conversation), { signal, tools: this.tools.list() })) {
+        for await (const delta of this.gateway.stream(await this.buildMessages(conversation), { signal, tools: this.tools.list() })) {
           if (signal.aborted) break
           if (typeof delta !== 'string') {
             intents.push({ id: delta.id, tool: delta.name, arguments: delta.arguments })
@@ -635,7 +682,7 @@ export class JefAgent {
         call.summary = definition.summarize(call.arguments)
         await this.store.update(conversationId, assistant.id, { toolCalls: calls })
         emit({ type: 'tool', conversationId, messageId: assistant.id, call })
-        const result = await this.executeTool(call.tool, call.arguments, signal)
+        const result = await this.executeTool(conversationId, call.tool, call.arguments, signal)
         call.status = result.ok ? 'succeeded' : 'failed'
         call.summary = result.summary
         call.output = result.output.slice(0, 20_000)
@@ -661,14 +708,21 @@ export class JefAgent {
     }
   }
 
-  private async executeTool(name: string, args: Record<string, unknown>, signal: AbortSignal) {
+  private async executeTool(conversationId: string, name: string, args: Record<string, unknown>, signal: AbortSignal) {
     try {
-      return await this.tools.execute(name, args, {
+      const context = {
         workspace: this.workspace,
         paths: this.paths,
         signal,
         timeoutMs: 120_000,
-      })
+        taskId: this.taskIds.get(conversationId),
+      }
+      let result = await this.tools.execute(name, args, context)
+      if (!result.ok && !signal.aborted && ['web_search', 'open_url'].includes(name) && /HTTP (?:429|5\d\d)|timed out|REQUEST_FAILED/i.test(result.summary)) {
+        await new Promise(resolve => setTimeout(resolve, 250))
+        if (!signal.aborted) result = await this.tools.execute(name, args, context)
+      }
+      return result
     } catch (error) {
       const message = error instanceof PermissionError ? error.message : 'The tool failed before producing output.'
       return { ok: false, summary: message, output: message }

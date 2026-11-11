@@ -340,6 +340,7 @@ public final class NthnActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void configure() { runOnUiThread(() -> configureWebProvider(this)); }
+        @JavascriptInterface public void configureResearch() { runOnUiThread(() -> configureResearchProvider(this)); }
         @JavascriptInterface public void models() {
             executor.execute(() -> {
                 try {
@@ -477,6 +478,33 @@ public final class NthnActivity extends AppCompatActivity {
                     } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); bridge.deliver("error", message(error)); }
                 });
             }).show();
+    }
+
+    private void configureResearchProvider(final AiWebBridge bridge) {
+        final String[] choices = {"Brave Search API key", "SearXNG HTTPS endpoint"};
+        new AlertDialog.Builder(this).setTitle("Configure Jef web search")
+            .setMessage("Jef can open public HTTPS pages now. Choose a search provider to find pages by topic.")
+            .setItems(choices, (dialog, selected) -> {
+                EditText value = new EditText(this);
+                value.setSingleLine(true);
+                value.setHint(selected == 0 ? "Brave Search API key" : "https://your-search-server.example/");
+                if (selected == 0) value.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                FrameLayout frame = new FrameLayout(this);
+                frame.setPadding(dp(20), 0, dp(20), 0);
+                frame.addView(value);
+                new AlertDialog.Builder(this).setTitle(choices[selected]).setView(frame)
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Save", (next, which) -> {
+                        String entered = value.getText().toString().trim();
+                        value.setText("");
+                        if (entered.isEmpty()) { bridge.deliver("error", "Enter a search key or endpoint."); return; }
+                        try {
+                            JSONObject request = new JSONObject().put("kind", selected == 0 ? "brave" : "searxng")
+                                .put(selected == 0 ? "apiKey" : "endpoint", entered);
+                            bridge.agentAction("research-config", request.toString());
+                        } catch (Exception error) { bridge.deliver("error", message(error)); }
+                    }).show();
+            }).setNegativeButton("Cancel", null).show();
     }
 
     private void chooseWebProvider(final AiWebBridge bridge, final char[] secret, final String suggested) {
@@ -631,6 +659,8 @@ public final class NthnActivity extends AppCompatActivity {
         body.addView(themes, themesParams);
         body.addView(label("Configuration"));
         body.addView(row("Jef and AI providers", v -> show(NthnNavigation.AI)));
+        body.addView(row("Check for app updates", v -> checkForAppUpdate()));
+        body.addView(row("Private release access", v -> configureReleaseAccess()));
         body.addView(row("Terminal settings", v -> startActivity(new Intent(this, SettingsActivity.class))));
         body.addView(label("Environment"));
         body.addView(text("Linux prefix\n" + NthnBackend.PREFIX + "\n\nHome\n" + (backend == null ? "Unavailable" : backend.home().getAbsolutePath()), 14, false, R.color.nthn_muted));
@@ -652,6 +682,79 @@ public final class NthnActivity extends AppCompatActivity {
         if (NthnTheme.isDark(this) == dark) return;
         NthnTheme.setDark(this, dark);
         recreate();
+    }
+
+    private void configureReleaseAccess() {
+        EditText key = new EditText(this);
+        key.setSingleLine(true);
+        key.setHint("GitHub read token");
+        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        FrameLayout frame = new FrameLayout(this);
+        frame.setPadding(dp(20), 0, dp(20), 0);
+        frame.addView(key);
+        new AlertDialog.Builder(this).setTitle("Private release access")
+            .setMessage("Use a fine-grained GitHub token with read access to this private NTHN repository. The token stays encrypted in NTHN app storage. Leave blank to remove it.")
+            .setView(frame).setNegativeButton("Cancel", null)
+            .setPositiveButton("Save", (dialog, which) -> {
+                final String token = key.getText().toString().trim();
+                key.setText("");
+                executor.execute(() -> {
+                    try {
+                        if (backend == null) throw new IOException("AI service is unavailable.");
+                        String request = new JSONObject().put("token", token).toString();
+                        NthnBackend.CommandResult result = backend.agent("release-config", request.toCharArray());
+                        if (!result.ok()) throw new IOException(aiMessage(result.output));
+                        main.post(() -> toast(token.isEmpty() ? "Release access removed" : "Release access saved"));
+                    } catch (Exception error) { main.post(() -> toast(message(error))); }
+                });
+            }).show();
+    }
+
+    private void checkForAppUpdate() {
+        executor.execute(() -> {
+            try {
+                if (backend == null) throw new IOException("AI service is unavailable.");
+                NthnBackend.CommandResult result = backend.agent("update-check", null);
+                if (!result.ok()) throw new IOException(aiMessage(result.output));
+                JSONObject release = new JSONObject(result.output).optJSONObject("release");
+                if (release == null) { main.post(() -> toast("NTHN is up to date")); return; }
+                String version = release.optString("version", "new version");
+                long bytes = release.optLong("size", 0);
+                main.post(() -> {
+                    if (destroyed) return;
+                    new AlertDialog.Builder(this).setTitle("NTHN V" + version + " available")
+                        .setMessage("Download the verified APK (" + Math.max(1, bytes / 1_000_000) + " MB)? Android will ask before installation.")
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Download", (dialog, which) -> downloadAppUpdate(version))
+                        .show();
+                });
+            } catch (Exception error) { main.post(() -> toast(message(error))); }
+        });
+    }
+
+    private void downloadAppUpdate(String version) {
+        toast("Downloading NTHN V" + version);
+        executor.execute(() -> {
+            try {
+                NthnBackend.CommandResult result = backend.agent("update-download", null);
+                if (!result.ok()) throw new IOException(aiMessage(result.output));
+                JSONObject apk = new JSONObject(result.output).optJSONObject("apk");
+                if (apk == null) throw new IOException("No newer APK is available.");
+                File file = new File(apk.getString("path"));
+                NthnUpdater.verify(this, file);
+                main.post(() -> {
+                    if (destroyed) return;
+                    new AlertDialog.Builder(this).setTitle("Install NTHN V" + version)
+                        .setMessage("The APK checksum, app identity, version, and signing certificate were verified. Continue to Android's installer?")
+                        .setNegativeButton("Later", null)
+                        .setPositiveButton("Install", (dialog, which) -> {
+                            try {
+                                if (!NthnUpdater.install(this, file)) toast("Allow NTHN as an install source, then check for updates again.");
+                            } catch (Exception error) { toast(message(error)); }
+                        }).show();
+                });
+            } catch (Exception error) { main.post(() -> toast(message(error))); }
+        });
     }
 
     private interface TaskSuccess { void accept(Object value); }

@@ -610,6 +610,9 @@
       <div class="catalog-preview" id="catalog-preview">Add an account to discover models.</div>
 
       <p class="provider-note">Add OpenRouter, OpenAI, Anthropic, Gemini, xKiro or Groq accounts, or connect local Ollama. Keys stay in the encrypted private vault. Verified models may use paid credits.</p>
+      <div class="sidebar-heading"><span>Web research</span></div>
+      <p class="provider-note" id="research-meta">Page retrieval available · search needs setup</p>
+      <button class="button" id="configure-research" type="button">Configure web search</button>
     </aside>
 
     <button class="backdrop" id="backdrop" aria-label="Close provider sidebar"></button>
@@ -903,6 +906,8 @@
       renderHistory(snapshot.conversations || []);
       if (Array.isArray(snapshot.memories)) renderMemories(snapshot.memories);
       document.querySelector('#model-preference').value = snapshot.modelPreference || 'automatic';
+      document.querySelector('#research-meta').textContent = snapshot.research?.searchConfigured
+        ? `Web search: ${snapshot.research.provider}` : 'Page retrieval available · search needs setup';
       document.querySelector('#provider-meta').textContent = snapshot.workspaceStatus === 'empty'
         ? `Empty workspace · ${snapshot.workspace}`
         : snapshot.workspaceStatus === 'unavailable'
@@ -1021,6 +1026,10 @@
     });
     document.querySelector('#add-provider').addEventListener('click', openProviderDialog);
     document.querySelector('#refresh-models').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.models(); });
+    document.querySelector('#configure-research').addEventListener('click', () => {
+      if (window.NthnAI) window.NthnAI.configureResearch();
+      else document.querySelector('#research-meta').textContent = 'Open in the NTHN app to configure web search.';
+    });
     document.querySelector('#workspace-switch').addEventListener('click', () => { if (!busy) workspaceDialog.showModal(); });
     document.querySelector('#close-workspace').addEventListener('click', () => workspaceDialog.close());
     document.querySelector('#cancel-workspace').addEventListener('click', () => workspaceDialog.close());

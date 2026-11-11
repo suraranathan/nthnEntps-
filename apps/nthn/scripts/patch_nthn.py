@@ -43,7 +43,17 @@ replace('app/src/main/res/xml/shortcuts.xml', 'android:targetPackage="com.termux
 # Keep the terminal implementation and change only presentation resources.
 replace('app/src/main/AndroidManifest.xml', '        android:banner="@drawable/banner"\n', '')
 replace('app/src/main/AndroidManifest.xml', '''        <activity
-            android:name=".app.TermuxActivity"''', '''        <activity
+            android:name=".app.TermuxActivity"''', '''        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.nthnupdates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/nthn_update_paths" />
+        </provider>
+
+        <activity
             android:name=".app.NthnActivity"
             android:exported="true"
             android:label="@string/application_name"
@@ -143,7 +153,7 @@ for source in branding.rglob('*'):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
 
-replace('app/src/main/AndroidManifest.xml', '<application', '<application\n        android:usesCleartextTraffic="false"', 1)
+replace('app/src/main/AndroidManifest.xml', '<application', '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n\n    <application\n        android:usesCleartextTraffic="false"', 1)
 provider_sources = Path(__file__).resolve().parents[3] / 'apps/dashboard/server/ai'
 provider_assets = root / 'app/src/main/assets/nthn-ai/server/ai'
 provider_assets.mkdir(parents=True, exist_ok=True)
@@ -156,6 +166,7 @@ agent_assets.mkdir(parents=True, exist_ok=True)
 for source in agent_sources.glob('*.ts'):
     shutil.copyfile(source, agent_assets / source.name)
 shutil.copyfile(agent_sources.parent / 'providers.ts', agent_assets.parent / 'providers.ts')
+(root / 'app/src/main/assets/nthn-ai/version.txt').write_text(app_version + '\n')
 
 chat_ui = Path(__file__).resolve().parents[3] / 'apps/nthn/ui-preview/index.html'
 shutil.copyfile(chat_ui, root / 'app/src/main/assets/nthn_chat.html')
