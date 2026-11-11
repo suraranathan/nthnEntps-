@@ -12,6 +12,6 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <include layout="@layout/nthn_bottom_nav" />
+    <include android:id="@+id/nthn_bottom_nav" layout="@layout/nthn_bottom_nav" />
 
 </LinearLayout>

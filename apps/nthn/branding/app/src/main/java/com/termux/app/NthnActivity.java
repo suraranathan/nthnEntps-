@@ -83,11 +83,12 @@ public final class NthnActivity extends AppCompatActivity {
     }
 
     private void show(String requested) {
-        screen = requested == null ? NthnNavigation.HOME : requested;
+        screen = requested == null ? NthnNavigation.AI : requested;
         if (!screen.equals(NthnNavigation.HOME) && !screen.equals(NthnNavigation.AI)
             && !screen.equals(NthnNavigation.FILES) && !screen.equals(NthnNavigation.SETTINGS))
             screen = NthnNavigation.HOME;
         content.removeAllViews();
+        findViewById(R.id.nthn_bottom_nav).setVisibility(screen.equals(NthnNavigation.AI) ? View.GONE : View.VISIBLE);
         int selected;
         if (screen.equals(NthnNavigation.AI)) {
             if (title != null) title.setText("Jef"); selected = R.id.nav_ai; showAi();
@@ -263,6 +264,18 @@ public final class NthnActivity extends AppCompatActivity {
     private final class AiWebBridge {
         private final WebView web;
         AiWebBridge(WebView web) { this.web = web; }
+
+        @JavascriptInterface public void navigate(String destination) {
+            if (destination == null) return;
+            if (!destination.equals(NthnNavigation.HOME) && !destination.equals("terminal")
+                && !destination.equals(NthnNavigation.AI) && !destination.equals(NthnNavigation.FILES)
+                && !destination.equals(NthnNavigation.SETTINGS)) return;
+            main.post(() -> {
+                if (destroyed) return;
+                if (destination.equals("terminal")) NthnNavigation.open(NthnActivity.this, "terminal");
+                else if (!destination.equals(screen)) show(destination);
+            });
+        }
 
         @JavascriptInterface public void stop() {
             if (backend != null) backend.stop();

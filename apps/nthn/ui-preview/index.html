@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#08090c" />
   <title>Jef · NTHN</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       color-scheme: dark;
@@ -453,9 +456,118 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
     }
+
+    /* V1.8 chat shell: the native AI bridge and conversation rendering stay in place. */
+    :root {
+      --ink: #f4f8ff;
+      --muted: #c0cedd;
+      --faint: #aebed0;
+      --canvas: #060a10;
+      --sidebar: #0c121b;
+      --surface: #101b28;
+      --surface-strong: #172638;
+      --line: #30485e;
+      --line-soft: #263a4d;
+      --accent: #62dcff;
+      --on-accent: #05151d;
+      --accent-soft: #172f3f;
+      --sans: "Space Grotesk", "Roboto", "Segoe UI", sans-serif;
+      --mono: "IBM Plex Mono", "Roboto Mono", monospace;
+    }
+    :root[data-theme="light"] {
+      --ink: #102333;
+      --muted: #455e70;
+      --faint: #526b7d;
+      --canvas: #eef3f7;
+      --sidebar: #dfeaf2;
+      --surface: #ffffff;
+      --surface-strong: #e6f0f7;
+      --line: #b8cad8;
+      --line-soft: #cbd9e3;
+      --accent: #086f91;
+      --on-accent: #ffffff;
+      --accent-soft: #d8ebf3;
+    }
+    body { font-size: 16px; }
+    .app { grid-template-columns: 240px minmax(0, 1fr); }
+    .sidebar { overflow-y: auto; }
+    .brand { min-height: 76px; padding-inline: 20px; }
+    .brand-mark { width: 35px; height: 35px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); font: 700 19px/1 var(--sans); }
+    .brand-name { font: 700 17px/1.2 var(--sans); letter-spacing: -.04em; }
+    .brand-subtitle { font: 14px/1.3 var(--sans); color: var(--muted); }
+    .section-nav { display: grid; gap: 5px; padding: 20px 12px 16px; border-bottom: 1px solid var(--line); }
+    .section-nav button { min-height: 48px; display: flex; align-items: center; gap: 12px; width: 100%; padding: 0 14px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--muted); text-align: left; cursor: pointer; font: 600 15px/1.3 var(--sans); }
+    .section-nav button:hover, .section-nav button:focus-visible { background: var(--surface); color: var(--ink); }
+    .section-nav button[aria-current="page"] { background: var(--surface-strong); border-color: var(--line); color: var(--ink); }
+    .section-nav svg { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .add-provider, .provider, .provider-remove, .dialog-close, .button, .approval-actions button { min-height: 44px; }
+    .add-provider, .dialog-close { min-width: 44px; }
+    .sidebar-heading { font: 600 14px/1.3 var(--sans); }
+    .provider-note, .catalog-preview, .provider-model, .thread-meta { font-family: var(--sans); font-size: 13px; }
+    .provider-name, .message-body { font-size: 16px; }
+    .workspace { background: var(--canvas); }
+    .topbar { min-height: 76px; padding-inline: clamp(18px, 4vw, 48px); border-bottom-color: var(--line); }
+    .menu-button { width: 44px; height: 44px; }
+    .menu-button svg, .send-button svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .thread-name { font: 700 20px/1.2 var(--sans); letter-spacing: -.03em; }
+    .thread-meta { color: var(--muted); }
+    .thread-action, .workspace-switch { min-height: 44px; border-radius: 10px; font: 600 14px/1.2 var(--sans); }
+    .workspace-switch { background: var(--surface); border-color: var(--line); color: var(--ink); }
+    .sidebar > .workspace-switch { display: block; width: calc(100% - 32px); max-width: none; margin: 16px; text-align: left; }
+    .model-chip { display: none; }
+    .messages { width: min(100%, 760px); padding: 38px 24px 30px; }
+    .message { grid-template-columns: 30px minmax(0, 1fr); }
+    .message-mark { width: 30px; height: 30px; border-radius: 50%; font: 600 12px/1 var(--sans); }
+    .message-author { color: var(--muted); font: 600 13px/1.3 var(--sans); }
+    .message-body { line-height: 1.65; }
+    .welcome { max-width: 560px; margin: min(10vh, 80px) auto 0; text-align: center; }
+    .welcome-face { width: 144px; height: 144px; margin: 0 auto 22px; }
+    .welcome-kicker { font: 600 14px/1.3 var(--sans); letter-spacing: 0; text-transform: none; }
+    .welcome h1 { margin: 12px 0 10px; font-size: clamp(30px, 4vw, 42px); }
+    .welcome p { margin-inline: auto; font-size: 16px; }
+    .welcome-actions { justify-content: center; }
+    .welcome-actions button { min-height: 44px; padding-inline: 15px; border-radius: 22px; background: transparent; font: 500 14px/1.3 var(--sans); }
+    .activity-status { width: min(100%, 760px); padding-inline: 24px; font: 500 14px/1.3 var(--sans); }
+    .composer-wrap { padding-inline: 24px; }
+    .composer { width: min(100%, 760px); border-radius: 20px; box-shadow: none; }
+    .composer textarea { min-height: 66px; padding: 15px 17px 4px; font-size: 16px; }
+    .composer-footer { padding: 4px 11px 10px 17px; }
+    .composer-hint { font: 14px/1.3 var(--sans); }
+    .send-button { width: 44px; height: 44px; border-radius: 50%; }
+    .jef-face { position: relative; display: block; flex: none; width: 40px; height: 40px; border: 2px solid #294157; border-radius: 50%; background: #0a1522; }
+    .jef-face .eye { position: absolute; top: 38%; width: 7%; height: 13%; border-radius: 50%; background: #82e8ff; animation: jef-blink 5.4s infinite; }
+    .jef-face .eye.left { left: 32%; }
+    .jef-face .eye.right { right: 32%; }
+    .jef-face .mouth { position: absolute; top: 66%; left: 42%; width: 16%; height: 3%; border-radius: 50%; background: #82e8ff; }
+    .jef-face .thought { position: absolute; top: 22%; left: 45%; width: 10%; height: 10%; border-radius: 50%; background: #82e8ff; opacity: 0; }
+    body[data-jef-state="idle"] .jef-face { animation: jef-breathe 3.2s ease-in-out infinite; }
+    body[data-jef-state="thinking"] .jef-face .thought { opacity: 1; animation: jef-think 1s ease-in-out infinite; }
+    body[data-jef-state="thinking"] .jef-face .eye { transform: translateY(-3px); }
+    body[data-jef-state="replying"] .jef-face .mouth { animation: jef-talk .32s ease-in-out infinite alternate; }
+    @keyframes jef-blink { 0%, 44%, 46%, 100% { transform: scaleY(1); } 45% { transform: scaleY(.15); } }
+    @keyframes jef-breathe { 50% { transform: translateY(-3px); } }
+    @keyframes jef-think { 50% { transform: translateY(-7px); opacity: .35; } }
+    @keyframes jef-talk { to { transform: scaleY(3); } }
+    @media (max-width: 720px) {
+      .app { display: block; }
+      .topbar { min-height: 64px; padding-inline: 12px; }
+      .thread-name { font-size: 18px; }
+      .thread-meta { font-size: 12px; }
+      .sidebar > .workspace-switch { max-width: none; }
+      .messages { padding: 26px 16px 20px; }
+      .message-body { font-size: 16px; }
+      .welcome { margin-top: min(7vh, 52px); }
+      .welcome-face { width: 116px; height: 116px; }
+      .composer-wrap { padding-inline: 12px; }
+      .composer textarea { min-height: 58px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .jef-face, .jef-face .eye, .jef-face .thought, .jef-face .mouth { animation: none !important; }
+      body[data-jef-state="replying"] .jef-face .mouth { transform: scaleY(2); }
+    }
   </style>
 </head>
-<body>
+<body data-jef-state="idle">
   <div class="app" id="app">
     <aside class="sidebar" id="provider-sidebar" aria-label="AI providers">
       <div class="brand">
@@ -465,6 +577,16 @@
           <div class="brand-subtitle">Build with Jef</div>
         </div>
       </div>
+
+      <nav class="section-nav" aria-label="App sections">
+        <button type="button" data-native-screen="ai" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M9 15c1.5 1.3 4.5 1.3 6 0"/></svg>Jef chat</button>
+        <button type="button" data-native-screen="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 21v-7h6v7"/></svg>Home</button>
+        <button type="button" data-native-screen="terminal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></svg>Terminal</button>
+        <button type="button" data-native-screen="files"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Files</button>
+        <button type="button" data-native-screen="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Settings</button>
+      </nav>
+
+      <button class="workspace-switch" id="workspace-switch" type="button" aria-label="Choose project folder">⌁ Linux home</button>
 
       <div class="sidebar-heading"><span>Jef</span></div>
       <p class="provider-note" id="active-model">Active model: automatic</p>
@@ -494,13 +616,13 @@
 
     <main class="workspace">
       <header class="topbar">
-        <button class="menu-button" id="menu-button" aria-controls="provider-sidebar" aria-expanded="false" aria-label="Open providers">☰</button>
+        <button class="menu-button" id="menu-button" aria-controls="provider-sidebar" aria-expanded="false" aria-label="Open sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+        <span class="jef-face" aria-hidden="true"><span class="thought"></span><span class="eye left"></span><span class="eye right"></span><span class="mouth"></span></span>
         <div class="thread-title">
           <div class="thread-name">New conversation</div>
           <div class="thread-meta" id="provider-meta">Checking AI providers…</div>
         </div>
-        <button class="workspace-switch" id="workspace-switch" type="button" aria-label="Choose project folder">~/</button>
-        <button class="thread-action" id="new-conversation" type="button">New</button>
+        <button class="thread-action" id="new-conversation" type="button">New chat</button>
         <div class="model-chip" id="model-chip">automatic</div>
       </header>
 
@@ -509,14 +631,14 @@
         </div>
       </section>
 
-      <div class="activity-status" id="activity-status" role="status"><span class="activity-dot" aria-hidden="true"></span><span>Jef is working…</span><button id="stop-button" class="thread-action" type="button">Stop</button></div>
+      <div class="activity-status" id="activity-status" role="status"><span class="activity-dot" aria-hidden="true"></span><span id="activity-copy">Jef is working…</span><button id="stop-button" class="thread-action" type="button">Stop</button></div>
 
       <div class="composer-wrap">
         <form class="composer" id="composer">
           <textarea id="message-input" rows="2" placeholder="Ask Jef to inspect, build, fix, or just talk…" aria-label="Message Jef"></textarea>
           <div class="composer-footer">
             <span class="composer-hint">Enter to send · Shift + Enter for a new line</span>
-            <button class="send-button" id="send-button" type="submit" aria-label="Send message" disabled>↑</button>
+            <button class="send-button" id="send-button" type="submit" aria-label="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
           </div>
         </form>
       </div>
@@ -603,6 +725,7 @@
 
     function setBusy(value) {
       busy = value;
+      document.body.dataset.jefState = value ? 'thinking' : 'idle';
       activityStatus.classList.toggle('visible', value);
       input.disabled = value;
       sendButton.disabled = value || !input.value.trim();
@@ -615,7 +738,15 @@
     function setSidebar(open) {
       app.classList.toggle('sidebar-open', open);
       menuButton.setAttribute('aria-expanded', String(open));
+      menuButton.setAttribute('aria-label', open ? 'Close sidebar' : 'Open sidebar');
     }
+
+    document.querySelectorAll('[data-native-screen]').forEach(button => button.addEventListener('click', () => {
+      const destination = button.dataset.nativeScreen;
+      setSidebar(false);
+      if (window.NthnAI) window.NthnAI.navigate(destination);
+      else if (destination !== 'ai') location.href = `app-shell.html#${destination}`;
+    }));
 
     function selectProvider(button) {
       activeProvider?.setAttribute('aria-current', 'false');
@@ -682,12 +813,14 @@
       try { packet = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (_) { return; }
       const progress = packet?.progress;
       if (!progress || !busy) return;
-      const activityText = activityStatus.querySelector('span:last-child');
+      const activityText = document.querySelector('#activity-copy');
       if (progress.type === 'start') {
+        document.body.dataset.jefState = 'thinking';
         liveMessageId = progress.messageId;
         liveBody = appendMessage({ role: 'assistant', content: '' }).querySelector('.message-body');
         activityText.textContent = 'Jef is thinking…';
       } else if (progress.type === 'delta') {
+        document.body.dataset.jefState = 'replying';
         if (liveMessageId !== progress.messageId || !liveBody) {
           liveMessageId = progress.messageId;
           liveBody = appendMessage({ role: 'assistant', content: '' }).querySelector('.message-body');
@@ -697,6 +830,7 @@
         paragraph.textContent += progress.text || '';
         activityText.textContent = 'Jef is writing…';
       } else if (progress.type === 'tool' || progress.type === 'tool-output') {
+        document.body.dataset.jefState = 'thinking';
         activityText.textContent = `${progress.type === 'tool' ? 'Running' : 'Finished'} · ${progress.summary || progress.tool}`;
         if (progress.type === 'tool-output' && liveBody) {
           const output = document.createElement('div'); output.className = 'code-line';
@@ -704,6 +838,7 @@
           liveBody.append(output);
         }
       } else if (progress.type === 'approval') {
+        document.body.dataset.jefState = 'thinking';
         activityText.textContent = 'Jef is waiting for your approval…';
       } else if (progress.type === 'done') {
         activityText.textContent = 'Finishing…';
@@ -714,12 +849,14 @@
     function showWelcome(snapshot) {
       const empty = snapshot?.workspaceStatus === 'empty';
       const welcome = document.createElement('div'); welcome.className = 'welcome';
-      const kicker = document.createElement('div'); kicker.className = 'welcome-kicker'; kicker.textContent = empty ? 'Project needed' : 'Jef coding workspace';
-      const heading = document.createElement('h1'); heading.textContent = empty ? 'Give Jef a project to work on.' : 'What are we building today?';
+      const face = document.createElement('span'); face.className = 'jef-face welcome-face'; face.setAttribute('aria-hidden', 'true');
+      face.innerHTML = '<span class="thought"></span><span class="eye left"></span><span class="eye right"></span><span class="mouth"></span>';
+      const kicker = document.createElement('div'); kicker.className = 'welcome-kicker'; kicker.textContent = empty ? 'Project needed' : 'Jef is here';
+      const heading = document.createElement('h1'); heading.textContent = empty ? 'Give Jef a project to work on.' : 'What’s on your mind?';
       const description = document.createElement('p');
       description.textContent = empty
         ? 'Your selected folder has no visible project files. Create or clone a project in Terminal or Files, then choose its folder here. You can still chat with Jef.'
-        : 'Jef can inspect your files, propose edits, run allowed development commands, and explain what changed. You approve file changes and commands before they run.';
+        : 'Ask a question or start with your project. Jef can help with code, plans, and everyday things.';
       const actions = document.createElement('div'); actions.className = 'welcome-actions';
       const choose = document.createElement('button'); choose.type = 'button'; choose.textContent = 'Choose project'; choose.addEventListener('click', () => workspaceDialog.showModal()); actions.append(choose);
       if (!empty) for (const suggestion of ['Inspect this project', 'Find and fix an issue', 'Explain this codebase']) {
@@ -727,7 +864,7 @@
         button.addEventListener('click', () => { input.value = suggestion; input.dispatchEvent(new Event('input')); input.focus(); });
         actions.append(button);
       }
-      welcome.append(kicker, heading, description, actions); messages.append(welcome);
+      welcome.append(face, kicker, heading, description, actions); messages.append(welcome);
     }
 
     function renderProjects(snapshot) {
