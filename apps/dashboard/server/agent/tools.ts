@@ -10,6 +10,7 @@ import { readNativeAppScreen } from './app-state.ts'
 import { readNativeDeviceContext } from './device-state.ts'
 import { readNativeTerminalState } from './terminal-state.ts'
 import type { GithubWorkflowService } from './github-workflow.ts'
+import type { ReleaseUpdateService } from './release-update.ts'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve as resolvePath } from 'node:path'
@@ -69,6 +70,8 @@ export interface ToolRegistryOptions {
   terminalStatePath?: string
   githubWorkflow?: GithubWorkflowService
   installedVersion?: string
+  releaseUpdater?: ReleaseUpdateService
+  updateDirectory?: string
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
@@ -362,6 +365,35 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const commandApproval = options.requireCommandApproval ?? false
   const sandboxCommands = options.sandboxCommands ?? false
   return [
+    ...(options.releaseUpdater && options.installedVersion && options.updateDirectory ? [{
+      name: 'check_update',
+      description: 'Check the trusted NTHN GitHub Release for a newer version and validated APK metadata.',
+      requiresApproval: false,
+      required: [],
+      arguments: {},
+      summarize: () => 'Check for a newer verified NTHN release',
+      execute: async () => {
+        try {
+          const release = await options.releaseUpdater!.check(options.installedVersion!)
+          return { ok: true, summary: release ? `NTHN V${release.version} is available.` : 'No newer NTHN release is available.', output: JSON.stringify(release) }
+        } catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'NTHN update check failed.', output: '' } }
+      },
+    } as ToolDefinition, {
+      name: 'download_update',
+      description: 'Download a newer NTHN APK from the trusted GitHub Release and retain it only after exact size and SHA-256 verification.',
+      requiresApproval: true,
+      required: [],
+      arguments: {},
+      summarize: () => 'Download and verify the newer NTHN APK',
+      execute: async () => {
+        try {
+          const release = await options.releaseUpdater!.check(options.installedVersion!)
+          if (!release) return { ok: false, summary: 'No newer NTHN release is available.', output: '' }
+          const apk = await options.releaseUpdater!.download(release, options.updateDirectory!)
+          return { ok: true, summary: `Downloaded and verified NTHN V${release.version}.`, output: JSON.stringify({ version: release.version, ...apk }) }
+        } catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'NTHN update download failed.', output: '' } }
+      },
+    } as ToolDefinition] : []),
     ...(options.githubWorkflow && options.installedVersion ? [{
       name: 'github_dispatch',
       description: 'Dispatch the fixed NTHN Android build workflow for a reviewed branch after confirming that it contains a newer app version.',

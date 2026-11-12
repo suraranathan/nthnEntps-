@@ -240,6 +240,8 @@ async function main(): Promise<void> {
     terminalStatePath: join(agentDirectory, 'terminal-state.json'),
     githubWorkflow,
     installedVersion: appVersion(),
+    releaseUpdater: updater,
+    updateDirectory,
     writablePrefixes: ['.'],
     allowNTHNSourceWrites: choice.relative === 'nthnEntps' && existsSync(join(choice.workspace, 'apps/nthn/VERSION')) && existsSync(join(choice.workspace, 'apps/dashboard/server/agent/agent.ts')),
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],

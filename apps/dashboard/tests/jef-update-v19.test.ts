@@ -8,6 +8,9 @@ import { ReleaseUpdateService, parseRelease, parseChecksum, releaseHeaders } fro
 import { loadReleaseConfig, saveReleaseConfig } from '../server/agent/release-config.ts'
 import { CredentialVault } from '../server/ai/credential-vault.ts'
 import { randomBytes } from 'node:crypto'
+import { mkdir } from 'node:fs/promises'
+import { PathPolicy } from '../server/agent/permissions.ts'
+import { ToolRegistry } from '../server/agent/tools.ts'
 
 test('release metadata accepts only the expected NTHN APK and checksum URLs', () => {
   const base = 'https://github.com/suraranathan/nthnEntps-/releases/download/v1.9/'
@@ -62,4 +65,27 @@ test('private release token is encrypted and can be cleared by its owner', async
   await saveReleaseConfig(file, { token: '' }, vault)
   assert.equal(loadReleaseConfig(file, vault), undefined)
   vault.destroy()
+})
+
+test('Jef checks and downloads only a verified newer NTHN release with approval', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'jef-update-tools-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const workspace = join(root, 'workspace'), downloads = join(root, 'downloads')
+  await mkdir(workspace)
+  const apk = Buffer.from('verified V2 apk fixture')
+  const sha = createHash('sha256').update(apk).digest('hex')
+  const service = new ReleaseUpdateService({
+    fetchText: async url => url.pathname.endsWith('.sha256') ? `${sha}  nthn-V2.apk\n` : JSON.stringify({ tag_name: 'v2', assets: [
+      { name: 'nthn-V2.apk', browser_download_url: 'https://github.com/suraranathan/nthnEntps-/releases/download/v2/nthn-V2.apk', size: apk.length },
+      { name: 'nthn-V2.sha256', browser_download_url: 'https://github.com/suraranathan/nthnEntps-/releases/download/v2/nthn-V2.sha256', size: 80 },
+    ] }),
+    download: async (_url, file) => { await writeFile(file, apk); return { bytes: apk.length, sha256: sha } },
+  })
+  const tools = new ToolRegistry({ releaseUpdater: service, installedVersion: '1.9', updateDirectory: downloads })
+  const context = { workspace, paths: new PathPolicy({ root: workspace, writablePrefixes: ['.'] }), signal: new AbortController().signal }
+  assert.equal(tools.needsApproval('download_update', {}), true)
+  assert.equal(JSON.parse((await tools.execute('check_update', {}, context)).output).version, '2')
+  const result = await tools.execute('download_update', {}, context)
+  assert.equal(result.ok, true)
+  assert.deepEqual(await readFile(JSON.parse(result.output).path), apk)
 })
