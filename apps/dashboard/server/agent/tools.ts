@@ -8,6 +8,7 @@ import { inspectEnvironment, inspectTask } from './system-tools.ts'
 import { createSourceManifest } from './self-development.ts'
 import { readNativeAppScreen } from './app-state.ts'
 import { readNativeDeviceContext } from './device-state.ts'
+import { readNativeTerminalState } from './terminal-state.ts'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve as resolvePath } from 'node:path'
@@ -64,6 +65,7 @@ export interface ToolDefinition {
 export interface ToolRegistryOptions {
   appStatePath?: string
   deviceStatePath?: string
+  terminalStatePath?: string
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
@@ -357,6 +359,18 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const commandApproval = options.requireCommandApproval ?? false
   const sandboxCommands = options.sandboxCommands ?? false
   return [
+    ...(options.terminalStatePath ? [{
+      name: 'inspect_terminal',
+      description: 'Read a bounded snapshot of the currently visible native terminal session. Requires approval because terminal output may contain sensitive data. This does not send input to the open terminal.',
+      requiresApproval: true,
+      required: [],
+      arguments: {},
+      summarize: () => 'Inspect visible terminal output',
+      execute: async () => {
+        try { return { ok: true, summary: 'Read bounded native terminal snapshot.', output: JSON.stringify(await readNativeTerminalState(options.terminalStatePath!)) } }
+        catch { return { ok: false, summary: 'Native terminal state is unavailable.', output: '' } }
+      },
+    } as ToolDefinition] : []),
     ...(options.deviceStatePath ? [{
       name: 'inspect_device_context',
       description: 'Read the latest camera, location, speech, or shared-file context explicitly granted through the native NTHN app.',

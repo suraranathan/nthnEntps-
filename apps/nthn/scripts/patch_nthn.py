@@ -146,6 +146,20 @@ replace('app/src/main/java/com/termux/app/TermuxActivity.java', '        setTerm
 replace('app/src/main/java/com/termux/app/TermuxActivity.java', '                    if (mTermuxService == null) return; // Activity might have been destroyed.', '                    if (mTermuxService == null) return; // Activity might have been destroyed.\n                    NthnAiInstaller.install(this);')
 replace('app/src/main/java/com/termux/app/TermuxActivity.java', '        setActivityTheme();', '        setActivityTheme();\n        NthnTheme.apply(this);')
 replace('app/src/main/java/com/termux/app/TermuxActivity.java', '        setContentView(R.layout.activity_termux);', '        setContentView(R.layout.activity_termux);\n        NthnNavigation.attach(this, R.id.nav_terminal);')
+replace('app/src/main/java/com/termux/app/TermuxActivity.java', '''        if (mTermuxTerminalViewClient != null)
+            mTermuxTerminalViewClient.onResume();''', '''        if (mTermuxTerminalViewClient != null)
+            mTermuxTerminalViewClient.onResume();
+
+        recordTerminalState(getCurrentSession());''')
+replace('app/src/main/java/com/termux/app/TermuxActivity.java', '''    public TermuxAppSharedPreferences getPreferences() {''', '''    public void recordTerminalState(TerminalSession session) {
+        NthnTerminalState.record(this, session);
+    }
+
+    public TermuxAppSharedPreferences getPreferences() {''')
+replace('app/src/main/java/com/termux/app/terminal/TermuxTerminalSessionActivityClient.java', '''        if (mActivity.getCurrentSession() == changedSession) mActivity.getTerminalView().onScreenUpdated();''', '''        if (mActivity.getCurrentSession() == changedSession) {
+            mActivity.getTerminalView().onScreenUpdated();
+            mActivity.recordTerminalState(changedSession);
+        }''')
 
 for source in branding.rglob('*'):
     if source.is_file():

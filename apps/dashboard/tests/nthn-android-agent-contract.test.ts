@@ -72,6 +72,15 @@ test('Android navigation records real native screen state for Jef', async () => 
   assert.match(recorder, /app-state\.json/)
 })
 
+test('native terminal publishes a bounded read-only transcript snapshot for Jef', async () => {
+  const patch = await source('scripts/patch_nthn.py')
+  const recorder = await source('branding/app/src/main/java/com/termux/app/NthnTerminalState.java')
+  assert.match(patch, /recordTerminalState\(changedSession\)/)
+  assert.match(recorder, /terminal-state\.json/)
+  assert.match(recorder, /getTranscriptText/)
+  assert.match(recorder, /MAX_TRANSCRIPT/)
+})
+
 test('Android provider UI confirms detected keys, discovers models and removes accounts', async () => {
   const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
   const ui = await source('ui-preview/index.html')

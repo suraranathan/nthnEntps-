@@ -235,6 +235,18 @@ test('Jef reads permission-gated device context reported by the native app', asy
   assert.equal(JSON.parse(result.output).kind, 'location')
 })
 
+test('Jef reads a bounded snapshot of the visible native terminal', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const statePath = join(directory, 'terminal-state.json')
+  await writeFile(statePath, JSON.stringify({ title: 'bash', cwd: '/data/data/com.nthn/files/home', running: true, transcript: '$ pwd\n/data/data/com.nthn/files/home', observedAt: '2026-11-12T00:00:00.000Z' }))
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  const tools = new ToolRegistry({ terminalStatePath: statePath })
+  const result = await tools.execute('inspect_terminal', {}, { workspace, paths, signal: new AbortController().signal })
+  assert.equal(result.ok, true)
+  assert.equal(JSON.parse(result.output).title, 'bash')
+  assert.match(result.output, /data\/data\/com\.nthn\/files\/home/)
+})
+
 test('Jef carries relevant personal and project memories into a new chat and can save a lesson', async t => {
   const { directory, workspace } = await workspaceFixture(t)
   const memory = new JefMemoryStore(join(directory, 'memory.json'), workspace)

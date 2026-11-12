@@ -229,6 +229,7 @@ async function main(): Promise<void> {
     store, gateway, workspace: choice.workspace, name: 'Jef', memory, memoryScope, research, tasks, autonomy,
     appStatePath: join(agentDirectory, 'app-state.json'),
     deviceStatePath: join(agentDirectory, 'device-state.json'),
+    terminalStatePath: join(agentDirectory, 'terminal-state.json'),
     writablePrefixes: ['.'],
     allowNTHNSourceWrites: choice.relative === 'nthnEntps' && existsSync(join(choice.workspace, 'apps/nthn/VERSION')) && existsSync(join(choice.workspace, 'apps/dashboard/server/agent/agent.ts')),
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],
