@@ -1,6 +1,18 @@
 import type { CatalogEntry } from '../ai/contracts.ts'
 
-export type JefModelPreference = 'automatic' | 'low-cost'
+export type JefModelPreference = 'automatic' | 'low-cost' | 'free-only' | 'automatic-free' | 'manual-free'
+
+export function normalizeJefPreference(value: unknown): 'automatic-free' | 'manual-free' {
+  return value === 'manual-free' ? 'manual-free' : 'automatic-free'
+}
+
+export function isFreeJefCandidate(entry: CatalogEntry): boolean {
+  return entry.pricing.freeAccess.kind === 'verified-zero-price' || entry.pricing.freeAccess.kind === 'local-no-api-fee'
+}
+
+export function jefModelPermitted(entry: CatalogEntry, preference: JefModelPreference): boolean {
+  return !['free-only', 'automatic-free', 'manual-free'].includes(preference) || isFreeJefCandidate(entry)
+}
 
 function codingRank(entry: CatalogEntry): number {
   const name = `${entry.route.model.displayName} ${entry.route.ref.nativeModelId}`.toLowerCase()

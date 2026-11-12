@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync, existsSync, unlinkSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, existsSync, unlinkSync, mkdirSync } from 'node:fs'
 import { resolve, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
@@ -12,10 +12,12 @@ import { connectionSummary, openRouterAccounts, selectionConnection } from './nt
 import { jefCanUse, jefProbeCapabilities, jefTransportSupportsTools } from './jef-model-policy.ts'
 import { jefAvailability } from './jef-model-availability.ts'
 import { providerKeyHint } from './provider-key-hints.ts'
+import { openRouterAllowanceSnapshot } from './openrouter-quota.ts'
 import type { ManagedConnection } from './management-types.ts'
 
 const directory = resolve(fileURLToPath(new URL('../../', import.meta.url)), '.local/ai')
 const selectedPath = join(directory, 'selected-route.json')
+const preferencePath = resolve(directory, '../agent/model-preference.json')
 const baseUrl = 'https://openrouter.ai/api/v1'
 const providerEndpoints: Record<string, { baseUrl: string; networkPolicy: 'public' | 'loopback'; label: string }> = {
   openai: { baseUrl: 'https://api.openai.com/v1', networkPolicy: 'public', label: 'OpenAI' },
@@ -74,10 +76,22 @@ function selected(): { routeId: string, modelId: string | null, connectionId?: s
   }
   catch { return null }
 }
+
+function freeOnly(): boolean {
+  return true
+}
+
+function allowedForJef(entry: import('./contracts.ts').CatalogEntry): boolean {
+  return !freeOnly() || ['verified-zero-price', 'local-no-api-fee'].includes(entry.pricing.freeAccess.kind)
+}
 function saveSelected(routeId: string, modelId: string, connectionId: string, manual = false) {
+  mkdirSync(dirname(preferencePath), { recursive: true, mode: 0o700 })
   const temporary = `${selectedPath}.${process.pid}.tmp`
-  writeFileSync(temporary, JSON.stringify({ routeId, modelId, connectionId, manual }), { mode: 0o600, flag: 'wx' })
+  writeFileSync(temporary, JSON.stringify({ routeId, modelId, connectionId, manual, ...(!manual ? { preference: 'automatic-free' } : {}) }), { mode: 0o600, flag: 'wx' })
   renameSync(temporary, selectedPath)
+  const preferenceTemporary = `${preferencePath}.${process.pid}.tmp`
+  writeFileSync(preferenceTemporary, JSON.stringify(manual ? 'manual-free' : 'automatic-free'), { mode: 0o600, flag: 'wx' })
+  renameSync(preferenceTemporary, preferencePath)
 }
 
 function rankForJef(name: string, modelId: string): number {
@@ -101,7 +115,7 @@ async function autoSelect(connectionIds: string[]): Promise<{ modelId: string; r
   let cursor: string | undefined
   do {
     const page = await catalog.search({ connectionIds: refreshed, outputModality: 'text', pageSize: 100, ...(cursor ? { cursor } : {}) })
-    candidates.push(...page.entries.filter(entry => entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable' && jefTransportSupportsTools(entry.route.providerId) && entry.route.model.capabilities.tools !== 'unsupported'))
+    candidates.push(...page.entries.filter(entry => entry.route.lifecycle === 'active' && entry.route.access.state !== 'unavailable' && jefTransportSupportsTools(entry.route.providerId) && entry.route.model.capabilities.tools !== 'unsupported' && allowedForJef(entry)))
     cursor = page.nextCursor ?? undefined
   } while (cursor)
   candidates.sort((left, right) => rankForJef(left.route.model.displayName, left.route.ref.nativeModelId) - rankForJef(right.route.model.displayName, right.route.ref.nativeModelId)
@@ -185,10 +199,11 @@ try {
   const connection = openRouterAccounts(accounts)[0]
   if (command === 'accounts') {
     const current = selected()
-    console.log(JSON.stringify(accounts.map(account => ({
+    console.log(JSON.stringify(await Promise.all(accounts.map(async account => ({
       id: account.id, label: account.label, providerId: account.providerId, connection: connectionSummary(account), credentials: account.credentials.state,
       selected: current?.connectionId === account.id,
-    })), null, 2))
+      allowance: openRouterAllowanceSnapshot(await manager!.keyAllowance(account.id, account.revision).catch(() => null)),
+    }))), null, 2))
   } else if (command === 'configure' || command === 'configure-stdin' || command === 'add-account' || command === 'add-account-stdin' || command === 'add-provider-stdin') {
     const provider = command === 'add-provider-stdin' ? providerEndpoints[argument ?? ''] : null
     if (command === 'add-provider-stdin' && !provider) throw new ManagementError('INVALID_INPUT')
@@ -278,7 +293,7 @@ try {
         if (!argument) throw new ManagementError('INVALID_INPUT')
         for (const account of usable) await catalog.refresh(account.id)
         const page = await catalog.search({ connectionIds: usable.map(account => account.id), search: argument, pageSize: 100 })
-        const routes = page.entries.filter(item => item.route.ref.nativeModelId === argument).map(item => item.route)
+        const routes = page.entries.filter(item => item.route.ref.nativeModelId === argument && allowedForJef(item)).map(item => item.route)
         if (!routes.length) throw new ManagementError('MODEL_UNAVAILABLE')
         verification = new VerificationService(manager, catalog)
         let checkedAt = ''

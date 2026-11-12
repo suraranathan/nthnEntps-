@@ -45,6 +45,7 @@ public final class NthnActivity extends AppCompatActivity {
     private FrameLayout content;
     private TextView title;
     private NthnBackend backend;
+    private NthnDeviceController devices;
     private File currentDirectory;
     private String screen = NthnNavigation.HOME;
     private boolean destroyed;
@@ -54,6 +55,7 @@ public final class NthnActivity extends AppCompatActivity {
         super.onCreate(state);
         setContentView(R.layout.activity_nthn);
         content = findViewById(R.id.nthn_content);
+        devices = new NthnDeviceController(this);
         title = null;
         try {
             backend = new NthnBackend(this);
@@ -78,8 +80,19 @@ public final class NthnActivity extends AppCompatActivity {
     @Override protected void onDestroy() {
         destroyed = true;
         if (backend != null) backend.stop();
+        if (devices != null) devices.destroy();
         executor.shutdownNow();
         super.onDestroy();
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (devices != null) devices.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (devices != null) devices.onPermissionResult(requestCode, grantResults);
     }
 
     private void show(String requested) {
@@ -87,6 +100,7 @@ public final class NthnActivity extends AppCompatActivity {
         if (!screen.equals(NthnNavigation.HOME) && !screen.equals(NthnNavigation.AI)
             && !screen.equals(NthnNavigation.FILES) && !screen.equals(NthnNavigation.SETTINGS))
             screen = NthnNavigation.HOME;
+        NthnAppState.record(this, screen);
         content.removeAllViews();
         findViewById(R.id.nthn_bottom_nav).setVisibility(screen.equals(NthnNavigation.AI) ? View.GONE : View.VISIBLE);
         int selected;
@@ -303,7 +317,7 @@ public final class NthnActivity extends AppCompatActivity {
         }
         @JavascriptInterface public void memories() { agentAction("memory-list", null); }
         @JavascriptInterface public void modelPreference(String value) {
-            if (!"automatic".equals(value) && !"low-cost".equals(value)) return;
+            if (!"automatic-free".equals(value) && !"manual-free".equals(value)) return;
             try { agentAction("model-preference", new JSONObject().put("value", value).toString()); }
             catch (Exception error) { deliver("error", message(error)); }
         }
@@ -323,6 +337,11 @@ public final class NthnActivity extends AppCompatActivity {
             catch (Exception error) { deliver("error", message(error)); }
         }
         @JavascriptInterface public boolean darkTheme() { return NthnTheme.isDark(NthnActivity.this); }
+        @JavascriptInterface public void captureCamera() { runOnUiThread(() -> devices.captureCamera(this::deliver)); }
+        @JavascriptInterface public void listen() { runOnUiThread(() -> devices.listen(this::deliver)); }
+        @JavascriptInterface public void locate() { runOnUiThread(() -> devices.locate(this::deliver)); }
+        @JavascriptInterface public void importFile() { runOnUiThread(() -> devices.importFile(this::deliver)); }
+        @JavascriptInterface public void speak(String text) { runOnUiThread(() -> devices.speak(this::deliver, text)); }
 
         @JavascriptInterface public void send(String request) {
             if (request == null || request.trim().isEmpty()) return;
@@ -661,6 +680,8 @@ public final class NthnActivity extends AppCompatActivity {
         body.addView(row("Jef and AI providers", v -> show(NthnNavigation.AI)));
         body.addView(row("Check for app updates", v -> checkForAppUpdate()));
         body.addView(row("Private release access", v -> configureReleaseAccess()));
+        body.addView(row("GitHub update write access", v -> configureGithubWriteAccess()));
+        body.addView(row("Run NTHN build workflow", v -> dispatchGithubWorkflow()));
         body.addView(row("Terminal settings", v -> startActivity(new Intent(this, SettingsActivity.class))));
         body.addView(label("Environment"));
         body.addView(text("Linux prefix\n" + NthnBackend.PREFIX + "\n\nHome\n" + (backend == null ? "Unavailable" : backend.home().getAbsolutePath()), 14, false, R.color.nthn_muted));
@@ -705,6 +726,56 @@ public final class NthnActivity extends AppCompatActivity {
                         NthnBackend.CommandResult result = backend.agent("release-config", request.toCharArray());
                         if (!result.ok()) throw new IOException(aiMessage(result.output));
                         main.post(() -> toast(token.isEmpty() ? "Release access removed" : "Release access saved"));
+                    } catch (Exception error) { main.post(() -> toast(message(error))); }
+                });
+            }).show();
+    }
+
+    private void configureGithubWriteAccess() {
+        EditText key = new EditText(this);
+        key.setSingleLine(true);
+        key.setHint("GitHub Actions write token");
+        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        FrameLayout frame = new FrameLayout(this);
+        frame.setPadding(dp(20), 0, dp(20), 0);
+        frame.addView(key);
+        new AlertDialog.Builder(this).setTitle("GitHub update write access")
+            .setMessage("Use a fine-grained token limited to this repository with Actions write and Contents read permissions. This token is stored separately from release read access. Leave blank to remove it.")
+            .setView(frame).setNegativeButton("Cancel", null)
+            .setPositiveButton("Save", (dialog, which) -> {
+                final String token = key.getText().toString().trim();
+                key.setText("");
+                executor.execute(() -> {
+                    try {
+                        if (backend == null) throw new IOException("AI service is unavailable.");
+                        String request = new JSONObject().put("token", token).toString();
+                        NthnBackend.CommandResult result = backend.agent("github-write-config", request.toCharArray());
+                        if (!result.ok()) throw new IOException(aiMessage(result.output));
+                        main.post(() -> toast(token.isEmpty() ? "GitHub write access removed" : "GitHub write access saved"));
+                    } catch (Exception error) { main.post(() -> toast(message(error))); }
+                });
+            }).show();
+    }
+
+    private void dispatchGithubWorkflow() {
+        EditText branch = new EditText(this);
+        branch.setSingleLine(true);
+        branch.setText("codex/jef-v2");
+        FrameLayout frame = new FrameLayout(this);
+        frame.setPadding(dp(20), 0, dp(20), 0);
+        frame.addView(branch);
+        new AlertDialog.Builder(this).setTitle("Run NTHN build workflow?")
+            .setMessage("This dispatches the real GitHub Actions workflow for the branch below. Build and release steps may run on GitHub. Review the branch before confirming.")
+            .setView(frame).setNegativeButton("Cancel", null)
+            .setPositiveButton("Dispatch", (dialog, which) -> {
+                final String ref = branch.getText().toString().trim();
+                executor.execute(() -> {
+                    try {
+                        if (backend == null) throw new IOException("AI service is unavailable.");
+                        String request = new JSONObject().put("branch", ref).toString();
+                        NthnBackend.CommandResult result = backend.agent("github-dispatch", request.toCharArray());
+                        if (!result.ok()) throw new IOException(aiMessage(result.output));
+                        main.post(() -> toast("GitHub build dispatched for " + ref));
                     } catch (Exception error) { main.post(() -> toast(message(error))); }
                 });
             }).show();

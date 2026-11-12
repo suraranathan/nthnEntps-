@@ -25,6 +25,7 @@ const messages: Record<string, string> = {
   NOT_FOUND: 'Connection not found.', CONFLICT: 'Connection changed; reload its current revision.',
   CREDENTIAL_REQUIRED: 'This provider requires a credential.', INVALID_CREDENTIAL: 'Invalid credential format.',
   AUTH_REJECTED: 'Provider rejected credentials or access.', RATE_LIMITED: 'Provider rate limit reached.',
+  REQUEST_TOO_LARGE: 'Provider rejected the request because it is too large.', UPSTREAM_UNAVAILABLE: 'Provider or upstream model is unavailable.',
   REDIRECT_BLOCKED: 'Provider redirect rejected.', PROBE_FAILED: 'Provider connection test failed.',
   INVALID_RESPONSE: 'Provider response could not be validated.', RESPONSE_LIMIT: 'Provider response exceeded the test limit.',
   REQUEST_FAILED: 'Provider request failed or timed out.', STORE_FAILED: 'Provider storage operation failed.',

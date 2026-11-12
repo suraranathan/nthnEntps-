@@ -6,6 +6,8 @@ import type { TaskStore, TaskStep } from './tasks.ts'
 import type { AutonomyPolicy } from './autonomy.ts'
 import { inspectEnvironment, inspectTask } from './system-tools.ts'
 import { createSourceManifest } from './self-development.ts'
+import { readNativeAppScreen } from './app-state.ts'
+import { readNativeDeviceContext } from './device-state.ts'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve as resolvePath } from 'node:path'
@@ -60,6 +62,8 @@ export interface ToolDefinition {
 }
 
 export interface ToolRegistryOptions {
+  appStatePath?: string
+  deviceStatePath?: string
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
@@ -353,6 +357,30 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const commandApproval = options.requireCommandApproval ?? false
   const sandboxCommands = options.sandboxCommands ?? false
   return [
+    ...(options.deviceStatePath ? [{
+      name: 'inspect_device_context',
+      description: 'Read the latest camera, location, speech, or shared-file context explicitly granted through the native NTHN app.',
+      requiresApproval: false,
+      required: [],
+      arguments: {},
+      summarize: () => 'Inspect latest granted device context',
+      execute: async () => {
+        try { return { ok: true, summary: 'Read latest granted device context.', output: JSON.stringify(await readNativeDeviceContext(options.deviceStatePath!)) } }
+        catch { return { ok: false, summary: 'No granted device context is available.', output: '' } }
+      },
+    } as ToolDefinition] : []),
+    ...(options.appStatePath ? [{
+      name: 'inspect_app_screen',
+      description: 'Read the current NTHN app screen name and update time reported by the native app. This is structured app state, not a screenshot.',
+      requiresApproval: false,
+      required: [],
+      arguments: {},
+      summarize: () => 'Inspect current NTHN screen',
+      execute: async () => {
+        try { return { ok: true, summary: 'Read native NTHN screen state.', output: JSON.stringify(await readNativeAppScreen(options.appStatePath!)) } }
+        catch { return { ok: false, summary: 'Native NTHN screen state is unavailable.', output: '' } }
+      },
+    } as ToolDefinition] : []),
     {
       name: 'source_manifest',
       description: 'Hash the selected NTHN source tree and report its version and integrity. This does not build or install the app.',

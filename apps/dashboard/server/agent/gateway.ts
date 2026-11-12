@@ -52,6 +52,8 @@ function friendly(error: unknown): GatewayError {
       INCOMPATIBLE: 'The provider rejected the request shape.',
       REDIRECT_BLOCKED: 'The provider attempted a redirect, which is blocked.',
       RESPONSE_LIMIT: 'The provider response exceeded the size limit.',
+      REQUEST_TOO_LARGE: 'The provider rejected the request because it is too large.',
+      UPSTREAM_UNAVAILABLE: 'The provider or its upstream model is unavailable.',
       REQUEST_FAILED: 'The provider request failed.',
       PROBE_FAILED: 'The provider request failed.',
     }
@@ -305,7 +307,7 @@ export class ResolvedRouteGateway implements Gateway {
         }
       } catch (error) {
         const failure = friendly(error)
-        if (!emitted && !options.signal?.aborted && ['REQUEST_FAILED', 'DNS_FAILED', 'RATE_LIMITED', 'PROBE_FAILED', 'MODEL_UNAVAILABLE', 'INSUFFICIENT_CREDITS', 'INCOMPATIBLE'].includes(failure.code)) {
+        if (!emitted && !options.signal?.aborted && ['REQUEST_FAILED', 'DNS_FAILED', 'RATE_LIMITED', 'PROBE_FAILED', 'MODEL_UNAVAILABLE', 'INSUFFICIENT_CREDITS', 'INCOMPATIBLE', 'REQUEST_TOO_LARGE', 'UPSTREAM_UNAVAILABLE'].includes(failure.code)) {
           excluded.add(route.id)
           previousFailure = failure
           continue

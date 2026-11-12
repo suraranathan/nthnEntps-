@@ -4,6 +4,15 @@ import { HttpProvider, ModelRouter } from '../server/providers.ts'
 import { AI_CONTRACT_VERSION } from '../server/ai/contracts.ts'
 import type { LegacyProviderBinding, ProviderConnection, ServerConnection } from '../server/ai/contracts.ts'
 import { modelRouteKey } from '../server/ai/route-identity.ts'
+import { providerHttpFailureCode } from '../server/ai/endpoint-policy.ts'
+
+test('provider HTTP failures retain actionable status classes without response bodies', () => {
+  assert.equal(providerHttpFailureCode(402), 'INSUFFICIENT_CREDITS')
+  assert.equal(providerHttpFailureCode(408), 'REQUEST_FAILED')
+  assert.equal(providerHttpFailureCode(413), 'REQUEST_TOO_LARGE')
+  assert.equal(providerHttpFailureCode(429), 'RATE_LIMITED')
+  assert.equal(providerHttpFailureCode(503), 'UPSTREAM_UNAVAILABLE')
+})
 
 const ref = (connectionId: string, nativeModelId = 'vendor/model', upstreamEndpointId: string | null = null) => ({ connectionId, nativeModelId, upstreamEndpointId })
 

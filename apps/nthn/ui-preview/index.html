@@ -360,6 +360,9 @@
 
     .composer-footer { display: flex; align-items: center; gap: 10px; padding: 8px 9px 9px 15px; }
     .composer-hint { flex: 1; color: var(--faint); font: 10px/1.2 var(--mono); }
+    .device-actions { display: flex; gap: 4px; }
+    .device-action { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+    .device-action:hover, .device-action:focus-visible { background: var(--panel); color: var(--ink); }
 
     .send-button {
       display: grid;
@@ -590,7 +593,7 @@
 
       <div class="sidebar-heading"><span>Jef</span></div>
       <p class="provider-note" id="active-model">Active model: automatic</p>
-      <div class="field model-preference"><label for="model-preference">Automatic model choice</label><select id="model-preference"><option value="automatic">Coding focused</option><option value="low-cost">Lower listed price</option></select></div>
+      <div class="field model-preference"><label for="model-preference">Free model choice</label><select id="model-preference"><option value="automatic-free">Automatic free</option><option value="manual-free">Manual free</option></select></div>
       <div class="sidebar-actions"><button class="thread-action" id="history-button" type="button">Saved chats</button><button class="thread-action" id="memory-button" type="button">Memory</button></div>
       <div class="sidebar-heading">
         <span>Providers</span>
@@ -606,10 +609,10 @@
       </div>
 
       <div class="sidebar-heading"><span>Discovered models</span><button class="add-provider" id="refresh-models" type="button" aria-label="Refresh models" title="Refresh models">↻</button></div>
-      <p class="provider-note">Listed models are untested until Jef verifies real access. Tap a model to test and select it.</p>
+      <p class="provider-note">Listed models are untested until Jef verifies real access. Tap a model to test and select it. Free-only mode refuses paid or unknown-price models.</p>
       <div class="catalog-preview" id="catalog-preview">Add an account to discover models.</div>
 
-      <p class="provider-note">Add OpenRouter, OpenAI, Anthropic, Gemini, xKiro or Groq accounts, or connect local Ollama. Keys stay in the encrypted private vault. Verified models may use paid credits.</p>
+      <p class="provider-note">Add OpenRouter, OpenAI, Anthropic, Gemini, xKiro or Groq accounts, or connect local Ollama. Keys stay in the encrypted private vault. Free-only mode rejects paid and unknown-price models.</p>
       <div class="sidebar-heading"><span>Web research</span></div>
       <p class="provider-note" id="research-meta">Page retrieval available · search needs setup</p>
       <button class="button" id="configure-research" type="button">Configure web search</button>
@@ -641,6 +644,13 @@
           <textarea id="message-input" rows="2" placeholder="Ask Jef to inspect, build, fix, or just talk…" aria-label="Message Jef"></textarea>
           <div class="composer-footer">
             <span class="composer-hint">Enter to send · Shift + Enter for a new line</span>
+            <span class="device-actions" aria-label="Device input">
+              <button class="device-action" id="listen-button" type="button" aria-label="Speak to Jef" title="Speak to Jef">●</button>
+              <button class="device-action" id="camera-button" type="button" aria-label="Capture camera image" title="Camera">▣</button>
+              <button class="device-action" id="location-button" type="button" aria-label="Share current location" title="Location">⌖</button>
+              <button class="device-action" id="file-button" type="button" aria-label="Import a shared file" title="Shared file">＋</button>
+              <button class="device-action" id="voice-button" type="button" aria-label="Speak Jef's latest reply" title="Speak reply">◖</button>
+            </span>
             <button class="send-button" id="send-button" type="submit" aria-label="Send message" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
           </div>
         </form>
@@ -905,7 +915,7 @@
       renderProjects(snapshot);
       renderHistory(snapshot.conversations || []);
       if (Array.isArray(snapshot.memories)) renderMemories(snapshot.memories);
-      document.querySelector('#model-preference').value = snapshot.modelPreference || 'automatic';
+      document.querySelector('#model-preference').value = snapshot.modelPreference || 'automatic-free';
       document.querySelector('#research-meta').textContent = snapshot.research?.searchConfigured
         ? `Web search: ${snapshot.research.provider}` : 'Page retrieval available · search needs setup';
       document.querySelector('#provider-meta').textContent = snapshot.workspaceStatus === 'empty'
@@ -982,7 +992,10 @@
         const icon = document.createElement('span'); icon.className = 'provider-icon'; icon.textContent = (account.providerId || 'openrouter').slice(0, 1).toUpperCase();
         const copy = document.createElement('span');
         const name = document.createElement('span'); name.className = 'provider-name'; name.textContent = account.label;
-        const detail = document.createElement('span'); detail.className = 'provider-model'; detail.textContent = `${account.credentials}${account.selected ? ' · selected route' : ''}`;
+        const detail = document.createElement('span'); detail.className = 'provider-model';
+        const allowance = account.allowance && Number.isFinite(account.allowance.limit) && Number.isFinite(account.allowance.remaining)
+          ? ` · credit ${account.allowance.remaining} of ${account.allowance.limit} remaining` : '';
+        detail.textContent = `${account.credentials}${account.selected ? ' · selected route' : ''}${allowance}`;
         const dot = document.createElement('span'); dot.className = `status-dot${account.connection === 'connected' ? ' connected' : ''}`; dot.setAttribute('aria-label', account.connection);
         copy.append(name, detail); button.append(icon, copy, dot); button.addEventListener('click', () => selectProvider(button));
         const row = document.createElement('div'); row.className = 'provider-row'; row.append(button);
@@ -1035,6 +1048,15 @@
     document.querySelector('#cancel-workspace').addEventListener('click', () => workspaceDialog.close());
     document.querySelector('#workspace-form').addEventListener('submit', event => { event.preventDefault(); if (workspacePath.value.trim()) selectWorkspace(workspacePath.value.trim()); });
     document.querySelector('#new-conversation').addEventListener('click', () => { if (window.NthnAI) { setBusy(true); window.NthnAI.newConversation(); } else renderSnapshot({ messages: [], title: 'New conversation', workspaceRelative: currentSnapshot?.workspaceRelative || '.', projects: currentSnapshot?.projects || [] }); });
+    document.querySelector('#listen-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.listen(); });
+    document.querySelector('#camera-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.captureCamera(); });
+    document.querySelector('#location-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.locate(); });
+    document.querySelector('#file-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.importFile(); });
+    document.querySelector('#voice-button').addEventListener('click', () => {
+      const replies = [...document.querySelectorAll('.message.assistant .message-body')];
+      const text = replies.at(-1)?.textContent?.trim();
+      if (text && window.NthnAI) window.NthnAI.speak(text);
+    });
     menuButton.addEventListener('click', () => setSidebar(!app.classList.contains('sidebar-open')));
     backdrop.addEventListener('click', () => setSidebar(false));
     window.addEventListener('keydown', (event) => {
@@ -1079,6 +1101,16 @@
       if (kind === 'accounts') renderAccounts(value);
       if (kind === 'models') renderModels(value);
       if (kind === 'progress') renderProgress(value);
+      if (kind === 'speech') {
+        input.value = value;
+        input.dispatchEvent(new Event('input'));
+        input.focus();
+      }
+      if (kind === 'device-context') {
+        input.value = `Use this device context that I explicitly granted: ${value}`;
+        input.dispatchEvent(new Event('input'));
+        input.focus();
+      }
       if (kind === 'snapshot') { renderSnapshot(value); document.querySelector('#memory-error').textContent = ''; }
       if (kind === 'error') {
         if (document.querySelector('#memory-dialog').open) document.querySelector('#memory-error').textContent = value;

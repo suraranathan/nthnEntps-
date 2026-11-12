@@ -43,6 +43,7 @@ final class NthnNavigation {
 
     static void open(Activity activity, String screen) {
         if ("terminal".equals(screen)) {
+            NthnAppState.record(activity, "terminal");
             if (activity instanceof TermuxActivity) return;
             activity.startActivity(new Intent(activity, TermuxActivity.class));
             return;

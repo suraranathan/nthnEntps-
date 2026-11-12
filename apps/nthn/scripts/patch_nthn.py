@@ -153,7 +153,7 @@ for source in branding.rglob('*'):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
 
-replace('app/src/main/AndroidManifest.xml', '<application', '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n\n    <application\n        android:usesCleartextTraffic="false"', 1)
+replace('app/src/main/AndroidManifest.xml', '<application', '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n\n    <application\n        android:usesCleartextTraffic="false"', 1)
 provider_sources = Path(__file__).resolve().parents[3] / 'apps/dashboard/server/ai'
 provider_assets = root / 'app/src/main/assets/nthn-ai/server/ai'
 provider_assets.mkdir(parents=True, exist_ok=True)

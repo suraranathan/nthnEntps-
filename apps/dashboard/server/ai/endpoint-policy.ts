@@ -20,6 +20,18 @@ export function endpointRulesFromEnv(value: string | undefined): EndpointRules {
   return { localPorts: [...new Set([...defaultEndpointRules.localPorts, ...ports])] }
 }
 export const resolveAddresses: Resolver = hostname => lookup(hostname, { all: true, verbatim: true })
+export function providerHttpFailureCode(status: number): string {
+  if (status === 401 || status === 403) return 'AUTH_REJECTED'
+  if (status === 402) return 'INSUFFICIENT_CREDITS'
+  if (status === 404) return 'MODEL_UNAVAILABLE'
+  if (status === 408) return 'REQUEST_FAILED'
+  if (status === 413) return 'REQUEST_TOO_LARGE'
+  if (status === 429) return 'RATE_LIMITED'
+  if (status === 400 || status === 422) return 'INCOMPATIBLE'
+  if (status >= 300 && status < 400) return 'REDIRECT_BLOCKED'
+  if (status >= 500 && status < 600) return 'UPSTREAM_UNAVAILABLE'
+  return 'PROBE_FAILED'
+}
 const hostOf = (url: URL) => url.hostname.replace(/^\[|\]$/g, '')
 
 /** Conservative allowlist of globally routable IP ranges; mapped/transition IPv6 is denied. */
@@ -107,13 +119,7 @@ export async function* requestPinnedStream(
       const chunks: Buffer[] = []
       response.on('data', (chunk: Buffer) => { if (chunks.length < 64) chunks.push(chunk) })
       response.on('end', () => {
-        let code = 'PROBE_FAILED'
-        if (status === 401 || status === 403) code = 'AUTH_REJECTED'
-        else if (status === 429) code = 'RATE_LIMITED'
-        else if (status === 404) code = 'MODEL_UNAVAILABLE'
-        else if (status === 400 || status === 422) code = 'INCOMPATIBLE'
-        else if (status >= 300 && status < 400) code = 'REDIRECT_BLOCKED'
-        failure = new ManagementError(code)
+        failure = new ManagementError(providerHttpFailureCode(status))
         done = true; notify()
       })
       response.on('error', () => { failure = new ManagementError('REQUEST_FAILED'); done = true; notify() })

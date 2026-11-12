@@ -44,6 +44,21 @@ test('multiple accounts persist independently with encrypted credentials and no 
   assert.equal((await restored.test(a.id, a.revision)).ok, true)
 })
 
+test('OpenRouter allowance reports only provider-observed credit values', async t => {
+  const path = await directory(t)
+  let requestedPath = ''
+  const manager = new ConnectionManager(path, { resolver: publicResolver, transport: async (_endpoint, probe, secret) => {
+    requestedPath = probe
+    assert.equal(secret, key)
+    return { status: 200, body: { data: { limit: 10, limit_remaining: 6.5, usage: 3.5, is_free_key: true } } }
+  } })
+  t.after(async () => manager.close())
+  let connection = manager.add(openrouter, key)
+  connection = manager.setEnabled(connection.id, connection.revision, true)
+  assert.deepEqual(await manager.keyAllowance(connection.id, connection.revision), { limit: 10, remaining: 6.5 })
+  assert.equal(requestedPath, '/key')
+})
+
 test('edit, enable, disable, replace/clear credentials and remove are revision-checked and persistent', async t => {
   const path = await directory(t), manager = new ConnectionManager(path)
   t.after(async () => manager.close())

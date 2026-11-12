@@ -63,6 +63,15 @@ test('Android Jef bridge forwards live agent progress to the conversation screen
   assert.match(ui, /kind === 'progress'/)
 })
 
+test('Android navigation records real native screen state for Jef', async () => {
+  const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
+  const navigation = await source('branding/app/src/main/java/com/termux/app/NthnNavigation.java')
+  const recorder = await source('branding/app/src/main/java/com/termux/app/NthnAppState.java')
+  assert.match(activity, /NthnAppState\.record\(this, screen\)/)
+  assert.match(navigation, /NthnAppState\.record\(activity, "terminal"\)/)
+  assert.match(recorder, /app-state\.json/)
+})
+
 test('Android provider UI confirms detected keys, discovers models and removes accounts', async () => {
   const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
   const ui = await source('ui-preview/index.html')
@@ -72,4 +81,25 @@ test('Android provider UI confirms detected keys, discovers models and removes a
   assert.match(activity, /backend\.ai\("models"/)
   assert.match(ui, /NthnAI\.removeAccount/)
   assert.match(ui, /kind === 'models'/)
+})
+
+test('V2 Android bridge exposes permission-gated camera, speech, location, storage and voice actions', async () => {
+  const patch = await source('scripts/patch_nthn.py')
+  const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
+  const controller = await source('branding/app/src/main/java/com/termux/app/NthnDeviceController.java')
+  const ui = await source('ui-preview/index.html')
+  assert.match(patch, /android\.permission\.CAMERA/)
+  assert.match(patch, /android\.permission\.RECORD_AUDIO/)
+  assert.match(patch, /android\.permission\.ACCESS_FINE_LOCATION/)
+  assert.match(activity, /@JavascriptInterface public void captureCamera\(\)/)
+  assert.match(activity, /@JavascriptInterface public void listen\(\)/)
+  assert.match(activity, /@JavascriptInterface public void locate\(\)/)
+  assert.match(activity, /@JavascriptInterface public void importFile\(\)/)
+  assert.match(activity, /@JavascriptInterface public void speak\(String text\)/)
+  assert.match(controller, /ActivityCompat\.requestPermissions/)
+  assert.match(ui, /NthnAI\.captureCamera\(\)/)
+  assert.match(ui, /NthnAI\.listen\(\)/)
+  assert.match(ui, /NthnAI\.locate\(\)/)
+  assert.match(ui, /NthnAI\.importFile\(\)/)
+  assert.match(ui, /NthnAI\.speak\(/)
 })

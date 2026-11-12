@@ -193,10 +193,46 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   assert.match(prompt, /You are Jef, the user's personal AI inside NTHN/i)
   assert.match(prompt, /Help with everyday questions, planning, and personal context/i)
   assert.match(prompt, /This Jef instance serves one owner: the person speaking to you/i)
+  assert.match(prompt, /NTHN's creator/i)
   assert.match(prompt, /Do not invent other users, social features, or live user-presence tracking/i)
   assert.match(prompt, /Do not claim a connectivity or provider outage without an explicit error from the app or a tool/i)
   assert.match(prompt, /NTHN is the app name; do not invent an expansion for its letters/i)
   assert.match(prompt, /You can discuss general topics and chat casually/i)
+})
+
+test('Jef sends only completed nonempty conversation turns to a provider', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const store = new AgentChatStore(join(directory, 'chats'))
+  await store.load()
+  const gateway = new FakeGateway([['Hello.']])
+  const agent = new JefAgent({ store, gateway, workspace })
+  const conversation = await agent.newConversation()
+  await store.append(conversation.id, { role: 'assistant', content: '', status: 'streaming' })
+  await store.append(conversation.id, { role: 'assistant', content: '[Request failed: The provider request failed.]', status: 'error' })
+  await agent.run(conversation.id, 'Say hello', () => {})
+  assert.deepEqual(gateway.calls[0].filter(turn => turn.role !== 'system').map(turn => [turn.role, turn.content]), [['user', 'Say hello']])
+})
+
+test('Jef reads the current NTHN screen from the native app state bridge', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const statePath = join(directory, 'app-state.json')
+  await writeFile(statePath, JSON.stringify({ screen: 'terminal', updatedAt: '2026-11-12T00:00:00.000Z' }))
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  const tools = new ToolRegistry({ appStatePath: statePath })
+  const result = await tools.execute('inspect_app_screen', {}, { workspace, paths, signal: new AbortController().signal })
+  assert.equal(result.ok, true)
+  assert.deepEqual(JSON.parse(result.output), { screen: 'terminal', updatedAt: '2026-11-12T00:00:00.000Z' })
+})
+
+test('Jef reads permission-gated device context reported by the native app', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const statePath = join(directory, 'device-state.json')
+  await writeFile(statePath, JSON.stringify({ kind: 'location', latitude: 14.5995, longitude: 120.9842, observedAt: '2026-11-12T00:00:00.000Z' }))
+  const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
+  const tools = new ToolRegistry({ deviceStatePath: statePath })
+  const result = await tools.execute('inspect_device_context', {}, { workspace, paths, signal: new AbortController().signal })
+  assert.equal(result.ok, true)
+  assert.equal(JSON.parse(result.output).kind, 'location')
 })
 
 test('Jef carries relevant personal and project memories into a new chat and can save a lesson', async t => {

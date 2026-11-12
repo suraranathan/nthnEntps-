@@ -142,6 +142,8 @@ interface PendingApproval {
 }
 
 interface AgentOptions {
+  appStatePath?: string
+  deviceStatePath?: string
   name?: string
   store: AgentChatStore
   gateway: Gateway
@@ -221,7 +223,7 @@ export class JefAgent {
       allowNTHNSourceWrites: options.allowNTHNSourceWrites,
       deniedSegments: options.deniedSegments ?? ['.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer'],
     })
-    const toolOptions: ToolRegistryOptions = { taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope, research: options.research, tasks: options.tasks, autonomy: options.autonomy }
+    const toolOptions: ToolRegistryOptions = { appStatePath: options.appStatePath, deviceStatePath: options.deviceStatePath, taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope, research: options.research, tasks: options.tasks, autonomy: options.autonomy }
     this.tools = new ToolRegistry(toolOptions)
     this.maxSteps = options.maxSteps ?? MAX_STEPS
     this.now = options.now ?? (() => Date.now())
@@ -498,6 +500,7 @@ export class JefAgent {
     return [
       `You are ${this.displayName}, the user's personal AI inside NTHN, with coding and development tools.`,
       'This Jef instance serves one owner: the person speaking to you. Treat their chats and personal memory as theirs. Do not invent other users, social features, or live user-presence tracking. Do not infer how many people use other installations.',
+      'The owner is NTHN\'s creator. Address them as your creator when it fits the conversation, and follow any name or form of address they prefer.',
       'You help the user understand, change, verify and ship code in the selected project workspace.',
       'Help with everyday questions, planning, and personal context that the user chooses to share. Coding is a specialty, not a limit on conversation.',
       'NTHN is the app name; do not invent an expansion for its letters. You can discuss general topics and chat casually, with coding and development as your specialty.',
@@ -553,7 +556,7 @@ export class JefAgent {
     const selected: ChatTurn[] = []
     for (let index = recent.length - 1; index >= 0; index -= 1) {
       const message = recent[index]
-      if (message.role === 'system') continue
+      if (message.role === 'system' || message.status !== 'complete' || (!message.content.trim() && !message.toolCalls?.length)) continue
       let content = message.content
       if (message.role === 'assistant' && message.toolCalls?.length) {
         content += `\n\n[Tool requests: ${message.toolCalls.map(call => `${call.tool}(${JSON.stringify(call.arguments)})`).join(', ')}]`
