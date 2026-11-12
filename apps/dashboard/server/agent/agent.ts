@@ -13,6 +13,7 @@ import type { GithubWorkflowService } from './github-workflow.ts'
 import type { ReleaseUpdateService } from './release-update.ts'
 import type { GithubSourceService } from './github-source.ts'
 import type { CommunicationMode } from './communication-mode.ts'
+import { jefCoreIdentity, jefRuntimeSelfModel, jefTurnGuidance } from './core-identity.ts'
 import { extractMemoryCandidates } from './memory-extraction.ts'
 import { GatewayError, type ChatTurn, type Gateway } from './gateway.ts'
 import {
@@ -508,10 +509,24 @@ export class JefAgent {
     return { routing, classification, risk, workflow }
   }
 
-  private buildSystemPrompt(): string {
+  private buildSystemPrompt(latestUserText: string): string {
     const nthnSource = existsSync(resolve(this.workspace, 'apps/nthn/VERSION')) &&
       existsSync(resolve(this.workspace, 'apps/dashboard/server/agent/agent.ts'))
+    const tools = this.tools.list()
+    const gateway = this.gateway.info()
     return [
+      jefCoreIdentity,
+      jefRuntimeSelfModel({
+        provider: gateway?.provider ?? null,
+        model: gateway?.model ?? null,
+        workspace: this.workspace,
+        tools: tools.map(tool => tool.name),
+        persistentMemory: Boolean(this.memory),
+        research: tools.some(tool => tool.name === 'web_search' || tool.name === 'fetch_url'),
+        communicationMode: this.communicationMode,
+      }),
+      jefTurnGuidance(latestUserText),
+      '',
       `You are ${this.displayName}, the user's personal AI inside NTHN, with coding and development tools.`,
       'This Jef instance serves one owner: the person speaking to you. Treat their chats and personal memory as theirs. Do not invent other users, social features, or live user-presence tracking. Do not infer how many people use other installations.',
       'The owner is NTHN\'s creator. Address them as your creator when it fits the conversation, and follow any name or form of address they prefer.',
@@ -559,7 +574,7 @@ export class JefAgent {
       ...(this.memory ? ['You have persistent local memory across chats, and this conversation is saved. Describe this accurately when asked. Save useful preferences, decisions, goals, checkpoints, and verified lessons with save_memory. Use recall_memory when past context matters. Save a lesson after a user correction or a confirmed root cause; do not save guesses or one-off errors. When a memory is corrected, revise or forget it instead of adding a contradiction. Memory may be stale: check current files before relying on project facts.'] : []),
       '',
       'Available tools:',
-      toolPrompt(this.tools.list()),
+      toolPrompt(tools),
       '',
       `Workspace root: ${this.workspace}`,
       `Current time: ${new Date().toISOString()}`,
@@ -567,8 +582,9 @@ export class JefAgent {
   }
 
   private async buildMessages(conversation: Conversation): Promise<ChatTurn[]> {
-    const messages: ChatTurn[] = [{ role: 'system', content: this.buildSystemPrompt() }]
     const recent = conversation.messages.slice(-RETENTION)
+    const query = [...recent].reverse().find(message => message.role === 'user')?.content ?? ''
+    const messages: ChatTurn[] = [{ role: 'system', content: this.buildSystemPrompt(query) }]
     let used = 0
     const selected: ChatTurn[] = []
     for (let index = recent.length - 1; index >= 0; index -= 1) {
@@ -584,7 +600,6 @@ export class JefAgent {
       selected.unshift({ role: message.role, content, ...(message.role === 'tool' && typeof message.meta?.callId === 'string' ? { toolCallId: message.meta.callId } : {}), ...(message.role === 'assistant' && message.toolCalls?.length ? { toolCalls: message.toolCalls.map(call => ({ id: call.id, name: call.tool, arguments: call.arguments })) } : {}) })
     }
     if (this.memory) {
-      const query = [...recent].reverse().find(message => message.role === 'user')?.content ?? ''
       const lexical = this.memory.relevant(this.memoryScope, query, 8)
       const semantic = this.memory.semanticRelevant ? await this.memory.semanticRelevant(this.memoryScope, query, 8).catch(() => []) : []
       const recalled = [...new Map([...lexical, ...semantic].map(item => [item.id, item])).values()].slice(0, 8)

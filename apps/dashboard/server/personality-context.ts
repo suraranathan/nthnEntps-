@@ -1,8 +1,8 @@
 import type { MemoryState } from './memory.ts'
+import { isJefSensitiveConversation } from './agent/core-identity.ts'
 
 // High-confidence cues only. Ambiguous cases remain a judgment for the model.
-const sensitive = /\b(suicid(?:e|al)|self[- ]harm|abuse|assault|grief|bereave|died|death|diagnos(?:is|ed)|emergency|panic attack|laid off|fired|cancer|hospital)\b|\b(?:kill|hurt) myself\b|\bending my life\b/i
-export const isSensitiveConversation = (text: string) => sensitive.test(text)
+export const isSensitiveConversation = isJefSensitiveConversation
 export const hasInappropriateHumor = (text: string) => /\b(haha|lol|lmao|just kidding|roast you)\b|[😂🤣]/i.test(text)
 export function conversationGuidance(memory: MemoryState, text: string) {
   const serious = isSensitiveConversation(text) || memory.preferences.humor === 'serious'

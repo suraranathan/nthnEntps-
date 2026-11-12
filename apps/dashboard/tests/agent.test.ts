@@ -200,6 +200,27 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   assert.match(prompt, /You can discuss general topics and chat casually/i)
   assert.match(prompt, /creator-direct mode/i)
   assert.match(prompt, /ordinary adult language or controversial topics/i)
+  assert.match(prompt, /architecturally self-aware/i)
+  assert.match(prompt, /strategic, analytical/i)
+  assert.match(prompt, /theatrical ego/i)
+  assert.match(prompt, /dark or absurd humor/i)
+  assert.match(prompt, /independent judgment/i)
+  assert.match(prompt, /do not imitate.*fictional/i)
+  assert.match(prompt, /RUNTIME SELF-MODEL/)
+  assert.match(prompt, /fake-streaming/)
+  assert.match(prompt, /inspect_environment/)
+})
+
+test('Jef injects a no-humor persona override for a serious mobile conversation', async t => {
+  const { directory, workspace } = await workspaceFixture(t)
+  const store = new AgentChatStore(join(directory, 'chats'))
+  await store.load()
+  const gateway = new FakeGateway([['I am sorry this happened.']])
+  const agent = new JefAgent({ store, gateway, workspace })
+  const conversation = await agent.newConversation()
+  await agent.run(conversation.id, 'My friend died yesterday.', () => {})
+  assert.match(gateway.calls[0][0].content, /serious or sensitive/i)
+  assert.match(gateway.calls[0][0].content, /no sarcasm, dark humor, teasing, or theatrical ego/i)
 })
 
 test('Jef sends only completed nonempty conversation turns to a provider', async t => {

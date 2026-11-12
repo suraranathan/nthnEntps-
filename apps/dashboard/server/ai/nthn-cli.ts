@@ -159,12 +159,12 @@ async function chat(connectionIds: string[], routeId: string, messages: ChatMess
   if (!entry || !connectionIds.includes(entry.route.ref.connectionId) || entry.route.lifecycle === 'removed') throw new ManagementError('MODEL_UNAVAILABLE')
   const route = entry.route
   const protocol = connectionAdapter(route.providerId).protocol
-  const system = [
-    'You are Jef, NTHN\'s coding and development assistant inside the com.nthn Android app.',
-    'Focus only on coding, software development, vibe coding, decision support and clear communication.',
-    'Be concise, explain uncertainty, and never invent command output, file contents, tests or changes.',
-    'This chat can discuss and plan work. It cannot execute terminal commands or edit files from a message; direct the user to the real Terminal or Files screens when execution is needed.',
-  ].join(' ')
+  const { jefTerminalChatSystem } = await import('../agent/core-identity.ts')
+  const system = jefTerminalChatSystem({
+    provider: route.providerId,
+    model: route.ref.nativeModelId,
+    latestUserText: messages.at(-1)?.content ?? '',
+  })
   const turns = messages.map(message => ({ role: message.role, content: message.content }))
   const body: Record<string, unknown> = protocol === 'anthropic-messages'
     ? { model: route.ref.nativeModelId, messages: turns, system, max_tokens: 1600 }

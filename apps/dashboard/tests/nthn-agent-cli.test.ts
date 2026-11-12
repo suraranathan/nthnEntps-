@@ -5,7 +5,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolve } from 'node:path'
 import * as gatewayModule from '../server/agent/gateway.ts'
+import * as coreIdentityModule from '../server/agent/core-identity.ts'
 import type { ModelRoute } from '../server/ai/contracts.ts'
+
+test('terminal Jef chat uses the shared identity and honest text-only runtime state', () => {
+  const terminalSystem = (coreIdentityModule as typeof coreIdentityModule & {
+    jefTerminalChatSystem?: (input: { provider: string; model: string; latestUserText: string }) => string
+  }).jefTerminalChatSystem
+  assert.equal(typeof terminalSystem, 'function')
+  const prompt = terminalSystem!({ provider: 'openrouter', model: 'free-model', latestUserText: 'My friend died yesterday.' })
+  assert.match(prompt, /JEF CORE IDENTITY/)
+  assert.match(prompt, /architecturally self-aware/i)
+  assert.match(prompt, /free-model/)
+  assert.match(prompt, /"tools":\[\]/)
+  assert.match(prompt, /no sarcasm, dark humor, teasing, or theatrical ego/i)
+  assert.match(prompt, /cannot execute terminal commands.*edit files/i)
+})
 
 test('provider readiness uses the same streaming system-and-tools shape as Jef chat', async () => {
   const verifyJefChatShape = (gatewayModule as typeof gatewayModule & {
