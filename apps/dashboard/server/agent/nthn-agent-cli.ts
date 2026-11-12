@@ -69,6 +69,7 @@ const help = `nthn Jef coding agent
   nthn-agent update-download
   nthn-agent github-write-config < request.json
   nthn-agent github-dispatch < request.json
+  nthn-agent github-status < request.json
 Chat JSON: {"text":"...","conversationId":"optional"}
 Workspace JSON: {"path":"project-folder"} or {"path":"."} for Linux home
 Approval JSON: {"conversationId":"...","approvalId":"...","approved":true}`
@@ -172,7 +173,7 @@ async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
 
 async function main(): Promise<void> {
   const [command = 'help', ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream', 'select', 'memory-list', 'memory-add', 'memory-update', 'memory-remove', 'memory-export', 'memory-search', 'memory-link', 'memory-history', 'task-list', 'model-preference', 'research-config', 'embedding-config', 'autonomy-config', 'release-config', 'update-check', 'update-download', 'github-write-config', 'github-dispatch'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream', 'select', 'memory-list', 'memory-add', 'memory-update', 'memory-remove', 'memory-export', 'memory-search', 'memory-link', 'memory-history', 'task-list', 'model-preference', 'research-config', 'embedding-config', 'autonomy-config', 'release-config', 'update-check', 'update-download', 'github-write-config', 'github-dispatch', 'github-status'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); return }
 
   let choice = loadMobileWorkspace(home, agentDirectory)
@@ -206,10 +207,17 @@ async function main(): Promise<void> {
   const autonomy = loadAutonomyPolicy(autonomyPath)
   const releaseConfig = loadReleaseConfig(releasePath, agentVault)
   const githubWrite = loadGithubWriteConfig(githubWritePath, agentVault)
+  const githubWorkflow = githubWrite ? new GithubWorkflowService(githubWrite.token) : undefined
   if (command === 'github-dispatch') {
     const body = input()
     if (typeof body.branch !== 'string' || !githubWrite) throw new ManagementError(githubWrite ? 'INVALID_INPUT' : 'CREDENTIAL_REQUIRED')
-    console.log(JSON.stringify(await new GithubWorkflowService(githubWrite.token).dispatch(body.branch, appVersion())))
+    console.log(JSON.stringify(await githubWorkflow!.dispatch(body.branch, appVersion())))
+    return
+  }
+  if (command === 'github-status') {
+    const body = input()
+    if (typeof body.runId !== 'string' || !githubWorkflow) throw new ManagementError(githubWorkflow ? 'INVALID_INPUT' : 'CREDENTIAL_REQUIRED')
+    console.log(JSON.stringify(await githubWorkflow.status(body.runId)))
     return
   }
   const updater = new ReleaseUpdateService({ ...(releaseConfig ? { token: releaseConfig.token } : {}) })
@@ -230,6 +238,8 @@ async function main(): Promise<void> {
     appStatePath: join(agentDirectory, 'app-state.json'),
     deviceStatePath: join(agentDirectory, 'device-state.json'),
     terminalStatePath: join(agentDirectory, 'terminal-state.json'),
+    githubWorkflow,
+    installedVersion: appVersion(),
     writablePrefixes: ['.'],
     allowNTHNSourceWrites: choice.relative === 'nthnEntps' && existsSync(join(choice.workspace, 'apps/nthn/VERSION')) && existsSync(join(choice.workspace, 'apps/dashboard/server/agent/agent.ts')),
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],

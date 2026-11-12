@@ -9,6 +9,7 @@ import type { MemoryStoreLike } from './memory-db.ts'
 import type { ResearchService } from './research.ts'
 import type { TaskStore } from './tasks.ts'
 import type { AutonomyPolicy } from './autonomy.ts'
+import type { GithubWorkflowService } from './github-workflow.ts'
 import { extractMemoryCandidates } from './memory-extraction.ts'
 import { GatewayError, type ChatTurn, type Gateway } from './gateway.ts'
 import {
@@ -145,6 +146,8 @@ interface AgentOptions {
   appStatePath?: string
   deviceStatePath?: string
   terminalStatePath?: string
+  githubWorkflow?: GithubWorkflowService
+  installedVersion?: string
   name?: string
   store: AgentChatStore
   gateway: Gateway
@@ -224,7 +227,7 @@ export class JefAgent {
       allowNTHNSourceWrites: options.allowNTHNSourceWrites,
       deniedSegments: options.deniedSegments ?? ['.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer'],
     })
-    const toolOptions: ToolRegistryOptions = { appStatePath: options.appStatePath, deviceStatePath: options.deviceStatePath, terminalStatePath: options.terminalStatePath, taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope, research: options.research, tasks: options.tasks, autonomy: options.autonomy }
+    const toolOptions: ToolRegistryOptions = { appStatePath: options.appStatePath, deviceStatePath: options.deviceStatePath, terminalStatePath: options.terminalStatePath, githubWorkflow: options.githubWorkflow, installedVersion: options.installedVersion, taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope, research: options.research, tasks: options.tasks, autonomy: options.autonomy }
     this.tools = new ToolRegistry(toolOptions)
     this.maxSteps = options.maxSteps ?? MAX_STEPS
     this.now = options.now ?? (() => Date.now())

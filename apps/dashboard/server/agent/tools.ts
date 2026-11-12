@@ -9,6 +9,7 @@ import { createSourceManifest } from './self-development.ts'
 import { readNativeAppScreen } from './app-state.ts'
 import { readNativeDeviceContext } from './device-state.ts'
 import { readNativeTerminalState } from './terminal-state.ts'
+import type { GithubWorkflowService } from './github-workflow.ts'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve as resolvePath } from 'node:path'
@@ -66,6 +67,8 @@ export interface ToolRegistryOptions {
   appStatePath?: string
   deviceStatePath?: string
   terminalStatePath?: string
+  githubWorkflow?: GithubWorkflowService
+  installedVersion?: string
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
@@ -359,6 +362,29 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const commandApproval = options.requireCommandApproval ?? false
   const sandboxCommands = options.sandboxCommands ?? false
   return [
+    ...(options.githubWorkflow && options.installedVersion ? [{
+      name: 'github_dispatch',
+      description: 'Dispatch the fixed NTHN Android build workflow for a reviewed branch after confirming that it contains a newer app version.',
+      requiresApproval: true,
+      required: ['branch'],
+      arguments: { branch: 'string' as const },
+      summarize: args => `Dispatch NTHN Android workflow for ${stringArg(args, 'branch')}`,
+      execute: async args => {
+        try { return { ok: true, summary: 'Dispatched the NTHN Android workflow.', output: JSON.stringify(await options.githubWorkflow!.dispatch(stringArg(args, 'branch'), options.installedVersion!)) } }
+        catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'GitHub workflow dispatch failed.', output: '' } }
+      },
+    } as ToolDefinition, {
+      name: 'github_workflow_status',
+      description: 'Read the current status and conclusion of a specific NTHN Android workflow run.',
+      requiresApproval: false,
+      required: ['runId'],
+      arguments: { runId: 'string' as const },
+      summarize: args => `Inspect GitHub workflow run ${stringArg(args, 'runId')}`,
+      execute: async args => {
+        try { return { ok: true, summary: 'Read NTHN Android workflow status.', output: JSON.stringify(await options.githubWorkflow!.status(stringArg(args, 'runId'))) } }
+        catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'GitHub workflow status failed.', output: '' } }
+      },
+    } as ToolDefinition] : []),
     ...(options.terminalStatePath ? [{
       name: 'inspect_terminal',
       description: 'Read a bounded snapshot of the currently visible native terminal session. Requires approval because terminal output may contain sensitive data. This does not send input to the open terminal.',
