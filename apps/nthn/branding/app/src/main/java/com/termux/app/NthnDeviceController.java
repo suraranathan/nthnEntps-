@@ -158,7 +158,9 @@ final class NthnDeviceController {
     }
 
     void onPermissionResult(int requestCode, int[] results) {
-        if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) { deliverError("Android permission was not granted."); return; }
+        boolean granted = false;
+        for (int result : results) if (result == PackageManager.PERMISSION_GRANTED) granted = true;
+        if (results.length == 0 || !granted) { deliverError("Android permission was not granted."); return; }
         if (requestCode == CAMERA_PERMISSION) launchCamera();
         else if (requestCode == AUDIO_PERMISSION) startListening();
         else if (requestCode == LOCATION_PERMISSION) readLocation();
@@ -176,6 +178,7 @@ final class NthnDeviceController {
     }
 
     private void importSelectedFile(Uri uri) {
+        File target = null;
         try {
             String name = "shared-file";
             try (android.database.Cursor cursor = activity.getContentResolver().query(uri, new String[]{ OpenableColumns.DISPLAY_NAME }, null, null, null)) {
@@ -185,7 +188,7 @@ final class NthnDeviceController {
             if (name.isEmpty()) name = "shared-file";
             File directory = new File(activity.getFilesDir(), "home/NTHN-Imports");
             if (!directory.isDirectory() && !directory.mkdirs()) throw new Exception("Import directory unavailable.");
-            File target = new File(directory, System.currentTimeMillis() + "-" + name);
+            target = new File(directory, System.currentTimeMillis() + "-" + name);
             long bytes = 0;
             try (InputStream input = activity.getContentResolver().openInputStream(uri); FileOutputStream output = new FileOutputStream(target)) {
                 if (input == null) throw new Exception("File unavailable.");
@@ -200,7 +203,10 @@ final class NthnDeviceController {
             JSONObject state = new JSONObject().put("path", target.getAbsolutePath()).put("name", name).put("bytes", bytes);
             record(state, "file", null, target);
             deliver("device-context", state.put("kind", "file").put("observedAt", Instant.now().toString()).toString());
-        } catch (Exception error) { deliverError("Shared file could not be imported."); }
+        } catch (Exception error) {
+            if (target != null && target.isFile()) target.delete();
+            deliverError("Shared file could not be imported.");
+        }
     }
 
     private void record(JSONObject state, String kind, String text, File file) {
