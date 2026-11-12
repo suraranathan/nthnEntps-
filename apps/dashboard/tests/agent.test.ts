@@ -218,12 +218,12 @@ test('Jef sends only completed nonempty conversation turns to a provider', async
 test('Jef reads the current NTHN screen from the native app state bridge', async t => {
   const { directory, workspace } = await workspaceFixture(t)
   const statePath = join(directory, 'app-state.json')
-  await writeFile(statePath, JSON.stringify({ screen: 'terminal', updatedAt: '2026-11-12T00:00:00.000Z' }))
+  await writeFile(statePath, JSON.stringify({ screen: 'ai', updatedAt: '2026-11-12T00:00:00.000Z', dashboard: { title: 'Provider issue', messageCount: 6, pendingApproval: false, provider: 'openrouter', model: 'free-model', workspace: 'nthnEntps' } }))
   const paths = new PathPolicy({ root: workspace, writablePrefixes: ['.'] })
   const tools = new ToolRegistry({ appStatePath: statePath })
   const result = await tools.execute('inspect_app_screen', {}, { workspace, paths, signal: new AbortController().signal })
   assert.equal(result.ok, true)
-  assert.deepEqual(JSON.parse(result.output), { screen: 'terminal', updatedAt: '2026-11-12T00:00:00.000Z' })
+  assert.deepEqual(JSON.parse(result.output), { screen: 'ai', updatedAt: '2026-11-12T00:00:00.000Z', dashboard: { title: 'Provider issue', messageCount: 6, pendingApproval: false, provider: 'openrouter', model: 'free-model', workspace: 'nthnEntps' } })
 })
 
 test('Jef reads permission-gated device context reported by the native app', async t => {

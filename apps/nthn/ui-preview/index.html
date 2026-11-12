@@ -952,6 +952,12 @@
       input.disabled = Boolean(pendingApproval);
       sendButton.disabled = Boolean(pendingApproval) || !input.value.trim();
       input.placeholder = pendingApproval ? 'Approve or deny Jef’s action to continue…' : 'Ask Jef to inspect, build, fix, or just talk…';
+      if (window.NthnAI && typeof window.NthnAI.screenState === 'function') window.NthnAI.screenState(JSON.stringify({
+        title: String(snapshot.title || 'New conversation').slice(0, 200), messageCount: snapshot.messages.length,
+        pendingApproval: Boolean(pendingApproval), provider: snapshot.provider ? String(snapshot.provider).slice(0, 200) : null,
+        model: snapshot.model ? String(snapshot.model).slice(0, 500) : null,
+        workspace: String(snapshot.workspaceRelative || '.').slice(0, 500)
+      }));
     }
 
     function renderHistory(chats) {
@@ -1051,7 +1057,18 @@
     document.querySelector('#cancel-workspace').addEventListener('click', () => workspaceDialog.close());
     document.querySelector('#workspace-form').addEventListener('submit', event => { event.preventDefault(); if (workspacePath.value.trim()) selectWorkspace(workspacePath.value.trim()); });
     document.querySelector('#new-conversation').addEventListener('click', () => { if (window.NthnAI) { setBusy(true); window.NthnAI.newConversation(); } else renderSnapshot({ messages: [], title: 'New conversation', workspaceRelative: currentSnapshot?.workspaceRelative || '.', projects: currentSnapshot?.projects || [] }); });
-    document.querySelector('#listen-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.listen(); });
+    const listenButton = document.querySelector('#listen-button');
+    const showListening = (active) => {
+      listenButton.dataset.listening = active ? 'true' : 'false';
+      listenButton.textContent = active ? '■' : '●';
+      listenButton.title = active ? 'Stop listening' : 'Speak to Jef';
+      listenButton.setAttribute('aria-label', active ? 'Stop listening' : 'Speak to Jef');
+    };
+    listenButton.addEventListener('click', () => {
+      if (!window.NthnAI) return;
+      if (listenButton.dataset.listening === 'true') window.NthnAI.stopListening();
+      else window.NthnAI.listen();
+    });
     document.querySelector('#camera-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.captureCamera(); });
     document.querySelector('#location-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.locate(); });
     document.querySelector('#file-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.importFile(); });
@@ -1100,11 +1117,14 @@
     window.nthnEvent = (kind, value) => {
       if (kind === 'status') {
         document.querySelector('#provider-meta').textContent = value;
+        if (value === 'Listening…') showListening(true);
+        else if (value === 'Listening stopped.') showListening(false);
       }
       if (kind === 'accounts') renderAccounts(value);
       if (kind === 'models') renderModels(value);
       if (kind === 'progress') renderProgress(value);
       if (kind === 'speech') {
+        showListening(false);
         input.value = value;
         input.dispatchEvent(new Event('input'));
         input.focus();
@@ -1116,6 +1136,7 @@
       }
       if (kind === 'snapshot') { renderSnapshot(value); document.querySelector('#memory-error').textContent = ''; }
       if (kind === 'error') {
+        showListening(false);
         if (document.querySelector('#memory-dialog').open) document.querySelector('#memory-error').textContent = value;
         setBusy(false);
         appendMessage({ role: 'assistant', content: value });

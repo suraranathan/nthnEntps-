@@ -316,6 +316,7 @@ public final class NthnActivity extends AppCompatActivity {
             catch (Exception error) { deliver("error", message(error)); }
         }
         @JavascriptInterface public void memories() { agentAction("memory-list", null); }
+        @JavascriptInterface public void screenState(String value) { NthnAppState.recordDashboard(NthnActivity.this, value); }
         @JavascriptInterface public void modelPreference(String value) {
             if (!"automatic-free".equals(value) && !"manual-free".equals(value)) return;
             try { agentAction("model-preference", new JSONObject().put("value", value).toString()); }
@@ -344,6 +345,7 @@ public final class NthnActivity extends AppCompatActivity {
         @JavascriptInterface public boolean darkTheme() { return NthnTheme.isDark(NthnActivity.this); }
         @JavascriptInterface public void captureCamera() { runOnUiThread(() -> devices.captureCamera(this::deliver)); }
         @JavascriptInterface public void listen() { runOnUiThread(() -> devices.listen(this::deliver)); }
+        @JavascriptInterface public void stopListening() { runOnUiThread(() -> devices.stopListening(this::deliver)); }
         @JavascriptInterface public void locate() { runOnUiThread(() -> devices.locate(this::deliver)); }
         @JavascriptInterface public void importFile() { runOnUiThread(() -> devices.importFile(this::deliver)); }
         @JavascriptInterface public void speak(String text) { runOnUiThread(() -> devices.speak(this::deliver, text)); }

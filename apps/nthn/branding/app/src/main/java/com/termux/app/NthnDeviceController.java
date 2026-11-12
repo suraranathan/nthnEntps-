@@ -43,6 +43,7 @@ final class NthnDeviceController {
     private final TextToSpeech voice;
     private Events events;
     private SpeechRecognizer recognizer;
+    private boolean speechCancelled;
     private File pendingCamera;
 
     NthnDeviceController(NthnActivity activity) {
@@ -81,8 +82,20 @@ final class NthnDeviceController {
         startListening();
     }
 
+    void stopListening(Events events) {
+        this.events = events;
+        if (recognizer != null) {
+            speechCancelled = true;
+            recognizer.cancel();
+            recognizer.destroy();
+            recognizer = null;
+        }
+        deliver("status", "Listening stopped.");
+    }
+
     private void startListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(activity)) { deliverError("Speech recognition is unavailable."); return; }
+        speechCancelled = false;
         if (recognizer != null) recognizer.destroy();
         recognizer = SpeechRecognizer.createSpeechRecognizer(activity);
         recognizer.setRecognitionListener(new RecognitionListener() {
@@ -91,9 +104,15 @@ final class NthnDeviceController {
             @Override public void onRmsChanged(float rmsdB) { }
             @Override public void onBufferReceived(byte[] buffer) { }
             @Override public void onEndOfSpeech() { }
-            @Override public void onError(int error) { deliverError("Speech recognition stopped (code " + error + ")."); }
+            @Override public void onError(int error) {
+                boolean cancelled = speechCancelled;
+                speechCancelled = false;
+                finishListening();
+                if (!cancelled) deliverError("Speech recognition stopped (code " + error + ").");
+            }
             @Override public void onResults(Bundle results) {
                 ArrayList<String> values = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                finishListening();
                 if (values == null || values.isEmpty()) { deliverError("No speech was recognized."); return; }
                 String text = values.get(0);
                 record(new JSONObject(), "speech", text, null);
@@ -107,6 +126,13 @@ final class NthnDeviceController {
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
         recognizer.startListening(intent);
+    }
+
+    private void finishListening() {
+        if (recognizer != null) {
+            recognizer.destroy();
+            recognizer = null;
+        }
     }
 
     void locate(Events events) {
@@ -222,7 +248,7 @@ final class NthnDeviceController {
     private void deliverError(String value) { deliver("error", value); }
 
     void destroy() {
-        if (recognizer != null) recognizer.destroy();
+        finishListening();
         voice.stop();
         voice.shutdown();
     }
