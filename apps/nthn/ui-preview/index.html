@@ -594,6 +594,7 @@
       <div class="sidebar-heading"><span>Jef</span></div>
       <p class="provider-note" id="active-model">Active model: automatic</p>
       <div class="field model-preference"><label for="model-preference">Free model choice</label><select id="model-preference"><option value="automatic-free">Automatic free</option><option value="manual-free">Manual free</option></select></div>
+      <div class="field model-preference"><label for="communication-mode">Response mode</label><select id="communication-mode"><option value="standard">Standard</option><option value="creator-direct">Uncensored (creator-direct)</option></select></div>
       <div class="sidebar-actions"><button class="thread-action" id="history-button" type="button">Saved chats</button><button class="thread-action" id="memory-button" type="button">Memory</button></div>
       <div class="sidebar-heading">
         <span>Providers</span>
@@ -916,6 +917,7 @@
       renderHistory(snapshot.conversations || []);
       if (Array.isArray(snapshot.memories)) renderMemories(snapshot.memories);
       document.querySelector('#model-preference').value = snapshot.modelPreference || 'automatic-free';
+      document.querySelector('#communication-mode').value = snapshot.communicationMode || 'standard';
       document.querySelector('#research-meta').textContent = snapshot.research?.searchConfigured
         ? `Web search: ${snapshot.research.provider}` : 'Page retrieval available · search needs setup';
       document.querySelector('#provider-meta').textContent = snapshot.workspaceStatus === 'empty'
@@ -1028,6 +1030,7 @@
     }
 
     document.querySelector('#model-preference').addEventListener('change', event => { if (window.NthnAI) window.NthnAI.modelPreference(event.target.value); });
+    document.querySelector('#communication-mode').addEventListener('change', event => { if (window.NthnAI) window.NthnAI.communicationMode(event.target.value); });
     document.querySelector('#history-button').addEventListener('click', () => document.querySelector('#history-dialog').showModal());
     document.querySelector('#memory-button').addEventListener('click', () => { document.querySelector('#memory-dialog').showModal(); if (window.NthnAI) window.NthnAI.memories(); });
     document.querySelector('#stop-button').addEventListener('click', () => { if (window.NthnAI) window.NthnAI.stop(); });

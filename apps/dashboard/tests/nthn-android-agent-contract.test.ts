@@ -92,6 +92,15 @@ test('Android provider UI confirms detected keys, discovers models and removes a
   assert.match(ui, /kind === 'models'/)
 })
 
+test('Android Jef UI exposes a persistent manual uncensored communication mode', async () => {
+  const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
+  const ui = await source('ui-preview/index.html')
+  assert.match(activity, /@JavascriptInterface public void communicationMode/)
+  assert.match(activity, /agentAction\("communication-mode"/)
+  assert.match(ui, /Uncensored \(creator-direct\)/)
+  assert.match(ui, /NthnAI\.communicationMode/)
+})
+
 test('V2 Android bridge exposes permission-gated camera, speech, location, storage and voice actions', async () => {
   const patch = await source('scripts/patch_nthn.py')
   const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')

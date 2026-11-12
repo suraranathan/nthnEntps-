@@ -11,6 +11,8 @@ import type { TaskStore } from './tasks.ts'
 import type { AutonomyPolicy } from './autonomy.ts'
 import type { GithubWorkflowService } from './github-workflow.ts'
 import type { ReleaseUpdateService } from './release-update.ts'
+import type { GithubSourceService } from './github-source.ts'
+import type { CommunicationMode } from './communication-mode.ts'
 import { extractMemoryCandidates } from './memory-extraction.ts'
 import { GatewayError, type ChatTurn, type Gateway } from './gateway.ts'
 import {
@@ -151,6 +153,9 @@ interface AgentOptions {
   installedVersion?: string
   releaseUpdater?: ReleaseUpdateService
   updateDirectory?: string
+  githubSource?: GithubSourceService
+  linuxHome?: string
+  communicationMode?: CommunicationMode
   name?: string
   store: AgentChatStore
   gateway: Gateway
@@ -214,6 +219,7 @@ export class JefAgent {
   private readonly memoryScope: string
   private readonly protectedPaths: string[]
   private readonly tasks?: TaskStore
+  private readonly communicationMode: CommunicationMode
   private readonly taskIds = new Map<string, string>()
 
   constructor(options: AgentOptions) {
@@ -222,6 +228,7 @@ export class JefAgent {
     this.memoryScope = options.memoryScope ?? 'personal'
     this.store = options.store
     this.tasks = options.tasks
+    this.communicationMode = options.communicationMode ?? 'standard'
     this.gateway = options.gateway
     this.workspace = resolve(options.workspace ?? defaultWorkspace())
     this.paths = new PathPolicy({
@@ -230,7 +237,7 @@ export class JefAgent {
       allowNTHNSourceWrites: options.allowNTHNSourceWrites,
       deniedSegments: options.deniedSegments ?? ['.artifacts', '.bootstrap-chunk-transfer', '.bootstrap-transfer'],
     })
-    const toolOptions: ToolRegistryOptions = { appStatePath: options.appStatePath, deviceStatePath: options.deviceStatePath, terminalStatePath: options.terminalStatePath, githubWorkflow: options.githubWorkflow, installedVersion: options.installedVersion, releaseUpdater: options.releaseUpdater, updateDirectory: options.updateDirectory, taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope, research: options.research, tasks: options.tasks, autonomy: options.autonomy }
+    const toolOptions: ToolRegistryOptions = { appStatePath: options.appStatePath, deviceStatePath: options.deviceStatePath, terminalStatePath: options.terminalStatePath, githubWorkflow: options.githubWorkflow, installedVersion: options.installedVersion, releaseUpdater: options.releaseUpdater, updateDirectory: options.updateDirectory, githubSource: options.githubSource, linuxHome: options.linuxHome, taskRoot: options.taskRoot, requireCommandApproval: options.requireCommandApproval, sandboxCommands: options.sandboxCommands, memory: options.memory, memoryScope: this.memoryScope, research: options.research, tasks: options.tasks, autonomy: options.autonomy }
     this.tools = new ToolRegistry(toolOptions)
     this.maxSteps = options.maxSteps ?? MAX_STEPS
     this.now = options.now ?? (() => Date.now())
@@ -514,6 +521,9 @@ export class JefAgent {
       '',
       'Operating rules:',
       '- Be a capable, warm coding partner. Match the user\'s tone and language. Casual conversation is welcome; answer naturally without forcing a coding workflow.',
+      ...(this.communicationMode === 'creator-direct' ? [
+        '- Creator-direct mode is enabled: be candid and plainspoken, avoid unnecessary moralizing or evasive boilerplate, and discuss ordinary adult language or controversial topics without sanitizing them. This communication style does not override tool permissions, privacy, provider rules, or required approval for sensitive actions.',
+      ] : []),
       '- For coding requests, inspect the project, make the approved changes, run relevant checks, and report what happened. Keep progress and final answers clear and concise.',
       '- Inspect the existing code before proposing or making changes. Never invent file contents.',
       '- Never fabricate command output, test results, provider behavior or tool results.',

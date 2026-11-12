@@ -182,7 +182,7 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   const store = new AgentChatStore(join(directory, 'chats'))
   await store.load()
   const gateway = new FakeGateway([['No project files are here.']])
-  const agent = new JefAgent({ store, gateway, workspace: directory })
+  const agent = new JefAgent({ store, gateway, workspace: directory, communicationMode: 'creator-direct' })
   const conversation = await agent.newConversation()
   await agent.run(conversation.id, 'Check the app', () => {})
   const prompt = gateway.calls[0][0].content
@@ -198,6 +198,8 @@ test('an empty workspace gives Jef a grounded project and runtime status', async
   assert.match(prompt, /Do not claim a connectivity or provider outage without an explicit error from the app or a tool/i)
   assert.match(prompt, /NTHN is the app name; do not invent an expansion for its letters/i)
   assert.match(prompt, /You can discuss general topics and chat casually/i)
+  assert.match(prompt, /creator-direct mode/i)
+  assert.match(prompt, /ordinary adult language or controversial topics/i)
 })
 
 test('Jef sends only completed nonempty conversation turns to a provider', async t => {

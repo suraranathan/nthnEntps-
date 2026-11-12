@@ -1,7 +1,7 @@
 const API = 'https://api.github.com/repos/suraranathan/nthnEntps-'
 const WORKFLOW = 'nthn-build-separate.yml'
 
-function validBranch(branch: string): boolean {
+export function validGithubBranch(branch: string): boolean {
   return branch === 'main' || (/^codex\/[A-Za-z0-9][A-Za-z0-9._/-]{0,90}$/.test(branch) &&
     !branch.includes('..') && !branch.includes('//') && !branch.includes('@{') && !branch.endsWith('/') && !branch.endsWith('.lock'))
 }
@@ -16,7 +16,7 @@ export class GithubWorkflowService {
   }
 
   async dispatch(branch: string, installedVersion: string): Promise<{ dispatched: true; branch: string; workflow: string; version: string }> {
-    if (!validBranch(branch)) throw new Error('Invalid GitHub branch.')
+    if (!validGithubBranch(branch)) throw new Error('Invalid GitHub branch.')
     if (!/^\d+(?:\.\d+){0,2}$/.test(installedVersion)) throw new Error('Invalid installed NTHN version.')
     let versionResponse: Response
     try {
@@ -68,7 +68,7 @@ export class GithubWorkflowService {
       if (value.name !== 'Build independent nthn APK' || value.event !== 'workflow_dispatch' ||
         !['queued', 'in_progress', 'completed'].includes(status) ||
         !(conclusion === null || ['success', 'failure', 'cancelled', 'timed_out', 'action_required', 'neutral', 'skipped', 'stale'].includes(conclusion)) ||
-        !validBranch(branch) || !/^[0-9a-f]{40}$/.test(commit) ||
+        !validGithubBranch(branch) || !/^[0-9a-f]{40}$/.test(commit) ||
         url !== `https://github.com/suraranathan/nthnEntps-/actions/runs/${runId}` || Number(value.id) !== Number(runId)) throw new Error('invalid response')
       return { runId: Number(runId), status, conclusion, branch, commit, url }
     } catch { throw new Error('GitHub workflow status response is invalid.') }

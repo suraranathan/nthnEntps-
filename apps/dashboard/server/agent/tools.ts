@@ -11,6 +11,7 @@ import { readNativeDeviceContext } from './device-state.ts'
 import { readNativeTerminalState } from './terminal-state.ts'
 import type { GithubWorkflowService } from './github-workflow.ts'
 import type { ReleaseUpdateService } from './release-update.ts'
+import type { GithubSourceService } from './github-source.ts'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve as resolvePath } from 'node:path'
@@ -72,6 +73,8 @@ export interface ToolRegistryOptions {
   installedVersion?: string
   releaseUpdater?: ReleaseUpdateService
   updateDirectory?: string
+  githubSource?: GithubSourceService
+  linuxHome?: string
   taskRoot?: string
   requireCommandApproval?: boolean
   sandboxCommands?: boolean
@@ -365,6 +368,29 @@ function buildTools(options: ToolRegistryOptions = {}): ToolDefinition[] {
   const commandApproval = options.requireCommandApproval ?? false
   const sandboxCommands = options.sandboxCommands ?? false
   return [
+    ...(options.githubSource && options.linuxHome ? [{
+      name: 'github_prepare_source',
+      description: 'Clone the fixed NTHN GitHub repository into the dedicated nthnEntps-v2 Linux-home project on an approved development branch. The GitHub token is never placed in command arguments.',
+      requiresApproval: true,
+      required: ['branch'],
+      arguments: { branch: 'string' as const },
+      summarize: args => `Prepare NTHN source from ${stringArg(args, 'branch')}`,
+      execute: async args => {
+        try { return { ok: true, summary: 'Prepared the NTHN Git development project.', output: JSON.stringify(await options.githubSource!.prepare(options.linuxHome!, stringArg(args, 'branch'))) } }
+        catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'NTHN source preparation failed.', output: '' } }
+      },
+    } as ToolDefinition, {
+      name: 'github_push_source',
+      description: 'Push the selected clean NTHN Git project to its matching approved development branch without force. The remote, branch, commit and changed-file list are validated first.',
+      requiresApproval: true,
+      required: ['branch'],
+      arguments: { branch: 'string' as const },
+      summarize: args => `Push reviewed NTHN source to ${stringArg(args, 'branch')}`,
+      execute: async (args, context) => {
+        try { return { ok: true, summary: 'Pushed the reviewed NTHN source commit.', output: JSON.stringify(await options.githubSource!.push(context.workspace, stringArg(args, 'branch'))) } }
+        catch (error) { return { ok: false, summary: error instanceof Error ? error.message : 'NTHN source push failed.', output: '' } }
+      },
+    } as ToolDefinition] : []),
     ...(options.releaseUpdater && options.installedVersion && options.updateDirectory ? [{
       name: 'check_update',
       description: 'Check the trusted NTHN GitHub Release for a newer version and validated APK metadata.',

@@ -321,6 +321,11 @@ public final class NthnActivity extends AppCompatActivity {
             try { agentAction("model-preference", new JSONObject().put("value", value).toString()); }
             catch (Exception error) { deliver("error", message(error)); }
         }
+        @JavascriptInterface public void communicationMode(String value) {
+            if (!"standard".equals(value) && !"creator-direct".equals(value)) return;
+            try { agentAction("communication-mode", new JSONObject().put("value", value).toString()); }
+            catch (Exception error) { deliver("error", message(error)); }
+        }
         @JavascriptInterface public void addMemory(String kind, String text, String scope) {
             if (kind == null || text == null || scope == null) return;
             try { agentAction("memory-add", new JSONObject().put("kind", kind).put("text", text).put("scope", scope).toString()); }

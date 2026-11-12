@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { compareJefCandidates, isFreeJefCandidate, jefModelPermitted, normalizeJefPreference } from '../server/agent/model-preference.ts'
 import type { CatalogEntry } from '../server/ai/contracts.ts'
+import { normalizeCommunicationMode } from '../server/agent/communication-mode.ts'
 
 function entry(name: string, price: string | null): CatalogEntry {
   return { route: { model: { displayName: name }, ref: { nativeModelId: name } }, pricing: { freeAccess: { kind: price === '0' ? 'verified-zero-price' : 'paid' }, components: price === null ? [] : [{ dimension: 'input', amount: price, currency: 'USD', per: '1000000' }] } } as unknown as CatalogEntry
@@ -32,4 +33,11 @@ test('V2 migrates legacy model preferences to automatic free and supports manual
   assert.equal(normalizeJefPreference('low-cost'), 'automatic-free')
   assert.equal(normalizeJefPreference('automatic'), 'automatic-free')
   assert.equal(normalizeJefPreference(undefined), 'automatic-free')
+})
+
+test('uncensored creator-direct communication is an explicit mode and standard remains default', () => {
+  assert.equal(normalizeCommunicationMode('creator-direct'), 'creator-direct')
+  assert.equal(normalizeCommunicationMode('standard'), 'standard')
+  assert.equal(normalizeCommunicationMode('uncensored'), 'standard')
+  assert.equal(normalizeCommunicationMode(undefined), 'standard')
 })

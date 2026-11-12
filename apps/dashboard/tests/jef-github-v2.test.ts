@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { CredentialVault } from '../server/ai/credential-vault.ts'
 import { loadGithubWriteConfig, saveGithubWriteConfig } from '../server/agent/github-write-config.ts'
 import { GithubWorkflowService } from '../server/agent/github-workflow.ts'
+import { GithubSourceService, type GitRunner } from '../server/agent/github-source.ts'
 import { PathPolicy } from '../server/agent/permissions.ts'
 import { ToolRegistry } from '../server/agent/tools.ts'
 
@@ -76,4 +77,37 @@ test('Jef exposes approved dispatch and read-only workflow monitoring tools', as
   const result = await tools.execute('github_workflow_status', { runId: '43157797332' }, context)
   assert.equal(result.ok, true)
   assert.equal(JSON.parse(result.output).conclusion, 'success')
+})
+
+test('GitHub source service prepares and pushes only the fixed NTHN repository without token arguments', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'nthn-source-home-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const calls: Array<{ args: string[]; env: NodeJS.ProcessEnv }> = []
+  let dirty = false
+  const runner: GitRunner = async (args, options) => {
+    calls.push({ args, env: options.env })
+    if (args[0] === 'clone') await mkdir(join(options.cwd, '.git'), { recursive: true })
+    if (args.includes('status')) return { stdout: dirty ? ' M apps/nthn/VERSION\n' : '', stderr: '' }
+    if (args.includes('branch')) return { stdout: 'codex/jef-v2\n', stderr: '' }
+    if (args.includes('get-url')) return { stdout: 'https://github.com/suraranathan/nthnEntps-.git\n', stderr: '' }
+    if (args.includes('rev-list')) return { stdout: args.at(-1)?.startsWith('HEAD..') ? '0\n' : '1\n', stderr: '' }
+    if (args.includes('diff')) return { stdout: 'apps/nthn/VERSION\napps/dashboard/server/agent/tools.ts\n', stderr: '' }
+    if (args.includes('rev-parse')) return { stdout: '4f1c9d90899f6ee1bfd930809ed4cf2661e17f6b\n', stderr: '' }
+    return { stdout: '', stderr: '' }
+  }
+  const service = new GithubSourceService('github-write-test-token', runner)
+  assert.deepEqual(await service.prepare(home, 'codex/jef-v2'), { project: 'nthnEntps-v2', branch: 'codex/jef-v2', commit: '4f1c9d90899f6ee1bfd930809ed4cf2661e17f6b' })
+  assert.deepEqual(await service.push(join(home, 'nthnEntps-v2'), 'codex/jef-v2'), { branch: 'codex/jef-v2', commit: '4f1c9d90899f6ee1bfd930809ed4cf2661e17f6b', changed: ['apps/nthn/VERSION', 'apps/dashboard/server/agent/tools.ts'] })
+  assert.equal(calls.some(call => call.args.join(' ').includes('github-write-test-token')), false)
+  assert.equal(calls.some(call => call.env.GIT_CONFIG_VALUE_0 === 'Authorization: Bearer github-write-test-token'), true)
+  dirty = true
+  await assert.rejects(() => service.push(join(home, 'nthnEntps-v2'), 'codex/jef-v2'), /uncommitted changes/)
+  await assert.rejects(() => service.push(join(home, 'nthnEntps-v2'), 'main'), /development branch/)
+  dirty = false
+  await rm(join(home, 'nthnEntps-v2'), { recursive: true, force: true })
+  const tools = new ToolRegistry({ githubSource: service, linuxHome: home })
+  assert.equal(tools.needsApproval('github_prepare_source', { branch: 'codex/jef-v2' }), true)
+  assert.equal((await tools.execute('github_prepare_source', { branch: 'codex/jef-v2' }, { workspace: home, paths: new PathPolicy({ root: home, writablePrefixes: ['.'] }), signal: new AbortController().signal })).ok, true)
+  const prepared = join(home, 'nthnEntps-v2')
+  assert.equal((await tools.execute('github_push_source', { branch: 'codex/jef-v2' }, { workspace: prepared, paths: new PathPolicy({ root: prepared, writablePrefixes: ['.'] }), signal: new AbortController().signal })).ok, true)
 })

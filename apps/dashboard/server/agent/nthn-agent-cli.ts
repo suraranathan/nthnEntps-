@@ -28,6 +28,8 @@ import { loadReleaseConfig, saveReleaseConfig } from './release-config.ts'
 import { ReleaseUpdateService } from './release-update.ts'
 import { loadGithubWriteConfig, saveGithubWriteConfig } from './github-write-config.ts'
 import { GithubWorkflowService } from './github-workflow.ts'
+import { GithubSourceService } from './github-source.ts'
+import { normalizeCommunicationMode, type CommunicationMode } from './communication-mode.ts'
 
 const appRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)))
 const providerDirectory = resolve(appRoot, '.local/ai')
@@ -41,6 +43,7 @@ const agentKeyPath = join(agentDirectory, 'master.key')
 const releasePath = join(agentDirectory, 'release.json')
 const githubWritePath = join(agentDirectory, 'github-write.json')
 const updateDirectory = join(agentDirectory, 'updates')
+const communicationModePath = join(agentDirectory, 'communication-mode.json')
 const home = resolve(process.env.NTHN_AGENT_WORKSPACE || process.env.HOME || join(appRoot, 'workspace'))
 const help = `nthn Jef coding agent
   nthn-agent state
@@ -56,6 +59,7 @@ const help = `nthn Jef coding agent
   nthn-agent memory-update < request.json
   nthn-agent memory-remove < request.json
   nthn-agent model-preference < request.json
+  nthn-agent communication-mode < request.json
   nthn-agent research-config < request.json
   nthn-agent embedding-config < request.json
   nthn-agent memory-export
@@ -90,6 +94,11 @@ function modelPreference(): JefModelPreference {
     const value: unknown = JSON.parse(readFileSync(preferencePath, 'utf8'))
     return normalizeJefPreference(value)
   } catch { return 'automatic-free' }
+}
+
+function communicationMode(): CommunicationMode {
+  try { return normalizeCommunicationMode(JSON.parse(readFileSync(communicationModePath, 'utf8')) as unknown) }
+  catch { return 'standard' }
 }
 
 function appVersion(): string {
@@ -173,7 +182,7 @@ async function resolveRoute(excluded = new Set<string>()): Promise<ModelRoute> {
 
 async function main(): Promise<void> {
   const [command = 'help', ...extra] = process.argv.slice(2)
-  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream', 'select', 'memory-list', 'memory-add', 'memory-update', 'memory-remove', 'memory-export', 'memory-search', 'memory-link', 'memory-history', 'task-list', 'model-preference', 'research-config', 'embedding-config', 'autonomy-config', 'release-config', 'update-check', 'update-download', 'github-write-config', 'github-dispatch', 'github-status'].includes(command)) throw new ManagementError('INVALID_INPUT')
+  if (extra.length || !['help', 'state', 'chat', 'chat-stream', 'new', 'workspace', 'approve', 'approve-stream', 'select', 'memory-list', 'memory-add', 'memory-update', 'memory-remove', 'memory-export', 'memory-search', 'memory-link', 'memory-history', 'task-list', 'model-preference', 'communication-mode', 'research-config', 'embedding-config', 'autonomy-config', 'release-config', 'update-check', 'update-download', 'github-write-config', 'github-dispatch', 'github-status'].includes(command)) throw new ManagementError('INVALID_INPUT')
   if (command === 'help') { console.log(help); return }
 
   let choice = loadMobileWorkspace(home, agentDirectory)
@@ -208,6 +217,7 @@ async function main(): Promise<void> {
   const releaseConfig = loadReleaseConfig(releasePath, agentVault)
   const githubWrite = loadGithubWriteConfig(githubWritePath, agentVault)
   const githubWorkflow = githubWrite ? new GithubWorkflowService(githubWrite.token) : undefined
+  const githubSource = githubWrite ? new GithubSourceService(githubWrite.token) : undefined
   if (command === 'github-dispatch') {
     const body = input()
     if (typeof body.branch !== 'string' || !githubWrite) throw new ManagementError(githubWrite ? 'INVALID_INPUT' : 'CREDENTIAL_REQUIRED')
@@ -242,6 +252,8 @@ async function main(): Promise<void> {
     installedVersion: appVersion(),
     releaseUpdater: updater,
     updateDirectory,
+    githubSource,
+    linuxHome: home,
     writablePrefixes: ['.'],
     allowNTHNSourceWrites: choice.relative === 'nthnEntps' && existsSync(join(choice.workspace, 'apps/nthn/VERSION')) && existsSync(join(choice.workspace, 'apps/dashboard/server/agent/agent.ts')),
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],
@@ -249,6 +261,7 @@ async function main(): Promise<void> {
     taskRoot: '.',
     requireCommandApproval: true,
     sandboxCommands: true,
+    communicationMode: communicationMode(),
   })
   await agent.load()
   if (command === 'chat-stream' || command === 'approve-stream') {
@@ -270,6 +283,12 @@ async function main(): Promise<void> {
     const temporary = `${preferencePath}.${process.pid}.tmp`
     writeFileSync(temporary, JSON.stringify(body.value), { mode: 0o600, flag: 'wx' })
     renameSync(temporary, preferencePath)
+  } else if (command === 'communication-mode') {
+    const body = input()
+    if (body.value !== 'standard' && body.value !== 'creator-direct') throw new ManagementError('INVALID_INPUT')
+    const temporary = `${communicationModePath}.${process.pid}.tmp`
+    writeFileSync(temporary, JSON.stringify(body.value), { mode: 0o600, flag: 'wx' })
+    renameSync(temporary, communicationModePath)
   } else if (command === 'select') {
     const body = input()
     if (typeof body.conversationId !== 'string' || !await agent.select(body.conversationId)) throw new ManagementError('INVALID_INPUT')
@@ -327,6 +346,7 @@ async function main(): Promise<void> {
     conversations: agent.state().conversations,
     ...(!['chat', 'chat-stream', 'approve', 'approve-stream'].includes(command) ? { memories: memory.list(memoryScope) } : {}),
     modelPreference: modelPreference(),
+    communicationMode: communicationMode(),
     research: { searchConfigured: research.configuredSearch, provider: researchConfig?.kind ?? null, pageRetrieval: true },
     embedding: { configured: !!embeddingConfig, provider: embeddingConfig?.kind ?? null, model: embeddingConfig?.model ?? null },
     autonomy: autonomy.snapshot(),
