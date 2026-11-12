@@ -30,6 +30,7 @@ import { loadGithubWriteConfig, saveGithubWriteConfig } from './github-write-con
 import { GithubWorkflowService } from './github-workflow.ts'
 import { GithubSourceService } from './github-source.ts'
 import { normalizeCommunicationMode, type CommunicationMode } from './communication-mode.ts'
+import { isNTHNSourceWorkspace } from './workspace-policy.ts'
 
 const appRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)))
 const providerDirectory = resolve(appRoot, '.local/ai')
@@ -255,7 +256,7 @@ async function main(): Promise<void> {
     githubSource,
     linuxHome: home,
     writablePrefixes: ['.'],
-    allowNTHNSourceWrites: choice.relative === 'nthnEntps' && existsSync(join(choice.workspace, 'apps/nthn/VERSION')) && existsSync(join(choice.workspace, 'apps/dashboard/server/agent/agent.ts')),
+    allowNTHNSourceWrites: isNTHNSourceWorkspace(choice.workspace),
     deniedSegments: ['.local', '.termux', '.ssh', '.gnupg', '.npm', '.npm-cache', '.cache'],
     protectedPaths: ['provider vault', 'credentials', 'Android app files outside Linux home'],
     taskRoot: '.',

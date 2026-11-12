@@ -27,3 +27,10 @@ export function selectionConnection(selection: SavedSelection | null, entry: Cat
   const connection = connections.find(item => item.id === entry.route.ref.connectionId)
   return connection && selectionIsCurrent(selection, entry, connection) ? connection : undefined
 }
+
+export function manualSelectionCandidates(entries: CatalogEntry[], value: string): CatalogEntry[] {
+  const exactRoute = entries.filter(entry => entry.route.id === value)
+  if (exactRoute.length) return exactRoute
+  const nativeModel = entries.filter(entry => entry.route.ref.nativeModelId === value)
+  return nativeModel.length === 1 ? nativeModel : []
+}

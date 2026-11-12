@@ -1025,11 +1025,11 @@
       const lines = String(raw || '').split('\n').filter(line => line.includes('\t'));
       if (!lines.length) { view.textContent = 'No models listed for connected accounts.'; return; }
       for (const line of lines.slice(0, 100)) {
-        const [id, name, account, availability] = line.split('\t');
+        const [id, name, account, availability, routeId] = line.split('\t');
         const item = document.createElement('button'); item.type = 'button'; item.className = 'project-choice';
         item.textContent = `${name || id} · ${account || ''} · ${availability || 'listed, untested'}`;
         item.title = id;
-        item.addEventListener('click', () => { if (window.NthnAI) { setSidebar(false); setBusy(true); window.NthnAI.selectModel(id); } });
+        item.addEventListener('click', () => { if (window.NthnAI) { setSidebar(false); setBusy(true); window.NthnAI.selectModel(routeId || id); } });
         view.append(item);
       }
       if (lines.length > 100) { const more = document.createElement('div'); more.textContent = `${lines.length - 100} more listed. Use nthn-ai models in Terminal.`; view.append(more); }

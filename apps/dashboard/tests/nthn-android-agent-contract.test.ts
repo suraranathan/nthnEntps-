@@ -135,10 +135,18 @@ test('V2 Android bridge exposes permission-gated camera, speech, location, stora
   assert.match(controller, /boolean granted = false/)
   assert.match(controller, /requestCode == LOCATION_PERMISSION\) readLocation/)
   assert.match(controller, /if \(target != null && target\.isFile\(\)\) target\.delete\(\)/)
+  assert.match(controller, /MAX_CACHED_LOCATION_AGE_MS/)
+  assert.match(controller, /isFreshLocation\(location, System\.currentTimeMillis\(\)\)/)
+  assert.match(controller, /Instant\.ofEpochMilli\(location\.getTime\(\)\)/)
   assert.match(ui, /NthnAI\.captureCamera\(\)/)
   assert.match(ui, /NthnAI\.listen\(\)/)
   assert.match(ui, /NthnAI\.stopListening\(\)/)
   assert.match(ui, /NthnAI\.locate\(\)/)
   assert.match(ui, /NthnAI\.importFile\(\)/)
   assert.match(ui, /NthnAI\.speak\(/)
+})
+
+test('Android GitHub setup requests permissions needed for source push and workflow dispatch', async () => {
+  const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
+  assert.match(activity, /Actions write and Contents write permissions/)
 })

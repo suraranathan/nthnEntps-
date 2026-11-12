@@ -38,6 +38,8 @@ final class NthnDeviceController {
     private static final int CAMERA_PERMISSION = 6201;
     private static final int AUDIO_PERMISSION = 6202;
     private static final int LOCATION_PERMISSION = 6203;
+    private static final long MAX_CACHED_LOCATION_AGE_MS = 5 * 60 * 1000;
+    private static final long MAX_LOCATION_CLOCK_SKEW_MS = 60 * 1000;
 
     private final NthnActivity activity;
     private final TextToSpeech voice;
@@ -150,7 +152,7 @@ final class NthnDeviceController {
             LocationManager manager = (LocationManager) activity.getSystemService(Activity.LOCATION_SERVICE);
             Location location = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
             if (location == null) location = manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-            if (location != null) { deliverLocation(location); return; }
+            if (isFreshLocation(location, System.currentTimeMillis())) { deliverLocation(location); return; }
             String provider = manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) ? LocationManager.NETWORK_PROVIDER : LocationManager.GPS_PROVIDER;
             manager.requestSingleUpdate(provider, new LocationListener() {
                 @Override public void onLocationChanged(Location value) { deliverLocation(value); }
@@ -163,11 +165,19 @@ final class NthnDeviceController {
 
     private void deliverLocation(Location location) {
         try {
+            String observedAt = Instant.ofEpochMilli(location.getTime()).toString();
             JSONObject state = new JSONObject().put("latitude", location.getLatitude()).put("longitude", location.getLongitude())
-                .put("accuracyMeters", location.hasAccuracy() ? location.getAccuracy() : JSONObject.NULL);
+                .put("accuracyMeters", location.hasAccuracy() ? location.getAccuracy() : JSONObject.NULL)
+                .put("observedAt", observedAt);
             record(state, "location", null, null);
-            deliver("device-context", state.put("kind", "location").put("observedAt", Instant.now().toString()).toString());
+            deliver("device-context", state.put("kind", "location").toString());
         } catch (Exception error) { deliverError("Location could not be recorded."); }
+    }
+
+    static boolean isFreshLocation(Location location, long now) {
+        if (location == null || location.getTime() <= 0) return false;
+        long age = now - location.getTime();
+        return age >= -MAX_LOCATION_CLOCK_SKEW_MS && age <= MAX_CACHED_LOCATION_AGE_MS;
     }
 
     void importFile(Events events) {
@@ -237,7 +247,8 @@ final class NthnDeviceController {
 
     private void record(JSONObject state, String kind, String text, File file) {
         try {
-            state.put("kind", kind).put("observedAt", Instant.now().toString());
+            state.put("kind", kind);
+            if (!state.has("observedAt")) state.put("observedAt", Instant.now().toString());
             if (text != null) state.put("text", text);
             if (file != null) state.put("path", file.getAbsolutePath()).put("bytes", file.length());
             NthnAppState.recordDevice(activity, state);

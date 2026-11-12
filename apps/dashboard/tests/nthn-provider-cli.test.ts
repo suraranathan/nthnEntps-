@@ -78,3 +78,22 @@ test('nthn keeps configured credentials connected and rejects stale selected rou
   entry.route.connectionRevision = connection.revision
   assert.equal(cliState.selectionIsCurrent(selection, entry, connection), true)
 })
+
+test('manual model selection resolves an exact route and rejects an ambiguous native model ID', () => {
+  const manualSelectionCandidates = (cliState as typeof cliState & {
+    manualSelectionCandidates?: (entries: CatalogEntry[], value: string) => CatalogEntry[]
+  }).manualSelectionCandidates
+  assert.equal(typeof manualSelectionCandidates, 'function')
+  const entry = (routeId: string, connectionId: string) => ({
+    route: {
+      id: routeId,
+      ref: { nativeModelId: 'shared/free-model', connectionId },
+    },
+  }) as CatalogEntry
+  const personal = entry('route-personal', '11111111-1111-4111-8111-111111111111')
+  const work = entry('route-work', '22222222-2222-4222-8222-222222222222')
+
+  assert.deepEqual(manualSelectionCandidates!([personal, work], 'route-work'), [work])
+  assert.deepEqual(manualSelectionCandidates!([personal, work], 'shared/free-model'), [])
+  assert.deepEqual(manualSelectionCandidates!([personal], 'shared/free-model'), [personal])
+})

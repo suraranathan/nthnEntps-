@@ -15,7 +15,7 @@ export class GithubWorkflowService {
     this.transport = transport
   }
 
-  async dispatch(branch: string, installedVersion: string): Promise<{ dispatched: true; branch: string; workflow: string; version: string }> {
+  async dispatch(branch: string, installedVersion: string): Promise<{ dispatched: true; branch: string; workflow: string; version: string; runId: number; url: string }> {
     if (!validGithubBranch(branch)) throw new Error('Invalid GitHub branch.')
     if (!/^\d+(?:\.\d+){0,2}$/.test(installedVersion)) throw new Error('Invalid installed NTHN version.')
     let versionResponse: Response
@@ -43,12 +43,20 @@ export class GithubWorkflowService {
     try {
       response = await this.transport(`${API}/actions/workflows/${WORKFLOW}/dispatches`, {
         method: 'POST', signal: AbortSignal.timeout(30_000), redirect: 'error',
-        headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json', 'User-Agent': 'NTHN-Jef/2' },
-        body: JSON.stringify({ ref: branch }),
+        headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json', 'User-Agent': 'NTHN-Jef/2', 'X-GitHub-Api-Version': '2026-03-10' },
+        body: JSON.stringify({ ref: branch, return_run_details: true }),
       })
     } catch { throw new Error('GitHub workflow request failed.') }
-    if (response.status !== 204) { await response.body?.cancel(); throw new Error(`GitHub workflow dispatch failed (HTTP ${response.status}).`) }
-    return { dispatched: true, branch, workflow: WORKFLOW, version }
+    if (response.status !== 200) { await response.body?.cancel(); throw new Error(`GitHub workflow dispatch failed (HTTP ${response.status}).`) }
+    try {
+      const value = await response.json() as Record<string, unknown>
+      const runId = Number(value.workflow_run_id)
+      const url = String(value.html_url ?? '')
+      if (!Number.isSafeInteger(runId) || runId < 1 ||
+        value.run_url !== `${API}/actions/runs/${runId}` ||
+        url !== `https://github.com/suraranathan/nthnEntps-/actions/runs/${runId}`) throw new Error('invalid response')
+      return { dispatched: true, branch, workflow: WORKFLOW, version, runId, url }
+    } catch { throw new Error('GitHub workflow dispatch response is invalid.') }
   }
 
   async status(runId: string): Promise<{ runId: number; status: string; conclusion: string | null; branch: string; commit: string; url: string }> {

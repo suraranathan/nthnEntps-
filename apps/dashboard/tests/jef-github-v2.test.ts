@@ -27,15 +27,20 @@ test('workflow dispatch checks the remote branch version before running the fixe
     calls.push({ url: String(url), init: init ?? {} })
     return String(url).includes('/contents/apps/nthn/VERSION')
       ? Response.json({ content: Buffer.from('2\n').toString('base64'), encoding: 'base64' })
-      : new Response(null, { status: 204 })
+      : Response.json({ workflow_run_id: 43157797332, run_url: 'https://api.github.com/repos/suraranathan/nthnEntps-/actions/runs/43157797332', html_url: 'https://github.com/suraranathan/nthnEntps-/actions/runs/43157797332' })
   })
   await assert.rejects(() => service.dispatch('main;echo secret', '1.9'), /Invalid GitHub branch/)
-  await service.dispatch('codex/jef-v2', '1.9')
+  const dispatched = await service.dispatch('codex/jef-v2', '1.9')
   assert.equal(calls.length, 2)
   assert.equal(calls[0].url, 'https://api.github.com/repos/suraranathan/nthnEntps-/contents/apps/nthn/VERSION?ref=codex%2Fjef-v2')
   assert.equal(calls[1].url, 'https://api.github.com/repos/suraranathan/nthnEntps-/actions/workflows/nthn-build-separate.yml/dispatches')
-  assert.deepEqual(JSON.parse(String(calls[1].init.body)), { ref: 'codex/jef-v2' })
+  assert.deepEqual(JSON.parse(String(calls[1].init.body)), { ref: 'codex/jef-v2', return_run_details: true })
   assert.equal((calls[1].init.headers as Record<string, string>).Authorization, 'Bearer test-token')
+  assert.equal((calls[1].init.headers as Record<string, string>)['X-GitHub-Api-Version'], '2026-03-10')
+  assert.deepEqual(dispatched, {
+    dispatched: true, branch: 'codex/jef-v2', workflow: 'nthn-build-separate.yml', version: '2',
+    runId: 43157797332, url: 'https://github.com/suraranathan/nthnEntps-/actions/runs/43157797332',
+  })
 })
 
 test('workflow dispatch refuses a branch at the installed version', async () => {
@@ -67,7 +72,7 @@ test('Jef exposes approved dispatch and read-only workflow monitoring tools', as
   await mkdir(join(workspace, 'apps'), { recursive: true })
   const service = new GithubWorkflowService('test-token', async (url, init) => {
     if (String(url).includes('/contents/')) return Response.json({ content: Buffer.from('2\n').toString('base64'), encoding: 'base64' })
-    if (init?.method === 'POST') return new Response(null, { status: 204 })
+    if (init?.method === 'POST') return Response.json({ workflow_run_id: 43157797332, run_url: 'https://api.github.com/repos/suraranathan/nthnEntps-/actions/runs/43157797332', html_url: 'https://github.com/suraranathan/nthnEntps-/actions/runs/43157797332' })
     return Response.json({ id: 43157797332, name: 'Build independent nthn APK', event: 'workflow_dispatch', status: 'completed', conclusion: 'success', html_url: 'https://github.com/suraranathan/nthnEntps-/actions/runs/43157797332', head_branch: 'codex/jef-v2', head_sha: 'c8b0eafc11d666893d064a897b125f567bc2cbd4' })
   })
   const tools = new ToolRegistry({ githubWorkflow: service, installedVersion: '1.9' })

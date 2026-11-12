@@ -8,7 +8,7 @@ import { CatalogService } from './catalog-service.ts'
 import { VerificationService } from './verification-service.ts'
 import { ManagementError } from './management-types.ts'
 import { connectionAdapter } from './connection-adapters.ts'
-import { connectionSummary, openRouterAccounts, selectionConnection } from './nthn-cli-state.ts'
+import { connectionSummary, manualSelectionCandidates, openRouterAccounts, selectionConnection } from './nthn-cli-state.ts'
 import { jefCanUse, jefProbeCapabilities, jefTransportSupportsTools } from './jef-model-policy.ts'
 import { jefAvailability } from './jef-model-availability.ts'
 import { providerKeyHint } from './provider-key-hints.ts'
@@ -38,7 +38,7 @@ const help = `nthn AI provider
   nthn-ai models            Refresh and list available text models
   nthn-ai cached-models     List the last discovered models without network access
   nthn-ai auto-select       Verify and choose a Jef-compatible model automatically
-  nthn-ai select MODEL_ID   Verify Jef tools, streaming and inference, then select
+  nthn-ai select MODEL_ID/ROUTE_ID Verify Jef tools, streaming and inference, then select
   nthn-ai test              Test connection, capabilities and a Jef-shaped chat request
   nthn-ai chat              Send a JSON conversation on stdin to the selected model
   nthn-ai clear-key         Remove the stored API key
@@ -296,14 +296,17 @@ try {
         for (const entry of page.entries) {
           const components = entry.pricing.components.filter(item => ['input', 'output'].includes(item.dimension) && item.currency === 'USD')
           const price = entry.pricing.freeAccess.kind === 'verified-zero-price' ? 'listed $0' : components.length ? components.map(item => `${item.dimension} $${item.amount}/${item.per}`).join(' + ') : entry.pricing.freeAccess.kind === 'paid' ? 'paid, price unknown' : 'price unknown'
-          console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName} · ${price}\t${accounts.find(account => account.id === entry.route.ref.connectionId)?.label ?? entry.route.providerId} · context ${entry.route.model.contextTokens ?? '?'} tokens\t${jefAvailability(entry, verification.store.latest(entry.route.id))}`)
+          console.log(`${entry.route.ref.nativeModelId}\t${entry.route.model.displayName} · ${price}\t${accounts.find(account => account.id === entry.route.ref.connectionId)?.label ?? entry.route.providerId} · context ${entry.route.model.contextTokens ?? '?'} tokens\t${jefAvailability(entry, verification.store.latest(entry.route.id))}\t${entry.route.id}`)
         }
         if (page.nextCursor) console.log('More models available; refine selection by exact model ID.')
       } else if (command === 'select') {
         if (!argument) throw new ManagementError('INVALID_INPUT')
         for (const account of usable) await catalog.refresh(account.id)
-        const page = await catalog.search({ connectionIds: usable.map(account => account.id), search: argument, pageSize: 100 })
-        const routes = page.entries.filter(item => item.route.ref.nativeModelId === argument && allowedForJef(item)).map(item => item.route)
+        const exact = await catalog.getRoute(argument)
+        const entries = exact && usable.some(account => account.id === exact.route.ref.connectionId)
+          ? [exact]
+          : (await catalog.search({ connectionIds: usable.map(account => account.id), search: argument, pageSize: 100 })).entries
+        const routes = manualSelectionCandidates(entries.filter(allowedForJef), argument).map(item => item.route)
         if (!routes.length) throw new ManagementError('MODEL_UNAVAILABLE')
         verification = new VerificationService(manager, catalog)
         let checkedAt = ''
@@ -314,8 +317,8 @@ try {
           if (jefCanUse(result)) { chosen = route; checkedAt = result.checkedAt; break }
         }
         if (!checkedAt) throw new ManagementError('MODEL_UNAVAILABLE')
-        saveSelected(chosen.id, argument, chosen.ref.connectionId, true)
-        console.log(JSON.stringify({ selected: argument, accountId: chosen.ref.connectionId, inference: 'verified', checkedAt }))
+        saveSelected(chosen.id, chosen.ref.nativeModelId, chosen.ref.connectionId, true)
+        console.log(JSON.stringify({ selected: chosen.ref.nativeModelId, routeId: chosen.id, accountId: chosen.ref.connectionId, inference: 'verified', checkedAt }))
       }
     }
     }

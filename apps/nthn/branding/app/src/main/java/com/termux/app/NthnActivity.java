@@ -765,7 +765,7 @@ public final class NthnActivity extends AppCompatActivity {
         frame.setPadding(dp(20), 0, dp(20), 0);
         frame.addView(key);
         new AlertDialog.Builder(this).setTitle("GitHub update write access")
-            .setMessage("Use a fine-grained token limited to this repository with Actions write and Contents read permissions. This token is stored separately from release read access. Leave blank to remove it.")
+            .setMessage("Use a fine-grained token limited to this repository with Actions write and Contents write permissions. This token is stored separately from release read access. Leave blank to remove it.")
             .setView(frame).setNegativeButton("Cancel", null)
             .setPositiveButton("Save", (dialog, which) -> {
                 final String token = key.getText().toString().trim();
