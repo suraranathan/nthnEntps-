@@ -549,13 +549,29 @@ public final class NthnActivity extends AppCompatActivity {
         try {
             String command = "openrouter".equals(providerId) ? "add-account-stdin" : "add-provider-stdin";
             NthnBackend.CommandResult result = backend.ai(command, "openrouter".equals(providerId) ? null : providerId, secret);
-            bridge.deliver("status", result.ok() ? "AI provider connected" : aiMessage(result.output));
+            String status;
+            if (!result.ok()) {
+                status = aiMessage(result.output);
+            } else {
+                NthnBackend.CommandResult selection = backend.ai("auto-select", null, null);
+                if (!selection.ok()) {
+                    status = "Provider saved, but no verified free Jef model is available: " + aiMessage(selection.output);
+                } else {
+                    NthnBackend.CommandResult readiness = backend.ai("test", null, null);
+                    status = readiness.ok()
+                        ? "AI provider connected and Jef-ready\n" + aiMessage(readiness.output)
+                        : "Provider saved and a free model was selected, but Jef readiness failed: " + aiMessage(readiness.output);
+                }
+            }
             NthnBackend.CommandResult accounts = backend.ai("accounts", null, null);
             if (accounts.ok()) bridge.deliver("accounts", accounts.output);
+            NthnBackend.CommandResult models = backend.ai("cached-models", null, null);
+            if (models.ok()) bridge.deliver("models", models.output);
             if (result.ok()) {
-                NthnBackend.CommandResult models = backend.ai("models", null, null);
-                if (models.ok()) bridge.deliver("models", models.output);
+                NthnBackend.CommandResult agent = backend.agent("state", null);
+                if (agent.ok()) bridge.deliver("snapshot", agent.output);
             }
+            bridge.deliver("status", status);
         } catch (Exception error) { java.util.Arrays.fill(secret, '\0'); bridge.deliver("error", message(error)); }
     }
 

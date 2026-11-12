@@ -85,13 +85,24 @@ test('native terminal publishes a bounded read-only transcript snapshot for Jef'
   assert.match(recorder, /MAX_TRANSCRIPT/)
 })
 
-test('Android provider UI confirms detected keys, discovers models and removes accounts', async () => {
+test('Android provider onboarding selects and verifies a free Jef model', async () => {
   const activity = await source('branding/app/src/main/java/com/termux/app/NthnActivity.java')
   const ui = await source('ui-preview/index.html')
+  const onboarding = activity.slice(
+    activity.indexOf('private void connectWebProvider'),
+    activity.indexOf('private String aiMessage'),
+  )
   assert.match(activity, /detect-provider-stdin/)
   assert.match(activity, /Confirm the suggested provider/)
   assert.match(activity, /@JavascriptInterface public void removeAccount/)
-  assert.match(activity, /backend\.ai\("models"/)
+  assert.match(onboarding, /backend\.ai\("auto-select"/)
+  assert.match(onboarding, /backend\.ai\("test"/)
+  assert.match(onboarding, /backend\.ai\("cached-models"/)
+  assert.match(onboarding, /backend\.agent\("state"/)
+  assert.match(onboarding, /bridge\.deliver\("snapshot"/)
+  assert.doesNotMatch(onboarding, /backend\.ai\("models"/)
+  assert.ok(onboarding.indexOf('"auto-select"') < onboarding.indexOf('"test"'))
+  assert.ok(onboarding.indexOf('"snapshot"') < onboarding.lastIndexOf('"status"'))
   assert.match(ui, /NthnAI\.removeAccount/)
   assert.match(ui, /kind === 'models'/)
 })
