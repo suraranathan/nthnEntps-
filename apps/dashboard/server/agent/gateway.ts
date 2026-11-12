@@ -39,6 +39,24 @@ export interface Gateway {
   stream(messages: ChatTurn[], options?: { signal?: AbortSignal; maxTokens?: number; tools?: ToolSchema[] }): AsyncGenerator<string | NativeToolCall>
 }
 
+/** Make one harmless request with the same streaming, system and tool shape used by Jef. */
+export async function verifyJefChatShape(gateway: Gateway): Promise<'verified'> {
+  const tools: ToolSchema[] = [{
+    name: 'readiness_probe',
+    description: 'A harmless provider readiness tool. It does not execute or change anything.',
+    arguments: { value: 'string' },
+  }]
+  let observed = false
+  for await (const item of gateway.stream([
+    { role: 'system', content: 'You are Jef inside NTHN. This is a provider readiness check. Reply briefly and do not claim that any tool was executed.' },
+    { role: 'user', content: 'Reply that Jef is ready.' },
+  ], { maxTokens: 128, tools })) {
+    if (typeof item === 'string' ? item.trim().length > 0 : item.kind === 'tool_call') observed = true
+  }
+  if (!observed) throw new GatewayError('INVALID_RESPONSE', 'The provider returned no usable Jef response.')
+  return 'verified'
+}
+
 function friendly(error: unknown): GatewayError {
   if (error instanceof GatewayError) return error
   if (error instanceof ManagementError) {

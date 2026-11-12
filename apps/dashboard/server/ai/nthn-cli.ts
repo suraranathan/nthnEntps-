@@ -39,7 +39,7 @@ const help = `nthn AI provider
   nthn-ai cached-models     List the last discovered models without network access
   nthn-ai auto-select       Verify and choose a Jef-compatible model automatically
   nthn-ai select MODEL_ID   Verify Jef tools, streaming and inference, then select
-  nthn-ai test              Test connection and selected model inference
+  nthn-ai test              Test connection, capabilities and a Jef-shaped chat request
   nthn-ai chat              Send a JSON conversation on stdin to the selected model
   nthn-ai clear-key         Remove the stored API key
 The key stays in this app's encrypted private vault. Model tests may use credits.`
@@ -254,12 +254,22 @@ try {
       const target = selectionConnection(selectedRoute, entry, usable) ?? usable[0]
       const result = await manager.test(target.id, target.revision)
       let inference: string | null = null
+      let jefChat: string | null = null
       if (result.ok && selectedRoute) {
         verification = new VerificationService(manager, catalog)
         const check = await verification.verify(selectedRoute.routeId, jefProbeCapabilities)
         inference = jefCanUse(check) ? 'verified' : check.code ?? 'CAPABILITY_UNTESTED_OR_UNSUPPORTED'
+        if (inference === 'verified' && entry) {
+          const { GatewayError, ResolvedRouteGateway, verifyJefChatShape } = await import('../agent/gateway.ts')
+          try {
+            jefChat = await verifyJefChatShape(new ResolvedRouteGateway(manager, async () => entry.route))
+          } catch (error) {
+            jefChat = error instanceof GatewayError ? error.code : 'REQUEST_FAILED'
+          }
+        }
       }
-      console.log(JSON.stringify({ connection: result.ok ? 'connected' : result.code, inference }))
+      console.log(JSON.stringify({ connection: result.ok ? 'connected' : result.code, inference, jefChat, model: entry?.route.ref.nativeModelId ?? null }))
+      if (!result.ok || inference !== 'verified' || jefChat !== 'verified') process.exitCode = 1
     } else {
       catalog = new CatalogService(manager)
       if (command === 'chat' || command === 'auto-select') {

@@ -567,10 +567,12 @@ public final class NthnActivity extends AppCompatActivity {
             String credentials = value.optString("credentials", "");
             String selected = value.optString("selectedModel", "");
             String inference = value.optString("inference", "");
+            String jefChat = value.optString("jefChat", "");
             String result = connection;
             if (!credentials.isEmpty()) result += "  ·  credentials " + credentials;
             if (!selected.isEmpty() && !"null".equals(selected)) result += "\nSelected: " + selected;
             if (!inference.isEmpty() && !"null".equals(inference)) result += "  ·  inference " + inference;
+            if (!jefChat.isEmpty() && !"null".equals(jefChat)) result += "  ·  Jef chat " + jefChat;
             return result;
         } catch (Exception ignored) {
             return output.isEmpty() ? "Done" : output;

@@ -6,6 +6,27 @@ import { join } from 'node:path'
 import { resolve } from 'node:path'
 import * as gatewayModule from '../server/agent/gateway.ts'
 import type { ModelRoute } from '../server/ai/contracts.ts'
+
+test('provider readiness uses the same streaming system-and-tools shape as Jef chat', async () => {
+  const verifyJefChatShape = (gatewayModule as typeof gatewayModule & {
+    verifyJefChatShape?: (gateway: gatewayModule.Gateway) => Promise<'verified'>
+  }).verifyJefChatShape
+  assert.equal(typeof verifyJefChatShape, 'function')
+  let captured: { messages: gatewayModule.ChatTurn[]; options: { maxTokens?: number; tools?: gatewayModule.ToolSchema[] } } | null = null
+  const gateway: gatewayModule.Gateway = {
+    info: () => ({ provider: 'fixture', model: 'free-model', transport: 'streaming' }),
+    async *stream(messages, options) {
+      captured = { messages, options: options ?? {} }
+      yield 'Jef readiness confirmed.'
+    },
+  }
+
+  assert.equal(await verifyJefChatShape!(gateway), 'verified')
+  assert.equal(captured!.messages[0].role, 'system')
+  assert.equal(captured!.messages.at(-1)?.role, 'user')
+  assert.ok((captured!.options.tools?.length ?? 0) > 0)
+  assert.ok((captured!.options.maxTokens ?? 0) > 0)
+})
 import type { AgentState } from '../server/agent/agent.ts'
 import { ManagementError } from '../server/ai/management-types.ts'
 
